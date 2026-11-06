@@ -1,0 +1,6 @@
+{
+  "name": "Student Management System",
+  "description": "Offline student and staff management system with ID card generator, attendance tracking, payroll, fees collection, financial ledger, and examinations module with result gazettes, marks sheets, and individual DMC result cards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

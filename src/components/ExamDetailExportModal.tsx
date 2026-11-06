@@ -1,0 +1,792 @@
+import React, { useState } from 'react';
+import { X, Printer, Download, Award, FileSpreadsheet, FileText, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Exam, calculateGrade, downloadCSV } from '../utils/examStore';
+import { SchoolSettings, getSchoolSettings } from '../utils/settingsHelper';
+import { Student } from '../types';
+
+export type ExamExportType = 'marks-sheet' | 'result-sheet' | 'bulk-dmc';
+
+interface ExamDetailExportModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  exportType: ExamExportType;
+  exam: Exam;
+  students: Student[];
+  schoolSettings?: SchoolSettings;
+}
+
+export const ExamDetailExportModal: React.FC<ExamDetailExportModalProps> = ({
+  isOpen,
+  onClose,
+  exportType,
+  exam,
+  students,
+  schoolSettings
+}) => {
+  const [selectedStudentIndex, setSelectedStudentIndex] = useState<number>(0);
+  const [bulkPrintMode, setBulkPrintMode] = useState<boolean>(true);
+
+  const [liveSchool, setLiveSchool] = useState<SchoolSettings>(() => schoolSettings || getSchoolSettings());
+  React.useEffect(() => {
+    if (schoolSettings) setLiveSchool(schoolSettings);
+  }, [schoolSettings]);
+  React.useEffect(() => {
+    const handleSettingsChange = () => setLiveSchool(getSchoolSettings());
+    window.addEventListener('schoolSettingsUpdated', handleSettingsChange);
+    return () => window.removeEventListener('schoolSettingsUpdated', handleSettingsChange);
+  }, []);
+
+  if (!isOpen) return null;
+
+  const school = liveSchool;
+  const isMinimalDmc = school.examDmcTemplate === 'minimal-classic';
+  const currentDate = new Date().toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  });
+
+  // Filter students for this class and section
+  const enrolledStudents = students.filter(
+    s => (s.class.toLowerCase() === exam.class.toLowerCase()) &&
+         (!exam.section || s.section === exam.section || exam.section === 'A')
+  );
+
+  // If no enrolled students matched directly, use the ones in exam.studentMarks or fallback to first few students
+  const activeStudentList = enrolledStudents.length > 0 
+    ? enrolledStudents 
+    : Object.keys(exam.studentMarks).length > 0
+      ? (Object.values(exam.studentMarks) as any[]).map(sm => ({
+          id: sm.studentId,
+          name: sm.studentName,
+          family: sm.fatherName || 'Guardian',
+          familyId: 'F-001',
+          class: exam.class,
+          section: exam.section,
+          status: 'Active' as const,
+          rollNo: sm.rollNo
+        }))
+      : students.slice(0, 6);
+
+  const totalMaxMarks = exam.subjects.reduce((sum, s) => sum + (s.totalMarks || 100), 0);
+
+  // Calculate results for all students in list
+  const evaluatedStudents = activeStudentList.map((st, idx) => {
+    const entry = exam.studentMarks[st.id];
+    let totalObt = 0;
+    let hasMarks = false;
+
+    const subjectMarksDetail = exam.subjects.map(sub => {
+      const mark = entry?.marks[sub.id];
+      if (typeof mark === 'number') {
+        hasMarks = true;
+        totalObt += mark;
+        const subPct = (mark / (sub.totalMarks || 100)) * 100;
+        return {
+          subId: sub.id,
+          name: sub.name,
+          max: sub.totalMarks || 100,
+          pass: sub.passingMarks || 33,
+          obt: mark,
+          percentage: subPct,
+          grade: calculateGrade(subPct, exam.gradingSchema).grade,
+          isPass: mark >= (sub.passingMarks || 33)
+        };
+      }
+      return {
+        subId: sub.id,
+        name: sub.name,
+        max: sub.totalMarks || 100,
+        pass: sub.passingMarks || 33,
+        obt: null,
+        percentage: 0,
+        grade: '-',
+        isPass: false
+      };
+    });
+
+    const percentage = totalMaxMarks > 0 ? (totalObt / totalMaxMarks) * 100 : 0;
+    const gradeObj = calculateGrade(percentage, exam.gradingSchema);
+    const allPassed = subjectMarksDetail.every(s => s.obt !== null ? s.isPass : true);
+
+    return {
+      student: st,
+      rollNo: entry?.rollNo || st.rollNo || String(idx + 1).padStart(2, '0'),
+      hasMarks,
+      totalObtained: totalObt,
+      percentage: Number(percentage.toFixed(1)),
+      grade: gradeObj.grade,
+      status: allPassed && hasMarks ? 'PASSED' : hasMarks ? 'NEEDS IMPROVEMENT' : 'PENDING',
+      subjectMarks: subjectMarksDetail
+    };
+  });
+
+  // Sort by total obtained descending to compute rank
+  const rankedStudents = [...evaluatedStudents].sort((a, b) => b.totalObtained - a.totalObtained);
+  const studentRanks = new Map<string, number>();
+  rankedStudents.forEach((st, idx) => {
+    studentRanks.set(st.student.id, idx + 1);
+  });
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleDownloadMarksSheetCSV = () => {
+    let csv = `EXAM: ${exam.name},CLASS: ${exam.class} - ${exam.section},DATE: ${currentDate}\n\n`;
+    csv += `Roll No,Student ID,Student Name,Father Name,${exam.subjects.map(s => `${s.name} (Max ${s.totalMarks})`).join(',')},Total Marks,Teacher Signature\n`;
+
+    activeStudentList.forEach((st, idx) => {
+      const roll = st.rollNo || String(idx + 1).padStart(2, '0');
+      const blanks = exam.subjects.map(() => '').join(',');
+      csv += `"${roll}","${st.id}","${st.name}","${st.family}",${blanks},,\n`;
+    });
+
+    downloadCSV(`${exam.name}_${exam.class}_Marks_Sheet.csv`, csv);
+  };
+
+  const currentStudentData = evaluatedStudents[selectedStudentIndex] || evaluatedStudents[0];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+      <div 
+        className="relative w-full max-w-5xl bg-[#0d1524] border border-[#223450] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[94vh]"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Top Controls Bar */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#1c2a42] bg-[#121c30] print:hidden">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
+              {exportType === 'marks-sheet' && <FileSpreadsheet className="w-5 h-5" />}
+              {exportType === 'result-sheet' && <FileText className="w-5 h-5" />}
+              {exportType === 'bulk-dmc' && <Award className="w-5 h-5" />}
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-white">
+                {exportType === 'marks-sheet' && 'Marks Entry Sheet (Teacher Roster)'}
+                {exportType === 'result-sheet' && 'Consolidated Result Sheet'}
+                {exportType === 'bulk-dmc' && 'Detailed Marks Certificate (DMC / Result Cards)'}
+              </h2>
+              <p className="text-xs text-slate-400">
+                {exam.name} • {exam.class} - {exam.section} • {exam.subjects.length} Subjects
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {exportType === 'marks-sheet' && (
+              <button
+                type="button"
+                onClick={handleDownloadMarksSheetCSV}
+                className="px-3.5 py-1.5 bg-[#17253b] hover:bg-[#203350] border border-[#2b4163] text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-400" />
+                Download CSV
+              </button>
+            )}
+
+            {exportType === 'bulk-dmc' && (
+              <div className="flex items-center bg-[#152238] border border-[#243754] rounded-xl p-0.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setBulkPrintMode(true)}
+                  className={`px-3 py-1 rounded-lg font-medium transition-colors ${
+                    bulkPrintMode ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  All DMCs (Bulk)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBulkPrintMode(false)}
+                  className={`px-3 py-1 rounded-lg font-medium transition-colors ${
+                    !bulkPrintMode ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Single View
+                </button>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
+            >
+              <Printer className="w-4 h-4" />
+              Print / Save PDF
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-[#1c2940] transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Content Viewer (Scrollable) */}
+        <div className="p-6 md:p-8 overflow-y-auto flex-1 bg-slate-100 text-slate-900 custom-scrollbar print:p-0 print:bg-white print:overflow-visible">
+          
+          {/* ========================================================= */}
+          {/* 1. MARKS ENTRY SHEET (TEACHER BLANK ROSTER)              */}
+          {/* ========================================================= */}
+          {exportType === 'marks-sheet' && (
+            <div className="max-w-4xl mx-auto bg-white p-8 md:p-10 rounded-xl shadow-md border border-slate-200 print:border-0 print:shadow-none print:p-4">
+              {/* Header */}
+              <div className="flex items-start justify-between border-b-2 border-slate-800 pb-4 mb-4">
+                <div className="flex items-start gap-4">
+                  {school.schoolLogo && (
+                    <img
+                      src={school.schoolLogo}
+                      alt={school.schoolName}
+                      className="w-14 h-14 object-contain rounded-lg border border-slate-200 p-1"
+                      referrerPolicy="no-referrer"
+                    />
+                  )}
+                  <div>
+                    <h1 className="text-xl font-black uppercase tracking-tight text-slate-900">
+                      {school.schoolName}
+                    </h1>
+                    <p className="text-xs text-slate-600">{school.schoolTagline || 'Student Evaluation Roster'}</p>
+                    <p className="text-[11px] text-slate-500">{school.schoolAddress}</p>
+                  </div>
+                </div>
+                <div className="text-right text-xs">
+                  <span className="inline-block px-2.5 py-0.5 bg-blue-100 text-blue-900 font-bold rounded uppercase tracking-wider text-[10px]">
+                    Marks Entry Sheet
+                  </span>
+                  <p className="font-semibold text-slate-700 mt-1.5">Session: {school.session || '2025-2026'}</p>
+                  <p className="text-slate-500 text-[11px]">Date: {currentDate}</p>
+                </div>
+              </div>
+
+              {/* Exam Info Banner */}
+              <div className="bg-slate-50 border border-slate-200 p-3 rounded-lg text-xs grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase">Exam Name</span>
+                  <span className="font-bold text-slate-800">{exam.name}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase">Class &amp; Section</span>
+                  <span className="font-bold text-slate-800">{exam.class} - {exam.section}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase">Total Subjects</span>
+                  <span className="font-bold text-slate-800">{exam.subjects.length} Subjects</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase">Max Marks</span>
+                  <span className="font-bold text-slate-800">{totalMaxMarks}</span>
+                </div>
+              </div>
+
+              {/* Roster Table with ready blank cells for entering marks */}
+              <div className="overflow-x-auto border border-slate-300 rounded-lg">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300 text-[11px]">
+                      <th className="p-2.5 border-r border-slate-300 w-12 text-center">Roll #</th>
+                      <th className="p-2.5 border-r border-slate-300 w-24">ID</th>
+                      <th className="p-2.5 border-r border-slate-300">Student Name</th>
+                      <th className="p-2.5 border-r border-slate-300">Father Name</th>
+                      {exam.subjects.map(s => (
+                        <th key={s.id} className="p-2 border-r border-slate-300 text-center min-w-[75px]">
+                          <span className="block font-bold">{s.name}</span>
+                          <span className="text-[10px] text-slate-500 font-normal">Max: {s.totalMarks || 100}</span>
+                        </th>
+                      ))}
+                      <th className="p-2.5 border-r border-slate-300 text-center min-w-[70px]">Total ({totalMaxMarks})</th>
+                      <th className="p-2.5 text-center min-w-[100px]">Signature / Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {activeStudentList.map((st, idx) => {
+                      const roll = st.rollNo || String(idx + 1).padStart(2, '0');
+                      return (
+                        <tr key={st.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                          <td className="p-2.5 font-bold text-slate-800 text-center border-r border-slate-200">{roll}</td>
+                          <td className="p-2.5 font-mono text-[11px] text-slate-600 border-r border-slate-200">{st.id}</td>
+                          <td className="p-2.5 font-semibold text-slate-900 border-r border-slate-200">{st.name}</td>
+                          <td className="p-2.5 text-slate-600 border-r border-slate-200">{st.family}</td>
+                          {exam.subjects.map(s => (
+                            <td key={s.id} className="p-2 border-r border-slate-200 text-center h-11">
+                              <div className="w-full h-8 border border-slate-300 rounded bg-white"></div>
+                            </td>
+                          ))}
+                          <td className="p-2 border-r border-slate-200 text-center">
+                            <div className="w-full h-8 border border-slate-300 rounded bg-white"></div>
+                          </td>
+                          <td className="p-2 text-center">
+                            <div className="w-full h-8 border-b border-slate-300"></div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Instructions and Teacher Signatures */}
+              <div className="mt-8 pt-6 border-t border-slate-200 grid grid-cols-2 gap-8 text-xs text-slate-600">
+                <div>
+                  <p className="font-bold text-slate-800 mb-1">Instructions for Examiners:</p>
+                  <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-slate-500">
+                    <li>Mark each paper strictly in accordance with the standard marking key.</li>
+                    <li>Avoid overwriting or ambiguous numbers. Any corrections must be countersigned.</li>
+                    <li>Return the completed marks roster within 48 hours of examination completion.</li>
+                  </ul>
+                </div>
+                <div className="flex items-end justify-between pt-4">
+                  <div className="text-center border-t border-slate-400 pt-1 w-36">
+                    <p className="font-semibold text-slate-800">Subject Teacher</p>
+                    <p className="text-[10px] text-slate-500">Signature</p>
+                  </div>
+                  <div className="text-center border-t border-slate-400 pt-1 w-36">
+                    <p className="font-semibold text-slate-800">Head of Department</p>
+                    <p className="text-[10px] text-slate-500">Signature &amp; Date</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* 2. RESULT SHEET (CONSOLIDATED GAZETTE)                     */}
+          {/* ========================================================= */}
+          {exportType === 'result-sheet' && (
+            <div className="max-w-4xl mx-auto bg-white p-8 md:p-10 rounded-xl shadow-md border border-slate-200 print:border-0 print:shadow-none print:p-4">
+              {/* School Header */}
+              <div className="flex items-start justify-between border-b-2 border-slate-800 pb-4 mb-4">
+                <div className="flex items-start gap-4">
+                  {school.schoolLogo && (
+                    <img
+                      src={school.schoolLogo}
+                      alt={school.schoolName}
+                      className="w-16 h-16 object-contain rounded-lg border border-slate-200 p-1"
+                      referrerPolicy="no-referrer"
+                    />
+                  )}
+                  <div>
+                    <h1 className="text-xl md:text-2xl font-black uppercase tracking-tight text-slate-900">
+                      {school.schoolName}
+                    </h1>
+                    <p className="text-xs text-slate-600">{school.campusName && `${school.campusName} • `}{school.schoolTagline}</p>
+                    <p className="text-[11px] text-slate-500">{school.schoolAddress}</p>
+                  </div>
+                </div>
+                <div className="text-right text-xs">
+                  <span className="inline-block px-3 py-1 bg-emerald-100 text-emerald-900 font-bold rounded uppercase tracking-wider text-[11px]">
+                    Result Gazette
+                  </span>
+                  <p className="font-semibold text-slate-700 mt-2">Session: {school.session || '2025-2026'}</p>
+                  <p className="text-slate-500 text-[11px]">Generated: {currentDate}</p>
+                </div>
+              </div>
+
+              {/* Title and metadata banner */}
+              <div className="text-center mb-5">
+                <h2 className="text-base font-black uppercase text-slate-900 tracking-wider">
+                  {exam.name} - Consolidated Result Sheet
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Class: <span className="font-semibold text-slate-800">{exam.class}</span> | Section: <span className="font-semibold text-slate-800">{exam.section}</span> | Total Max Marks: <span className="font-semibold text-slate-800">{totalMaxMarks}</span>
+                </p>
+              </div>
+
+              {/* Full Results Table with Subject Marks */}
+              <div className="overflow-x-auto border border-slate-300 rounded-lg">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300 text-[11px]">
+                      <th className="p-2 border-r border-slate-300 w-10 text-center">Pos</th>
+                      <th className="p-2 border-r border-slate-300 w-12 text-center">Roll</th>
+                      <th className="p-2 border-r border-slate-300">Student Name</th>
+                      <th className="p-2 border-r border-slate-300">Father Name</th>
+                      {exam.subjects.map(s => (
+                        <th key={s.id} className="p-2 border-r border-slate-300 text-center">
+                          <span className="block font-bold">{s.name}</span>
+                          <span className="text-[9px] text-slate-500">({s.totalMarks || 100})</span>
+                        </th>
+                      ))}
+                      <th className="p-2 border-r border-slate-300 text-center font-bold">Total</th>
+                      <th className="p-2 border-r border-slate-300 text-center font-bold">%</th>
+                      <th className="p-2 border-r border-slate-300 text-center font-bold">Grade</th>
+                      <th className="p-2 text-center font-bold">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {rankedStudents.map((item, idx) => (
+                      <tr key={item.student.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                        <td className="p-2 text-center font-bold text-blue-700 border-r border-slate-200">
+                          {idx + 1}
+                        </td>
+                        <td className="p-2 text-center font-semibold text-slate-700 border-r border-slate-200">
+                          {item.rollNo}
+                        </td>
+                        <td className="p-2 font-bold text-slate-900 border-r border-slate-200">
+                          {item.student.name}
+                        </td>
+                        <td className="p-2 text-slate-600 border-r border-slate-200">
+                          {item.student.family}
+                        </td>
+                        {item.subjectMarks.map(sub => (
+                          <td key={sub.subId} className="p-2 text-center border-r border-slate-200">
+                            {sub.obt !== null ? (
+                              <span className={`font-semibold ${sub.isPass ? 'text-slate-800' : 'text-rose-600'}`}>
+                                {sub.obt}
+                              </span>
+                            ) : (
+                              <span className="text-slate-300">-</span>
+                            )}
+                          </td>
+                        ))}
+                        <td className="p-2 text-center font-bold text-slate-900 border-r border-slate-200">
+                          {item.hasMarks ? item.totalObtained : '-'}
+                        </td>
+                        <td className="p-2 text-center font-semibold text-slate-800 border-r border-slate-200">
+                          {item.hasMarks ? `${item.percentage}%` : '-'}
+                        </td>
+                        <td className="p-2 text-center border-r border-slate-200">
+                          {item.hasMarks ? (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-300">
+                              {item.grade}
+                            </span>
+                          ) : (
+                            '-'
+                          )}
+                        </td>
+                        <td className="p-2 text-center">
+                          {item.hasMarks ? (
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              item.status === 'PASSED'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                            }`}>
+                              {item.status}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-[10px]">Pending</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Summary Statistics */}
+              <div className="grid grid-cols-4 gap-3 p-4 bg-slate-50 border border-slate-200 rounded-lg text-xs my-6">
+                <div>
+                  <span className="text-slate-500 block text-[11px]">Total Students</span>
+                  <span className="text-base font-bold text-slate-800">{rankedStudents.length}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[11px]">Results Submitted</span>
+                  <span className="text-base font-bold text-blue-700">{rankedStudents.filter(s => s.hasMarks).length}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[11px]">Passed</span>
+                  <span className="text-base font-bold text-emerald-700">
+                    {rankedStudents.filter(s => s.status === 'PASSED').length}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[11px]">Class Pass Rate</span>
+                  <span className="text-base font-bold text-slate-800">
+                    {rankedStudents.filter(s => s.hasMarks).length > 0
+                      ? `${Math.round((rankedStudents.filter(s => s.status === 'PASSED').length / rankedStudents.filter(s => s.hasMarks).length) * 100)}%`
+                      : '0%'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Signatures */}
+              <div className="pt-8 mt-6 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
+                <div className="text-center w-40 border-t border-slate-400 pt-1">
+                  <p className="font-semibold text-slate-800">Class Teacher</p>
+                  <p className="text-[10px] text-slate-500">Signature</p>
+                </div>
+                <div className="text-center w-40 border-t border-slate-400 pt-1">
+                  <p className="font-semibold text-slate-800">Controller of Exams</p>
+                  <p className="text-[10px] text-slate-500">Signature</p>
+                </div>
+                <div className="text-center w-40 border-t border-slate-400 pt-1">
+                  <p className="font-semibold text-slate-800">{school.principalName || 'Principal'}</p>
+                  <p className="text-[10px] text-slate-500">Stamp &amp; Seal</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* 3. BULK INDIVIDUAL RESULTS (DMC / REPORT CARDS)            */}
+          {/* ========================================================= */}
+          {exportType === 'bulk-dmc' && (
+            <div className="space-y-8">
+              {!bulkPrintMode && (
+                <div className="max-w-2xl mx-auto flex items-center justify-between bg-white px-4 py-3 rounded-xl border border-slate-200 shadow-sm print:hidden">
+                  <button
+                    type="button"
+                    disabled={selectedStudentIndex === 0}
+                    onClick={() => setSelectedStudentIndex(prev => Math.max(0, prev - 1))}
+                    className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1 text-xs font-semibold"
+                  >
+                    <ChevronLeft className="w-4 h-4" /> Previous
+                  </button>
+                  <span className="text-xs font-bold text-slate-800">
+                    Student {selectedStudentIndex + 1} of {evaluatedStudents.length}: {currentStudentData?.student.name}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={selectedStudentIndex === evaluatedStudents.length - 1}
+                    onClick={() => setSelectedStudentIndex(prev => Math.min(evaluatedStudents.length - 1, prev + 1))}
+                    className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1 text-xs font-semibold"
+                  >
+                    Next <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* Render DMC Cards */}
+              {(bulkPrintMode ? evaluatedStudents : [currentStudentData]).map((stData, dmcIdx) => (
+                <div
+                  key={stData.student.id}
+                  className={`max-w-2xl mx-auto bg-white p-8 md:p-10 shadow-lg print:shadow-none print:break-after-page mb-8 ${
+                    isMinimalDmc
+                      ? 'rounded-none border border-black print:border-black'
+                      : 'rounded-2xl border-2 border-slate-300 print:border-slate-800'
+                  }`}
+                >
+                  {/* DMC Header with School Logo & Crest */}
+                  <div className={`flex items-center justify-between pb-4 mb-5 ${isMinimalDmc ? 'border-b-2 border-black' : 'border-b-2 border-blue-900'}`}>
+                    <div className="flex items-center gap-4">
+                      {school.schoolLogo ? (
+                        <img
+                          src={school.schoolLogo}
+                          alt={school.schoolName}
+                          className="w-16 h-16 object-contain rounded-xl border border-slate-200 p-1 bg-white shadow-sm"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className={`w-16 h-16 rounded-xl text-white flex items-center justify-center font-bold text-2xl shadow-sm ${isMinimalDmc ? 'bg-black' : 'bg-blue-900'}`}>
+                          {school.schoolName.charAt(0)}
+                        </div>
+                      )}
+                      <div>
+                        <h1 className={`text-lg md:text-xl font-black uppercase tracking-tight ${isMinimalDmc ? 'text-black' : 'text-blue-950'}`}>
+                          {school.schoolName}
+                        </h1>
+                        <p className="text-xs text-slate-600 font-medium">
+                          {school.campusName && `${school.campusName} • `}{school.schoolTagline || 'Excellence in Learning'}
+                        </p>
+                        <p className="text-[10px] text-slate-500">
+                          {school.schoolAddress}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`inline-block px-3 py-1 text-white font-black text-[11px] rounded tracking-wider uppercase ${isMinimalDmc ? 'bg-black' : 'bg-blue-900'}`}>
+                        D.M.C
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-1">Session {school.session || '2025-2026'}</p>
+                    </div>
+                  </div>
+
+                  {/* Title Banner */}
+                  <div className="text-center my-3">
+                    <h2 className="text-base font-extrabold uppercase tracking-widest text-slate-900">
+                      DETAILED MARKS CERTIFICATE
+                    </h2>
+                    <p className={`text-xs font-semibold uppercase tracking-wide ${isMinimalDmc ? 'text-neutral-700' : 'text-blue-800'}`}>
+                      {exam.name}
+                    </p>
+                  </div>
+
+                  {/* Student Details Box */}
+                  <div className={`p-4 my-4 grid grid-cols-2 gap-y-2.5 gap-x-4 text-xs ${isMinimalDmc ? 'bg-white border border-black' : 'bg-slate-50 border border-slate-200 rounded-xl'}`}>
+                    <div>
+                      <span className="text-slate-500 block text-[10px] uppercase">Student Name</span>
+                      <span className="font-bold text-slate-900 text-sm">{stData.student.name}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[10px] uppercase">Father / Guardian</span>
+                      <span className="font-bold text-slate-900 text-sm">{stData.student.family}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[10px] uppercase">Roll No / Student ID</span>
+                      <span className="font-mono font-semibold text-slate-800">{stData.rollNo} / {stData.student.id}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[10px] uppercase">Class &amp; Section</span>
+                      <span className="font-bold text-slate-800">{exam.class} - {exam.section}</span>
+                    </div>
+                  </div>
+
+                  {/* Subjects Marks Table */}
+                  <div className={`overflow-hidden my-4 ${isMinimalDmc ? 'border border-black' : 'border border-slate-300 rounded-xl'}`}>
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className={`text-white font-bold text-[11px] uppercase ${isMinimalDmc ? 'bg-black' : 'bg-blue-900'}`}>
+                          <th className={`p-2.5 border-r ${isMinimalDmc ? 'border-neutral-700' : 'border-blue-800'}`}>Subject</th>
+                          <th className={`p-2.5 border-r text-center w-20 ${isMinimalDmc ? 'border-neutral-700' : 'border-blue-800'}`}>Total Marks</th>
+                          <th className={`p-2.5 border-r text-center w-20 ${isMinimalDmc ? 'border-neutral-700' : 'border-blue-800'}`}>Passing</th>
+                          <th className={`p-2.5 border-r text-center w-24 ${isMinimalDmc ? 'border-neutral-700' : 'border-blue-800'}`}>Marks Obtained</th>
+                          <th className={`p-2.5 border-r text-center w-16 ${isMinimalDmc ? 'border-neutral-700' : 'border-blue-800'}`}>Grade</th>
+                          <th className="p-2.5 text-center w-20">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 text-slate-700">
+                        {stData.subjectMarks.map(sub => (
+                          <tr key={sub.subId} className="hover:bg-slate-50">
+                            <td className="p-2.5 font-bold text-slate-900 border-r border-slate-200">
+                              {sub.name}
+                            </td>
+                            <td className="p-2.5 text-center font-medium border-r border-slate-200">
+                              {sub.max}
+                            </td>
+                            <td className="p-2.5 text-center text-slate-500 border-r border-slate-200">
+                              {sub.pass}
+                            </td>
+                            <td className="p-2.5 text-center font-bold text-slate-900 border-r border-slate-200">
+                              {sub.obt !== null ? sub.obt : '-'}
+                            </td>
+                            <td className="p-2.5 text-center font-bold border-r border-slate-200">
+                              {sub.grade}
+                            </td>
+                            <td className="p-2.5 text-center">
+                              {sub.obt !== null ? (
+                                <span className={`text-[10px] font-bold uppercase ${
+                                  sub.isPass ? 'text-emerald-700' : 'text-rose-600'
+                                }`}>
+                                  {sub.isPass ? 'Pass' : 'Fail'}
+                                </span>
+                              ) : (
+                                '-'
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-300">
+                          <td className="p-2.5 border-r border-slate-300 uppercase tracking-wide">
+                            Grand Total
+                          </td>
+                          <td className="p-2.5 text-center border-r border-slate-300 font-extrabold">
+                            {totalMaxMarks}
+                          </td>
+                          <td className="p-2.5 text-center border-r border-slate-300 text-slate-500">
+                            -
+                          </td>
+                          <td className="p-2.5 text-center border-r border-slate-300 font-extrabold text-blue-900 text-sm">
+                            {stData.hasMarks ? stData.totalObtained : '-'}
+                          </td>
+                          <td className="p-2.5 text-center border-r border-slate-300 font-extrabold text-blue-900 text-sm">
+                            {stData.hasMarks ? stData.grade : '-'}
+                          </td>
+                          <td className="p-2.5 text-center font-extrabold text-emerald-700 text-xs">
+                            {stData.status}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+
+                  {/* Summary Metric Ribbon */}
+                  <div className="grid grid-cols-4 gap-2 bg-blue-50/70 border border-blue-200 rounded-xl p-3 my-4 text-center">
+                    <div>
+                      <span className="text-[10px] text-blue-800 uppercase font-semibold block">Percentage</span>
+                      <span className="text-base font-black text-blue-950">
+                        {stData.hasMarks ? `${stData.percentage}%` : 'N/A'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-blue-800 uppercase font-semibold block">Overall Grade</span>
+                      <span className="text-base font-black text-blue-950">
+                        {stData.hasMarks ? stData.grade : 'N/A'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-blue-800 uppercase font-semibold block">Class Rank</span>
+                      <span className="text-base font-black text-blue-950">
+                        #{studentRanks.get(stData.student.id) || 1}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-blue-800 uppercase font-semibold block">Result</span>
+                      <span className={`text-base font-black ${stData.status === 'PASSED' ? 'text-emerald-700' : 'text-amber-700'}`}>
+                        {stData.status}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Grading Key Legend */}
+                  <div className="my-3 pt-2 border-t border-slate-200">
+                    <p className="text-[10px] font-bold text-slate-600 mb-1">Grading Scale:</p>
+                    <div className="flex flex-wrap gap-1.5 text-[9px] text-slate-500">
+                      {exam.gradingSchema.map(g => (
+                        <span key={g.grade} className="px-1.5 py-0.5 bg-slate-100 rounded border border-slate-200">
+                          <strong>{g.grade}:</strong> &gt;={g.minPercentage}%
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* DMC Signatures Footer */}
+                  <div className="pt-8 mt-6 border-t border-slate-200 flex items-end justify-between text-xs text-slate-600">
+                    <div className="text-center w-36 border-t border-slate-400 pt-1">
+                      <p className="font-semibold text-slate-800">Class Incharge</p>
+                      <p className="text-[10px] text-slate-500">Signature</p>
+                    </div>
+                    <div className="text-center w-36 border-t border-slate-400 pt-1">
+                      <p className="font-semibold text-slate-800">Exam Controller</p>
+                      <p className="text-[10px] text-slate-500">Signature</p>
+                    </div>
+                    <div className="text-center w-36 border-t border-slate-400 pt-1">
+                      <p className="font-semibold text-slate-800">{school.principalName || 'Principal'}</p>
+                      <p className="text-[10px] text-slate-500">Official Seal</p>
+                    </div>
+                  </div>
+
+                  <div className="text-center mt-4 text-[9px] text-slate-400">
+                    This document is computer generated by {school.schoolName}. Issued on {currentDate}.
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+        </div>
+
+        {/* Bottom Bar */}
+        <div className="flex items-center justify-between px-6 py-4 border-t border-[#1c2a42] bg-[#121c30] print:hidden">
+          <p className="text-xs text-slate-400">
+            {exportType === 'bulk-dmc'
+              ? `Displaying ${bulkPrintMode ? evaluatedStudents.length : 1} student result certificate(s)`
+              : `Ready to print or save as PDF`}
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-5 py-2 rounded-xl border border-[#243550] text-slate-300 hover:text-white hover:bg-[#1a2840] text-xs font-semibold transition-colors"
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
+            >
+              <Printer className="w-4 h-4" />
+              Print / Save PDF
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

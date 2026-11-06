@@ -1,0 +1,1412 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  Download, 
+  Printer, 
+  ExternalLink,
+  Barcode, 
+  QrCode, 
+  CheckCircle2,
+  Palette
+} from 'lucide-react';
+import { Student, StaffMember, ClassInfo, AttendanceRecord } from '../types';
+import { 
+  SchoolSettings, 
+  getSchoolSettings, 
+  saveSchoolSettings
+} from '../utils/settingsHelper';
+import { Exam, getStoredExams } from '../utils/examStore';
+import { generateSingleIdCard, DEFAULT_SCHOOL } from '../utils/pdfGenerator';
+import { generateSingleStaffIdCard, generateMonthlyIndividualSlipsCombinedPdf } from '../utils/staffPdfGenerator';
+import { generateSingleRollNumberSlipPDF, RollSlipData } from '../utils/rollSlipPdfGenerator';
+import { generateFeeCardPdf, buildStudentFeeCardData, formatOrBlank } from '../utils/feeCardHelper';
+import { generateWeeklyAttendancePdf, getWeekDays, calculateWeeklyAttendance, loadAttendance } from '../utils/attendanceHelper';
+
+// Modals for functional use
+import { IdCardModal } from './IdCardModal';
+import { StaffIdCardModal } from './StaffIdCardModal';
+import { RollNumberSlipsModal, MinimalStreamSlipCard } from './RollNumberSlipsModal';
+import { FeeChallanModal } from './FeeChallanModal';
+import { FeeCardModal } from './FeeCardModal';
+import { StaffSalarySlipsModal } from './StaffSalarySlipsModal';
+import { ExamDetailExportModal } from './ExamDetailExportModal';
+import { AttendanceSheetModal } from './AttendanceSheetModal';
+
+interface TemplatesSubmoduleProps {
+  schoolSettings?: SchoolSettings;
+  onUpdateSchoolSettings?: (settings: SchoolSettings) => void;
+  students?: Student[];
+  classes?: ClassInfo[];
+  staff?: StaffMember[];
+  allAttendance?: Record<string, AttendanceRecord[]>;
+  onShowToast: (message: string, type?: 'success' | 'info' | 'error') => void;
+}
+
+interface TemplateOption {
+  id: string;
+  label: string;
+  description: string;
+}
+
+interface DocumentItem {
+  id: string;
+  name: string;
+  format: string;
+  settingKey: keyof SchoolSettings;
+  templates: TemplateOption[];
+}
+
+const DOCUMENTS: DocumentItem[] = [
+  { 
+    id: 'roll-number-slip', 
+    name: 'Roll Number Slip', 
+    format: 'Scrollable Stream / A4 PDF',
+    settingKey: 'rollNumberSlipTemplate',
+    templates: [
+      { id: 'minimal-stream', label: 'Minimal Stream', description: 'Clean modern card with dark header badge & streamlined schedule' },
+      { id: 'classic-bordered', label: 'Classic Bordered', description: 'Traditional double-bordered academic admit card' }
+    ]
+  },
+  { 
+    id: 'student-id-card', 
+    name: 'Student ID Card', 
+    format: 'CR80 Standard (85.6 × 54 mm)',
+    settingKey: 'studentIdCardTemplate',
+    templates: [
+      { id: 'modern-tech', label: 'Modern Tech', description: 'Dark slate & cyan accent identity card' },
+      { id: 'classic-academic', label: 'Classic Academic', description: 'Clean ivory & royal blue crest card' }
+    ]
+  },
+  { 
+    id: 'staff-id-card', 
+    name: 'Staff ID Card', 
+    format: 'CR80 Standard (85.6 × 54 mm)',
+    settingKey: 'staffIdCardTemplate',
+    templates: [
+      { id: 'modern-tech', label: 'Modern Tech', description: 'Dark indigo executive faculty card' },
+      { id: 'classic-academic', label: 'Classic Academic', description: 'Traditional light academic faculty badge' }
+    ]
+  },
+  { 
+    id: 'fee-challan', 
+    name: 'Fee Challan', 
+    format: 'Multi-Part Voucher (A4 Landscape)',
+    settingKey: 'feeChallanTemplate',
+    templates: [
+      { id: 'standard-3copy', label: '3-Copy Bank Voucher', description: 'Bank Copy, School Copy & Student/Parent Copy' },
+      { id: 'compact-2copy', label: '2-Copy Compact Voucher', description: 'School Office Copy & Student/Parent Copy' }
+    ]
+  },
+  { 
+    id: 'student-fee-card', 
+    name: 'Student Fee Card', 
+    format: '12-Month Ledger (A4 Portrait)',
+    settingKey: 'studentFeeCardTemplate',
+    templates: [
+      { id: 'classic-ledger', label: 'Classic Ledger', description: 'Double-framed navy & crimson 12-month fee card' },
+      { id: 'minimal-modern', label: 'Minimal Modern', description: 'Monochrome clean-lined institutional ledger' }
+    ]
+  },
+  { 
+    id: 'staff-salary-slip', 
+    name: 'Staff Salary Slip', 
+    format: 'A4 Official Payslip',
+    settingKey: 'staffSalarySlipTemplate',
+    templates: [
+      { id: 'executive-emerald', label: 'Executive Emerald', description: 'Modern dark header with emerald net-pay highlight' },
+      { id: 'minimal-classic', label: 'Minimal Classic', description: 'High-contrast monochrome payroll voucher' }
+    ]
+  },
+  { 
+    id: 'exam-dmc', 
+    name: 'Exam DMC / Report Card', 
+    format: 'A4 Portrait Official',
+    settingKey: 'examDmcTemplate',
+    templates: [
+      { id: 'official-crest', label: 'Official Crest', description: 'Royal blue header with summary metrics ribbon' },
+      { id: 'minimal-classic', label: 'Minimal Classic', description: 'Crisp black-bordered academic transcript' }
+    ]
+  },
+  { 
+    id: 'attendance-register', 
+    name: 'Attendance Register', 
+    format: 'A4 Landscape Register',
+    settingKey: 'attendanceRegisterTemplate',
+    templates: [
+      { id: 'official-weekly', label: 'Official Weekly', description: 'Color-coded status badges with dark header' },
+      { id: 'compact-monochrome', label: 'Compact Monochrome', description: 'Ink-friendly monochrome print register' }
+    ]
+  },
+];
+
+export const TemplatesSubmodule: React.FC<TemplatesSubmoduleProps> = ({
+  schoolSettings: propSchoolSettings,
+  onUpdateSchoolSettings,
+  students = [],
+  classes = [],
+  staff = [],
+  allAttendance: propAllAttendance,
+  onShowToast
+}) => {
+  const allAttendance = propAllAttendance || loadAttendance();
+  const [liveSchool, setLiveSchool] = useState<SchoolSettings>(() => propSchoolSettings || getSchoolSettings());
+
+  useEffect(() => {
+    if (propSchoolSettings) {
+      setLiveSchool(propSchoolSettings);
+    }
+  }, [propSchoolSettings]);
+
+  useEffect(() => {
+    const handleSettingsChange = () => {
+      setLiveSchool(getSchoolSettings());
+    };
+    window.addEventListener('schoolSettingsUpdated', handleSettingsChange);
+    return () => window.removeEventListener('schoolSettingsUpdated', handleSettingsChange);
+  }, []);
+
+  const school = liveSchool;
+  const exams = getStoredExams();
+
+  const [selectedDocId, setSelectedDocId] = useState<string>('roll-number-slip');
+
+  // Modals state
+  const [isStudentIdModalOpen, setIsStudentIdModalOpen] = useState(false);
+  const [isStaffIdModalOpen, setIsStaffIdModalOpen] = useState(false);
+  const [isRollSlipsModalOpen, setIsRollSlipsModalOpen] = useState(false);
+  const [isFeeChallanModalOpen, setIsFeeChallanModalOpen] = useState(false);
+  const [isFeeCardModalOpen, setIsFeeCardModalOpen] = useState(false);
+  const [isSalarySlipModalOpen, setIsSalarySlipModalOpen] = useState(false);
+  const [isExamExportModalOpen, setIsExamExportModalOpen] = useState(false);
+  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
+
+  // Sample data for rendering
+  const sampleStudent: Student = students[0] || {
+    id: 'S-0179',
+    name: 'Muhammad Ali',
+    family: 'Ahmad Khan',
+    familyId: 'F-0010',
+    rollNo: '01',
+    fatherName: 'Ahmad Khan',
+    class: 'Class 1',
+    section: 'A',
+    status: 'Active',
+    bloodGroup: 'B+',
+    phone: '+92 300 1234567',
+    admissionDate: '2025-01-15'
+  };
+
+  const sampleStaff: StaffMember = staff[0] || {
+    id: 'T-001',
+    name: 'Prof. Muhammad Tariq',
+    role: 'Senior Faculty',
+    category: 'Teacher',
+    qualification: 'M.Sc. Mathematics',
+    department: 'Academics',
+    phone: '+92 301 5550192',
+    email: 'tariq@schoollee.pk',
+    status: 'Active',
+    payStatus: 'Paid',
+    salary: 65000,
+    joiningDate: '2023-08-01'
+  };
+
+  const sampleExam: Exam = exams[0] || {
+    id: 'EXAM-001',
+    name: '1st Term Examination',
+    class: 'Class 1',
+    section: 'A',
+    subjects: [
+      { id: 'sub-1', name: 'Mathematics', totalMarks: 100, passingMarks: 33, startDate: '2026-09-18' },
+      { id: 'sub-2', name: 'English', totalMarks: 100, passingMarks: 33, startDate: '2026-09-19' },
+      { id: 'sub-3', name: 'Science', totalMarks: 100, passingMarks: 33, startDate: '2026-09-20' },
+      { id: 'sub-4', name: 'Urdu', totalMarks: 100, passingMarks: 33, startDate: '2026-09-21' },
+      { id: 'sub-5', name: 'Islamiat', totalMarks: 50, passingMarks: 17, startDate: '2026-09-22' }
+    ],
+    tags: ['Midterm'],
+    createdAt: '15 Sep 2026',
+    createdTimestamp: Date.now(),
+    createdBy: 'Administrator',
+    resultsCount: 0,
+    studentMarks: {},
+    gradingSchema: []
+  };
+
+  const activeDoc = DOCUMENTS.find(d => d.id === selectedDocId) || DOCUMENTS[0];
+  const currentTemplateValue = (school[activeDoc.settingKey] as string) || activeDoc.templates[0].id;
+
+  const handleSelectTemplateStyle = (templateId: string) => {
+    const updated: SchoolSettings = {
+      ...school,
+      [activeDoc.settingKey]: templateId
+    };
+    setLiveSchool(updated);
+    saveSchoolSettings(updated);
+    if (onUpdateSchoolSettings) {
+      onUpdateSchoolSettings(updated);
+    }
+    const chosenOption = activeDoc.templates.find(t => t.id === templateId);
+    onShowToast(`${activeDoc.name} template updated to "${chosenOption?.label || templateId}" across the system!`, 'success');
+  };
+
+  const handleOpenGenerator = () => {
+    switch (selectedDocId) {
+      case 'roll-number-slip':
+        setIsRollSlipsModalOpen(true);
+        break;
+      case 'student-id-card':
+        setIsStudentIdModalOpen(true);
+        break;
+      case 'staff-id-card':
+        setIsStaffIdModalOpen(true);
+        break;
+      case 'fee-challan':
+        setIsFeeChallanModalOpen(true);
+        break;
+      case 'student-fee-card':
+        setIsFeeCardModalOpen(true);
+        break;
+      case 'staff-salary-slip':
+        setIsSalarySlipModalOpen(true);
+        break;
+      case 'exam-dmc':
+        setIsExamExportModalOpen(true);
+        break;
+      case 'attendance-register':
+        setIsAttendanceModalOpen(true);
+        break;
+    }
+  };
+
+  const buildSampleRollSlipData = (): RollSlipData => ({
+    student: sampleStudent,
+    rollNo: sampleStudent.rollNo || '01',
+    exams: [sampleExam],
+    dateSheet: (sampleExam.subjects && sampleExam.subjects.length > 0 ? sampleExam.subjects : [
+      { id: 's1', name: 'Mathematics', totalMarks: 100, passingMarks: 33, startDate: '2026-09-18' },
+      { id: 's2', name: 'English', totalMarks: 100, passingMarks: 33, startDate: '2026-09-19' },
+      { id: 's3', name: 'Science', totalMarks: 100, passingMarks: 33, startDate: '2026-09-20' },
+      { id: 's4', name: 'Urdu', totalMarks: 100, passingMarks: 33, startDate: '2026-09-21' },
+    ]).map((sub, idx) => ({
+      examName: sampleExam.name,
+      subjectName: sub.name,
+      date: sub.startDate || '2026-09-18',
+      time: '09:00 AM - 12:00 PM',
+      totalMarks: sub.totalMarks || 100,
+      passingMarks: sub.passingMarks || 33,
+      room: `Hall ${String.fromCharCode(65 + (idx % 3))}`
+    })),
+    folderName: sampleExam.name || 'Examination'
+  });
+
+  const handleDownloadPdf = () => {
+    try {
+      switch (selectedDocId) {
+        case 'roll-number-slip': {
+          const sampleSlipData = buildSampleRollSlipData();
+          generateSingleRollNumberSlipPDF(sampleSlipData, school);
+          onShowToast(`Roll Number Slip PDF downloaded for ${sampleStudent.name}!`, 'success');
+          break;
+        }
+
+        case 'student-id-card':
+          generateSingleIdCard(
+            sampleStudent,
+            school.studentIdCardTemplate || 'modern-tech',
+            DEFAULT_SCHOOL
+          );
+          onShowToast(`Student ID Card PDF downloaded for ${sampleStudent.name}!`, 'success');
+          break;
+
+        case 'staff-id-card':
+          generateSingleStaffIdCard(
+            sampleStaff,
+            school.staffIdCardTemplate || 'modern-tech',
+            DEFAULT_SCHOOL
+          );
+          onShowToast(`Staff ID Card PDF downloaded for ${sampleStaff.name}!`, 'success');
+          break;
+
+        case 'fee-challan':
+          setIsFeeChallanModalOpen(true);
+          break;
+
+        case 'student-fee-card':
+          generateFeeCardPdf(
+            students.length > 0 ? students.slice(0, 5) : [sampleStudent],
+            classes,
+            school
+          );
+          onShowToast(`Student Fee Card PDF downloaded!`, 'success');
+          break;
+
+        case 'staff-salary-slip':
+          generateMonthlyIndividualSlipsCombinedPdf(
+            staff.length > 0 ? staff : [sampleStaff],
+            'September 2026',
+            sampleStaff.id,
+            DEFAULT_SCHOOL
+          );
+          onShowToast(`Staff Salary Slip PDF downloaded!`, 'success');
+          break;
+
+        case 'exam-dmc':
+          setIsExamExportModalOpen(true);
+          break;
+
+        case 'attendance-register': {
+          const weekDays = getWeekDays('2026-09-15');
+          const targetStudents = students.length > 0 ? students.slice(0, 15) : [sampleStudent];
+          const { memberSummaries, totals } = calculateWeeklyAttendance(targetStudents, 'student', weekDays, allAttendance);
+          generateWeeklyAttendancePdf(
+            memberSummaries,
+            totals,
+            weekDays,
+            `Class ${sampleStudent.class} - Section ${sampleStudent.section || 'A'}`,
+            'Students',
+            DEFAULT_SCHOOL
+          );
+          onShowToast(`Attendance Register PDF downloaded!`, 'success');
+          break;
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      handleOpenGenerator();
+    }
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div className="space-y-4 animate-in fade-in duration-200">
+      {/* Clear-Cut 2-Column Layout */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+        
+        {/* ========================================================================= */}
+        {/* LEFT SIDE: Name of each document                                          */}
+        {/* ========================================================================= */}
+        <div className="md:col-span-4 lg:col-span-3 space-y-2 bg-[#0f1726] border border-[#1e2d45] rounded-2xl p-3 shadow-lg">
+          <div className="px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-[#1c293d]">
+            Documents
+          </div>
+          <div className="space-y-1">
+            {DOCUMENTS.map((doc) => {
+              const isSelected = selectedDocId === doc.id;
+              const activeTplId = (school[doc.settingKey] as string) || doc.templates[0].id;
+              const activeTpl = doc.templates.find(t => t.id === activeTplId) || doc.templates[0];
+              return (
+                <button
+                  key={doc.id}
+                  type="button"
+                  onClick={() => setSelectedDocId(doc.id)}
+                  className={`w-full text-left px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer flex items-center justify-between ${
+                    isSelected
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                      : 'text-slate-300 hover:text-white hover:bg-[#142033]'
+                  }`}
+                >
+                  <div className="min-w-0 pr-2">
+                    <span className="block truncate">{doc.name}</span>
+                    <span className={`block text-[10px] font-normal truncate mt-0.5 ${isSelected ? 'text-blue-100' : 'text-slate-500'}`}>
+                      {activeTpl.label}
+                    </span>
+                  </div>
+                  {isSelected && <span className="w-2 h-2 rounded-full bg-white shrink-0" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* RIGHT SIDE: Template Selector & Live Document Preview                     */}
+        {/* ========================================================================= */}
+        <div className="md:col-span-8 lg:col-span-9 bg-[#0f1726] border border-[#1e2d45] rounded-2xl p-5 shadow-lg space-y-5">
+          
+          {/* Top Bar of the Preview Pane */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#1c293d]">
+            <div>
+              <h2 className="text-lg font-bold text-white tracking-tight">{activeDoc.name}</h2>
+              <p className="text-xs text-slate-400 font-mono mt-0.5">{activeDoc.format}</p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="px-3.5 py-2 rounded-xl bg-[#142033] hover:bg-[#1a2c47] border border-[#233550] text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+                title="Print Document"
+              >
+                <Printer className="w-3.5 h-3.5 text-slate-400" />
+                <span>Print</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDownloadPdf}
+                className="px-3.5 py-2 rounded-xl bg-[#142033] hover:bg-[#1a2c47] border border-[#233550] text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+                title="Download PDF"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-400" />
+                <span>Download PDF</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleOpenGenerator}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-blue-600/30 transition-all cursor-pointer"
+              >
+                <span>Use / Export</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Template Style Switcher (Changes reflect across the entire system) */}
+          <div className="bg-[#121c2e] border border-[#1f314d] rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
+                <Palette className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white">Active System Template</div>
+                <div className="text-[11px] text-slate-400">
+                  {activeDoc.templates.find(t => t.id === currentTemplateValue)?.description}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {activeDoc.templates.map((tpl) => {
+                const isActive = currentTemplateValue === tpl.id;
+                return (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    onClick={() => handleSelectTemplateStyle(tpl.id)}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-blue-600/20 border-blue-500 text-white shadow-sm'
+                        : 'bg-[#0b121e] border-[#1e2d45] text-slate-400 hover:text-white hover:border-slate-600'
+                    }`}
+                  >
+                    {isActive && <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />}
+                    <span>{tpl.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Document Preview Box - Big, Readable, High Fidelity */}
+          <div className="p-4 sm:p-8 bg-[#070b13] border border-[#1a2638] rounded-xl overflow-x-auto flex justify-center">
+            {selectedDocId === 'roll-number-slip' && (
+              <RollNumberSlipPreview 
+                school={school} 
+                slip={buildSampleRollSlipData()} 
+                examTitle={sampleExam.name || '1st Term Examination'} 
+              />
+            )}
+
+            {selectedDocId === 'student-id-card' && (
+              <StudentIdCardPreview 
+                school={school} 
+                student={sampleStudent} 
+              />
+            )}
+
+            {selectedDocId === 'staff-id-card' && (
+              <StaffIdCardPreview 
+                school={school} 
+                staff={sampleStaff} 
+              />
+            )}
+
+            {selectedDocId === 'fee-challan' && (
+              <FeeChallanPreview 
+                school={school} 
+                student={sampleStudent} 
+              />
+            )}
+
+            {selectedDocId === 'student-fee-card' && (
+              <StudentFeeCardPreview 
+                school={school} 
+                student={sampleStudent}
+                classes={classes}
+              />
+            )}
+
+            {selectedDocId === 'staff-salary-slip' && (
+              <StaffSalarySlipPreview 
+                school={school} 
+                staff={sampleStaff} 
+              />
+            )}
+
+            {selectedDocId === 'exam-dmc' && (
+              <ExamDmcPreview 
+                school={school} 
+                student={sampleStudent} 
+                exam={sampleExam} 
+              />
+            )}
+
+            {selectedDocId === 'attendance-register' && (
+              <AttendanceRegisterPreview 
+                school={school} 
+                student={sampleStudent} 
+              />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* Interactive Functional Modals triggered from "Use / Export"               */}
+      {/* ========================================================================= */}
+      <RollNumberSlipsModal
+        isOpen={isRollSlipsModalOpen}
+        onClose={() => setIsRollSlipsModalOpen(false)}
+        students={students.length > 0 ? students : [sampleStudent]}
+        classes={classes}
+        exams={exams.length > 0 ? exams : [sampleExam]}
+        schoolSettings={school}
+        onShowToast={onShowToast}
+      />
+
+      <IdCardModal
+        isOpen={isStudentIdModalOpen}
+        onClose={() => setIsStudentIdModalOpen(false)}
+        student={sampleStudent}
+        allStudents={students.length > 0 ? students : [sampleStudent]}
+        onSelectStudent={() => {}}
+      />
+
+      <StaffIdCardModal
+        isOpen={isStaffIdModalOpen}
+        onClose={() => setIsStaffIdModalOpen(false)}
+        staff={sampleStaff}
+        allStaff={staff.length > 0 ? staff : [sampleStaff]}
+        onSelectStaff={() => {}}
+      />
+
+      <FeeChallanModal
+        isOpen={isFeeChallanModalOpen}
+        onClose={() => setIsFeeChallanModalOpen(false)}
+        student={sampleStudent}
+        schoolSettings={school}
+        challanNumber="CH-2026-0891"
+        feeRange="Monthly Tuition Fee"
+      />
+
+      <FeeCardModal
+        isOpen={isFeeCardModalOpen}
+        onClose={() => setIsFeeCardModalOpen(false)}
+        students={students.length > 0 ? students : [sampleStudent]}
+        classes={classes}
+        initialSelectedStudentId={sampleStudent.id}
+        schoolSettings={school}
+        onShowToast={onShowToast}
+      />
+
+      <StaffSalarySlipsModal
+        isOpen={isSalarySlipModalOpen}
+        onClose={() => setIsSalarySlipModalOpen(false)}
+        staffList={staff.length > 0 ? staff : [sampleStaff]}
+        selectedStaffMember={sampleStaff}
+      />
+
+      <ExamDetailExportModal
+        isOpen={isExamExportModalOpen}
+        onClose={() => setIsExamExportModalOpen(false)}
+        exportType="bulk-dmc"
+        exam={sampleExam}
+        students={students.length > 0 ? students : [sampleStudent]}
+        schoolSettings={school}
+      />
+
+      <AttendanceSheetModal
+        isOpen={isAttendanceModalOpen}
+        onClose={() => setIsAttendanceModalOpen(false)}
+        classes={classes}
+        allStudents={students.length > 0 ? students : [sampleStudent]}
+        allStaff={staff.length > 0 ? staff : [sampleStaff]}
+        allAttendance={allAttendance}
+      />
+    </div>
+  );
+};
+
+/* ========================================================================= */
+/* HIGH-FIDELITY, LARGE READABLE DOCUMENT PREVIEW COMPONENTS                 */
+/* ========================================================================= */
+
+/**
+ * 1. Roll Number Slip — Uses the shared MinimalStreamSlipCard from RollNumberSlipsModal
+ * so the template in Settings -> Templates matches the generated Roll Number Slips 100%.
+ */
+function RollNumberSlipPreview({
+  school,
+  slip,
+  examTitle
+}: {
+  school: SchoolSettings;
+  slip: RollSlipData;
+  examTitle: string;
+}) {
+  return (
+    <div className="w-full max-w-3xl">
+      <MinimalStreamSlipCard
+        slip={slip}
+        school={school}
+        examTitle={examTitle}
+        index={0}
+        total={1}
+      />
+    </div>
+  );
+}
+
+/**
+ * 2. Student ID Card (Front & Back) — Respects school.studentIdCardTemplate
+ */
+function StudentIdCardPreview({
+  school,
+  student
+}: {
+  school: SchoolSettings;
+  student: Student;
+}) {
+  const isClassic = school.studentIdCardTemplate === 'classic-academic';
+
+  if (isClassic) {
+    return (
+      <div className="flex flex-col sm:flex-row items-center gap-6 justify-center">
+        {/* Classic Front */}
+        <div className="w-72 h-[420px] rounded-2xl bg-[#f8fafc] text-slate-900 border-2 border-[#1e3a8a] shadow-2xl flex flex-col justify-between overflow-hidden font-sans">
+          <div className="bg-[#1e3a8a] text-white px-4 py-3 text-center border-b-4 border-amber-500">
+            <h2 className="text-xs font-black uppercase tracking-wider">
+              {school.schoolName || 'DEMO SCHOOL'}
+            </h2>
+            <span className="text-[9px] font-semibold text-blue-200 tracking-widest block uppercase mt-0.5">
+              STUDENT IDENTITY CARD
+            </span>
+          </div>
+
+          <div className="flex flex-col items-center my-auto px-4">
+            <div className="w-24 h-24 rounded-full bg-blue-50 border-2 border-[#1e3a8a] p-1 flex items-center justify-center shadow-md">
+              <div className="w-full h-full rounded-full bg-[#1e3a8a] flex items-center justify-center text-white text-3xl font-black">
+                {student.name.charAt(0)}
+              </div>
+            </div>
+            <h3 className="text-base font-black text-slate-900 mt-3 text-center">{student.name}</h3>
+            <span className="text-xs font-bold text-[#1e3a8a] bg-blue-100 px-3 py-0.5 rounded-full mt-1 border border-blue-300">
+              {student.class} — Section {student.section || 'A'}
+            </span>
+          </div>
+
+          <div className="px-5 space-y-1.5 text-xs border-t border-slate-200 pt-3">
+            <div className="flex justify-between">
+              <span className="text-slate-500 font-semibold">Roll No:</span>
+              <span className="font-bold text-slate-900">{student.rollNo || '01'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500 font-semibold">Father Name:</span>
+              <span className="font-bold text-slate-900">{student.fatherName || 'Ahmad Khan'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500 font-semibold">Blood Group:</span>
+              <span className="font-bold text-rose-600">{student.bloodGroup || 'B+'}</span>
+            </div>
+          </div>
+
+          <div className="px-5 py-2.5 bg-slate-100 border-t border-slate-200 flex items-center justify-between">
+            <span className="text-[9px] font-mono font-bold text-slate-600">ID: {student.id}</span>
+            <Barcode className="w-16 h-5 text-[#1e3a8a]" />
+          </div>
+        </div>
+
+        {/* Classic Back */}
+        <div className="w-72 h-[420px] rounded-2xl bg-[#f8fafc] text-slate-900 p-5 border-2 border-[#1e3a8a] shadow-2xl flex flex-col justify-between font-sans">
+          <div className="text-center border-b-2 border-[#1e3a8a] pb-2">
+            <span className="text-[10px] font-black text-[#1e3a8a] uppercase tracking-widest">TERMS &amp; CONDITIONS</span>
+          </div>
+
+          <div className="space-y-2 text-[10px] text-slate-700 leading-relaxed my-auto">
+            <p>• This card is the property of {school.schoolName} and must be returned upon withdrawal.</p>
+            <p>• Loss of card must be reported immediately to the administrative office.</p>
+            <p>• Students must wear this card on campus and during official assessments.</p>
+            <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-center space-y-0.5 mt-3">
+              <span className="text-[9px] text-slate-500 font-bold block uppercase">Emergency Contact</span>
+              <p className="font-mono text-xs font-bold text-[#1e3a8a]">{school.schoolPhone || '+92 42 35889012'}</p>
+              <p className="text-[9px] text-slate-600">{school.schoolAddress || 'Main Campus'}</p>
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-slate-300 flex items-end justify-between">
+            <div className="text-center">
+              <div className="w-20 border-b border-slate-500 mb-1" />
+              <span className="text-[9px] text-slate-600 font-bold">Principal Sign</span>
+            </div>
+            <div className="w-12 h-12 rounded-full border border-[#1e3a8a] flex items-center justify-center text-[8px] text-[#1e3a8a] font-bold">
+              SEAL
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center gap-6 justify-center">
+      {/* Modern Tech Front */}
+      <div className="w-72 h-[420px] rounded-2xl bg-gradient-to-b from-slate-900 via-slate-800 to-slate-950 text-white p-5 border-2 border-cyan-500/50 shadow-2xl flex flex-col justify-between relative overflow-hidden font-sans">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none" />
+        
+        <div className="text-center border-b border-cyan-500/30 pb-3">
+          <h2 className="text-xs font-black uppercase tracking-wider text-cyan-400">
+            {school.schoolName || 'SCHOOLLEE GRAMMAR SCHOOL'}
+          </h2>
+          <span className="text-[9px] font-bold text-slate-300 tracking-widest block uppercase mt-0.5">
+            STUDENT IDENTITY CARD
+          </span>
+        </div>
+
+        <div className="flex flex-col items-center my-auto">
+          <div className="w-24 h-24 rounded-2xl bg-cyan-600/20 border-2 border-cyan-400 p-1 flex items-center justify-center shadow-lg shadow-cyan-900/40">
+            <div className="w-full h-full rounded-xl bg-gradient-to-br from-cyan-600 to-blue-700 flex items-center justify-center text-white text-3xl font-black">
+              {student.name.charAt(0)}
+            </div>
+          </div>
+          <h3 className="text-base font-black text-white mt-3 text-center">{student.name}</h3>
+          <span className="text-xs font-bold text-cyan-400 bg-cyan-500/10 px-3 py-0.5 rounded-full mt-1 border border-cyan-500/20">
+            {student.class} — Section {student.section || 'A'}
+          </span>
+        </div>
+
+        <div className="space-y-1.5 text-xs border-t border-slate-700/80 pt-3">
+          <div className="flex justify-between text-slate-300">
+            <span className="text-slate-400">Roll No:</span>
+            <span className="font-bold text-white">{student.rollNo || '01'}</span>
+          </div>
+          <div className="flex justify-between text-slate-300">
+            <span className="text-slate-400">Father Name:</span>
+            <span className="font-bold text-white">{student.fatherName || 'Ahmad Khan'}</span>
+          </div>
+          <div className="flex justify-between text-slate-300">
+            <span className="text-slate-400">Blood Group:</span>
+            <span className="font-bold text-rose-400">{student.bloodGroup || 'B+'}</span>
+          </div>
+        </div>
+
+        <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
+          <span className="text-[9px] font-mono text-slate-400">ID: {student.id}</span>
+          <Barcode className="w-16 h-5 text-cyan-400" />
+        </div>
+      </div>
+
+      {/* Modern Tech Back */}
+      <div className="w-72 h-[420px] rounded-2xl bg-slate-900 text-white p-5 border border-slate-700 shadow-2xl flex flex-col justify-between font-sans">
+        <div className="text-center border-b border-slate-800 pb-2">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">TERMS &amp; CONDITIONS</span>
+        </div>
+
+        <div className="space-y-2 text-[10px] text-slate-300 leading-relaxed my-auto">
+          <p>• This card is the property of the school and must be returned upon withdrawal or completion.</p>
+          <p>• Loss of card must be reported immediately to the administrative office for reissue.</p>
+          <p>• Students must display this card on campus and during official assessments.</p>
+          <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-center space-y-0.5 mt-3">
+            <span className="text-[9px] text-slate-400 font-bold block uppercase">Emergency Contact</span>
+            <p className="font-mono text-xs font-bold text-cyan-300">{school.schoolPhone || '+92 42 35889012'}</p>
+            <p className="text-[9px] text-slate-400">{school.schoolAddress || 'Lahore, Pakistan'}</p>
+          </div>
+        </div>
+
+        <div className="pt-3 border-t border-slate-800 flex items-end justify-between">
+          <div className="text-center">
+            <div className="w-20 border-b border-slate-600 mb-1" />
+            <span className="text-[9px] text-slate-400 font-bold">Principal Sign</span>
+          </div>
+          <div className="w-12 h-12 rounded-full border border-slate-700 flex items-center justify-center text-[8px] text-slate-400 font-bold">
+            SEAL
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 3. Staff ID Card — Respects school.staffIdCardTemplate
+ */
+function StaffIdCardPreview({
+  school,
+  staff
+}: {
+  school: SchoolSettings;
+  staff: StaffMember;
+}) {
+  const isClassic = school.staffIdCardTemplate === 'classic-academic';
+
+  if (isClassic) {
+    return (
+      <div className="flex flex-col sm:flex-row items-center gap-6 justify-center">
+        <div className="w-72 h-[420px] rounded-2xl bg-[#f8fafc] text-slate-900 border-2 border-[#1e293b] shadow-2xl flex flex-col justify-between overflow-hidden font-sans">
+          <div className="bg-[#1e293b] text-white px-4 py-3 text-center border-b-4 border-amber-500">
+            <h2 className="text-xs font-black uppercase tracking-wider">
+              {school.schoolName || 'DEMO SCHOOL'}
+            </h2>
+            <span className="text-[9px] font-semibold text-slate-300 tracking-widest block uppercase mt-0.5">
+              FACULTY &amp; STAFF IDENTITY CARD
+            </span>
+          </div>
+
+          <div className="flex flex-col items-center my-auto px-4">
+            <div className="w-24 h-24 rounded-full bg-slate-100 border-2 border-[#1e293b] p-1 flex items-center justify-center shadow-md">
+              <div className="w-full h-full rounded-full bg-[#1e293b] flex items-center justify-center text-white text-3xl font-black">
+                {staff.name.charAt(0)}
+              </div>
+            </div>
+            <h3 className="text-base font-black text-slate-900 mt-3 text-center">{staff.name}</h3>
+            <span className="text-xs font-bold text-slate-800 bg-slate-200 px-3 py-0.5 rounded-full mt-1 border border-slate-300">
+              {staff.role}
+            </span>
+          </div>
+
+          <div className="px-5 space-y-1.5 text-xs border-t border-slate-200 pt-3">
+            <div className="flex justify-between">
+              <span className="text-slate-500 font-semibold">Department:</span>
+              <span className="font-bold text-slate-900">{staff.department || 'Academics'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500 font-semibold">Qualification:</span>
+              <span className="font-bold text-slate-900">{staff.qualification || 'M.Sc.'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500 font-semibold">Phone:</span>
+              <span className="font-mono font-bold text-slate-900">{staff.phone}</span>
+            </div>
+          </div>
+
+          <div className="px-5 py-2.5 bg-slate-100 border-t border-slate-200 flex items-center justify-between">
+            <span className="text-[9px] font-mono font-bold text-slate-600">EMP: {staff.id}</span>
+            <QrCode className="w-7 h-7 text-slate-800" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center gap-6 justify-center">
+      <div className="w-72 h-[420px] rounded-2xl bg-gradient-to-b from-[#0e1726] to-[#0a0f18] text-white p-5 border-2 border-indigo-500/50 shadow-2xl flex flex-col justify-between font-sans relative">
+        <div className="text-center border-b border-indigo-500/30 pb-3">
+          <h2 className="text-xs font-black uppercase tracking-wider text-indigo-400">
+            {school.schoolName || 'SCHOOLLEE GRAMMAR SCHOOL'}
+          </h2>
+          <span className="text-[9px] font-bold text-slate-300 tracking-widest block uppercase mt-0.5">
+            FACULTY &amp; STAFF IDENTITY CARD
+          </span>
+        </div>
+
+        <div className="flex flex-col items-center my-auto">
+          <div className="w-24 h-24 rounded-2xl bg-indigo-600/20 border-2 border-indigo-400 p-1 flex items-center justify-center shadow-lg shadow-indigo-900/40">
+            <div className="w-full h-full rounded-xl bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center text-white text-3xl font-black">
+              {staff.name.charAt(0)}
+            </div>
+          </div>
+          <h3 className="text-base font-black text-white mt-3 text-center">{staff.name}</h3>
+          <span className="text-xs font-bold text-indigo-300 bg-indigo-500/10 px-3 py-0.5 rounded-full mt-1 border border-indigo-500/20">
+            {staff.role}
+          </span>
+        </div>
+
+        <div className="space-y-1.5 text-xs border-t border-slate-800 pt-3">
+          <div className="flex justify-between text-slate-300">
+            <span className="text-slate-400">Department:</span>
+            <span className="font-bold text-white">{staff.department || 'Academics'}</span>
+          </div>
+          <div className="flex justify-between text-slate-300">
+            <span className="text-slate-400">Qualification:</span>
+            <span className="font-bold text-white">{staff.qualification || 'M.Sc.'}</span>
+          </div>
+          <div className="flex justify-between text-slate-300">
+            <span className="text-slate-400">Phone:</span>
+            <span className="font-mono text-white">{staff.phone}</span>
+          </div>
+        </div>
+
+        <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
+          <span className="text-[9px] font-mono text-slate-400">EMP: {staff.id}</span>
+          <QrCode className="w-8 h-8 text-indigo-400" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 4. Fee Challan — Respects school.feeChallanTemplate ('standard-3copy' vs 'compact-2copy')
+ */
+function FeeChallanPreview({
+  school,
+  student
+}: {
+  school: SchoolSettings;
+  student: Student;
+}) {
+  const isCompact2Copy = school.feeChallanTemplate === 'compact-2copy';
+  const copies = isCompact2Copy
+    ? ['School Copy', 'Student / Parent Copy']
+    : ['Bank Copy', 'School Copy', 'Student / Parent Copy'];
+
+  return (
+    <div className="w-full max-w-4xl bg-white text-black p-4 font-sans shadow-2xl border-2 border-black rounded-sm space-y-3">
+      <div className={`grid grid-cols-1 ${isCompact2Copy ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-3`}>
+        {copies.map((copyName, idx) => (
+          <div 
+            key={copyName}
+            className={`p-3 flex flex-col justify-between border border-black space-y-2 text-xs ${
+              idx < copies.length - 1 ? 'md:border-r-2 md:border-dashed md:border-black' : ''
+            }`}
+          >
+            {/* Header */}
+            <div className="text-center border-b border-black pb-2 space-y-0.5">
+              <span className="font-bold text-[10px] uppercase text-blue-900 block truncate">
+                {school.bankName || 'Faysal Bank Limited'}
+              </span>
+              <span className="font-mono text-[9px] text-neutral-600 block">
+                A/C: {school.accountNumber || '301829300000192'}
+              </span>
+              <h4 className="font-black text-xs uppercase truncate">
+                {school.schoolName || 'Demo School'}
+              </h4>
+              <span className="inline-block bg-neutral-200 text-black px-2 py-0.5 text-[9px] font-black uppercase mt-1">
+                {copyName}
+              </span>
+            </div>
+
+            {/* Meta */}
+            <div className="space-y-1 text-[10px] border-b border-black pb-2">
+              <div className="flex justify-between">
+                <span>Challan No:</span>
+                <span className="font-mono font-bold">CH-2026-0891</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Due Date:</span>
+                <span className="font-bold text-red-600">10 Sep 2026</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Student:</span>
+                <span className="font-bold truncate max-w-[110px]">{student.name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Class:</span>
+                <span className="font-bold">{student.class} ({student.section || 'A'})</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Roll No:</span>
+                <span className="font-mono font-bold">{student.rollNo || '01'}</span>
+              </div>
+            </div>
+
+            {/* Breakdown */}
+            <table className="w-full text-[10px] border border-black border-collapse">
+              <thead>
+                <tr className="bg-neutral-100 border-b border-black font-bold">
+                  <th className="p-1 text-left">Description</th>
+                  <th className="p-1 text-right">PKR</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-neutral-300">
+                  <td className="p-1">Tuition Fee</td>
+                  <td className="p-1 text-right font-mono">4,500</td>
+                </tr>
+                <tr className="border-b border-neutral-300">
+                  <td className="p-1">Exam Fund</td>
+                  <td className="p-1 text-right font-mono">300</td>
+                </tr>
+                <tr className="bg-neutral-200 font-black border-t border-black">
+                  <td className="p-1">Payable Within Due Date</td>
+                  <td className="p-1 text-right font-mono">4,800</td>
+                </tr>
+                <tr className="text-[9px] text-neutral-700">
+                  <td className="p-1">After Due Date (+{school.lateFineAmount || 300})</td>
+                  <td className="p-1 text-right font-mono">{(4800 + (school.lateFineAmount || 300)).toLocaleString()}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            {/* Signatures */}
+            <div className="pt-3 flex justify-between text-[8px] text-neutral-600 border-t border-black">
+              <span>Cashier Sign</span>
+              <span>Bank Stamp</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 5. Student Fee Card (12-Month Ledger Preview) — Matches FeeCardModal & school.studentFeeCardTemplate
+ */
+function StudentFeeCardPreview({
+  school,
+  student,
+  classes
+}: {
+  school: SchoolSettings;
+  student: Student;
+  classes: ClassInfo[];
+}) {
+  const cardData = buildStudentFeeCardData(student, classes, school);
+  const isMinimalTemplate = school.studentFeeCardTemplate === 'minimal-modern';
+
+  return (
+    <div className="w-full max-w-3xl bg-white text-slate-900 rounded-xl p-5 shadow-2xl overflow-x-auto border border-slate-300">
+      <div className={isMinimalTemplate ? "border border-slate-900 p-4 relative" : "border-2 border-[#1b365d] p-3.5 relative"}>
+        <div className={isMinimalTemplate ? "p-1" : "border border-[#1b365d] p-3.5"}>
+          {/* Top Header Row */}
+          <div className={`flex items-center justify-between text-[11px] font-bold mb-1 ${isMinimalTemplate ? 'text-slate-900' : 'text-[#1b365d]'}`}>
+            <span>School NO- {cardData.schoolNo}</span>
+            <div className={`${isMinimalTemplate ? 'bg-slate-900' : 'bg-[#dc2626]'} text-white px-5 py-0.5 rounded-full text-xs font-black tracking-wider uppercase`}>
+              FEE CARD
+            </div>
+            <span>Affiliation No- {cardData.affiliationNo}</span>
+          </div>
+
+          {/* UDISE */}
+          <div className={`text-center text-[10px] font-bold mb-1 ${isMinimalTemplate ? 'text-slate-600' : 'text-[#1b365d]'}`}>
+            UDISE- {cardData.udiseNo}
+          </div>
+
+          {/* School Name */}
+          <div className="text-center mb-1 leading-tight">
+            <h1 className={`text-2xl font-black tracking-tight uppercase ${isMinimalTemplate ? 'text-slate-950 font-sans' : 'text-[#be1818] font-serif'}`}>
+              {cardData.schoolName}
+            </h1>
+            <p className={`text-[11px] italic ${isMinimalTemplate ? 'text-slate-600 font-sans' : 'text-[#991b1b] font-serif'}`}>
+              {cardData.trustName}
+            </p>
+          </div>
+
+          <div className="text-center text-[10px] font-bold text-slate-800">
+            {cardData.schoolAddress}
+          </div>
+
+          {/* Session Pill */}
+          <div className="flex justify-center my-2">
+            <div className={`px-6 py-0.5 border rounded-full text-[10px] font-bold ${isMinimalTemplate ? 'border-slate-900 text-slate-900' : 'border-[#1b365d] text-[#1b365d]'}`}>
+              Session : {cardData.academicSession}
+            </div>
+          </div>
+
+          {/* Member Info */}
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs text-slate-800 my-3 font-medium">
+            <div className="flex items-baseline">
+              <span className="font-bold shrink-0 mr-2 text-slate-900">Name:</span>
+              <span className="border-b border-slate-400 flex-1 font-bold text-slate-900 px-1">{cardData.student.name}</span>
+            </div>
+            <div className="flex items-baseline">
+              <span className="font-bold shrink-0 mr-2 text-slate-900">Father&apos;s Name:</span>
+              <span className="border-b border-slate-400 flex-1 text-slate-900 px-1">{cardData.fatherName}</span>
+            </div>
+            <div className="flex items-baseline">
+              <span className="font-bold shrink-0 mr-2 text-slate-900">Class &amp; Sec:</span>
+              <span className="border-b border-slate-400 flex-1 text-slate-900 px-1">{cardData.className} - {cardData.section}</span>
+            </div>
+            <div className="flex items-baseline">
+              <span className="font-bold shrink-0 mr-2 text-slate-900">Roll No / A/c:</span>
+              <span className="border-b border-slate-400 flex-1 font-mono text-slate-900 px-1">{cardData.rollNo} / {cardData.accountNo}</span>
+            </div>
+          </div>
+
+          {/* 12-Month Table */}
+          <div className="mt-3 overflow-x-auto">
+            <table className={`w-full text-left text-[10px] border-collapse border ${isMinimalTemplate ? 'border-slate-900' : 'border-[#2b5b84]'}`}>
+              <thead className={`${isMinimalTemplate ? 'bg-slate-100 text-slate-900' : 'bg-[#d6e6f5] text-[#1b365d]'} font-bold uppercase text-[9px]`}>
+                <tr>
+                  <th className="p-1.5 border border-slate-400">MONTH</th>
+                  <th className="p-1.5 border border-slate-400 text-center">ADMISSION</th>
+                  <th className="p-1.5 border border-slate-400 text-center">ANNUAL</th>
+                  <th className="p-1.5 border border-slate-400 text-center">TUITION</th>
+                  <th className="p-1.5 border border-slate-400 text-center">TOTAL PAYABLE</th>
+                  <th className="p-1.5 border border-slate-400 text-center">PAID</th>
+                  <th className="p-1.5 border border-slate-400 text-center">DUES</th>
+                  <th className="p-1.5 border border-slate-400 text-center">REC. NO.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cardData.months.slice(0, 6).map((row) => (
+                  <tr key={row.month}>
+                    <td className="p-1 font-bold border border-slate-300">{row.month}</td>
+                    <td className="p-1 text-right font-mono border border-slate-300">{formatOrBlank(row.admissionFee)}</td>
+                    <td className="p-1 text-right font-mono border border-slate-300">{formatOrBlank(row.annualFee)}</td>
+                    <td className="p-1 text-right font-mono border border-slate-300">{formatOrBlank(row.tuitionFee)}</td>
+                    <td className="p-1 text-right font-mono font-bold border border-slate-300">{formatOrBlank(row.totalPayable)}</td>
+                    <td className="p-1 text-right font-mono font-bold border border-slate-300">{formatOrBlank(row.amountPaid)}</td>
+                    <td className="p-1 text-right font-mono border border-slate-300">{formatOrBlank(row.dues)}</td>
+                    <td className="p-1 text-center font-mono border border-slate-300">{row.receiptNo}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 6. Staff Salary Slip — Respects school.staffSalarySlipTemplate
+ */
+function StaffSalarySlipPreview({
+  school,
+  staff
+}: {
+  school: SchoolSettings;
+  staff: StaffMember;
+}) {
+  const isMinimalClassic = school.staffSalarySlipTemplate === 'minimal-classic';
+
+  return (
+    <div className={`w-full max-w-2xl bg-white text-black p-6 font-sans shadow-2xl space-y-4 ${
+      isMinimalClassic ? 'border-2 border-black rounded-none' : 'border border-slate-300 rounded-xl'
+    }`}>
+      {isMinimalClassic ? (
+        <div className="text-center border-b-2 border-black pb-3 space-y-1">
+          <h2 className="text-lg font-black uppercase">{school.schoolName || 'DEMO SCHOOL'}</h2>
+          <p className="text-[11px] text-neutral-600">{school.schoolAddress}</p>
+          <span className="inline-block border border-black px-3 py-0.5 text-xs font-black uppercase">
+            OFFICIAL SALARY PAYSLIP — SEPTEMBER 2026
+          </span>
+        </div>
+      ) : (
+        <div className="bg-slate-900 text-white p-4 rounded-xl flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-black uppercase tracking-tight">{school.schoolName || 'DEMO SCHOOL'}</h2>
+            <p className="text-[11px] text-slate-300">{school.campusName || 'Main Campus'} • {school.schoolAddress}</p>
+          </div>
+          <div className="text-right">
+            <span className="inline-block bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 px-3 py-1 rounded-lg text-[10px] font-black uppercase">
+              SALARY SLIP
+            </span>
+            <p className="text-[10px] text-slate-400 mt-1">September 2026</p>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3 text-xs border-b border-slate-300 pb-3">
+        <div>Employee Name: <strong>{staff.name}</strong></div>
+        <div>Designation: <strong>{staff.role}</strong></div>
+        <div>Employee ID: <strong className="font-mono">{staff.id}</strong></div>
+        <div>Department: <strong>{staff.department || 'Academics'}</strong></div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 text-xs">
+        <div className="border border-slate-300 rounded-lg p-3 space-y-1.5">
+          <span className="font-bold border-b border-slate-200 block pb-1 uppercase text-[10px] text-slate-500">Earnings</span>
+          <div className="flex justify-between"><span>Basic Salary</span><span className="font-mono font-bold">Rs {staff.salary ? staff.salary.toLocaleString() : '65,000'}</span></div>
+          <div className="flex justify-between"><span>Allowances</span><span className="font-mono">Rs 0</span></div>
+          <div className="flex justify-between font-bold border-t border-slate-200 pt-1">
+            <span>Gross Salary</span><span className="font-mono">Rs {staff.salary ? staff.salary.toLocaleString() : '65,000'}</span>
+          </div>
+        </div>
+
+        <div className="border border-slate-300 rounded-lg p-3 space-y-1.5">
+          <span className="font-bold border-b border-slate-200 block pb-1 uppercase text-[10px] text-slate-500">Deductions</span>
+          <div className="flex justify-between"><span>Tax / Provident</span><span className="font-mono">Rs 0</span></div>
+          <div className="flex justify-between"><span>Leave Deduction</span><span className="font-mono">Rs 0</span></div>
+          <div className="flex justify-between font-bold border-t border-slate-200 pt-1">
+            <span>Total Deductions</span><span className="font-mono">Rs 0</span>
+          </div>
+        </div>
+      </div>
+
+      <div className={`p-3 flex justify-between items-center text-sm font-black ${
+        isMinimalClassic
+          ? 'bg-neutral-100 border-2 border-black text-black'
+          : 'bg-emerald-50 border border-emerald-300 text-emerald-950 rounded-xl'
+      }`}>
+        <span>NET SALARY PAYABLE:</span>
+        <span className="text-base font-mono">PKR {staff.salary ? staff.salary.toLocaleString() : '65,000'}/-</span>
+      </div>
+
+      <div className="pt-4 flex justify-between text-xs font-bold border-t border-slate-300 text-slate-600">
+        <span>Accountant / Bursar Sign</span>
+        <span>Recipient Signature</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 7. Exam DMC / Report Card — Respects school.examDmcTemplate
+ */
+function ExamDmcPreview({
+  school,
+  student,
+  exam
+}: {
+  school: SchoolSettings;
+  student: Student;
+  exam: Exam;
+}) {
+  const isMinimalDmc = school.examDmcTemplate === 'minimal-classic';
+
+  return (
+    <div className={`w-full max-w-2xl bg-white text-black p-6 font-sans shadow-2xl space-y-4 ${
+      isMinimalDmc ? 'border border-black rounded-none' : 'border-2 border-slate-300 rounded-2xl'
+    }`}>
+      <div className={`flex items-center justify-between pb-3 ${isMinimalDmc ? 'border-b-2 border-black' : 'border-b-2 border-blue-900'}`}>
+        <div>
+          <h2 className={`text-base font-black uppercase ${isMinimalDmc ? 'text-black' : 'text-blue-950'}`}>
+            {school.schoolName || 'DEMO SCHOOL'}
+          </h2>
+          <p className="text-[11px] font-semibold text-neutral-600">{exam.name || 'Annual Examination 2026'}</p>
+        </div>
+        <span className={`inline-block text-white px-3 py-1 text-xs font-black uppercase rounded ${isMinimalDmc ? 'bg-black' : 'bg-blue-900'}`}>
+          D.M.C
+        </span>
+      </div>
+
+      <div className={`grid grid-cols-2 gap-3 text-xs p-3 ${isMinimalDmc ? 'border border-black bg-white' : 'bg-slate-50 border border-slate-200 rounded-xl'}`}>
+        <div>Student: <strong>{student.name}</strong></div>
+        <div>Father Name: <strong>{student.fatherName || 'Ahmad Khan'}</strong></div>
+        <div>Class: <strong>{student.class} - {student.section || 'A'}</strong></div>
+        <div>Roll Number: <strong className="font-mono">{student.rollNo || '01'}</strong></div>
+      </div>
+
+      <table className="w-full text-xs border border-black border-collapse">
+        <thead>
+          <tr className={`text-white font-bold text-[11px] uppercase ${isMinimalDmc ? 'bg-black' : 'bg-blue-900'}`}>
+            <th className="p-2 border-r border-slate-600 text-left">Subject</th>
+            <th className="p-2 border-r border-slate-600 text-center">Max Marks</th>
+            <th className="p-2 border-r border-slate-600 text-center">Passing</th>
+            <th className="p-2 border-r border-slate-600 text-center">Obtained</th>
+            <th className="p-2 text-center">Grade</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[
+            { name: 'Mathematics', max: 100, pass: 33, obt: 92, grade: 'A+' },
+            { name: 'English', max: 100, pass: 33, obt: 88, grade: 'A' },
+            { name: 'General Science', max: 100, pass: 33, obt: 94, grade: 'A+' },
+            { name: 'Urdu', max: 100, pass: 33, obt: 85, grade: 'A' },
+            { name: 'Islamiat', max: 50, pass: 17, obt: 47, grade: 'A+' },
+          ].map((row, i) => (
+            <tr key={i} className="border-b border-neutral-300 text-[11px]">
+              <td className="p-1.5 border-r border-neutral-300 font-bold">{row.name}</td>
+              <td className="p-1.5 border-r border-neutral-300 text-center font-mono">{row.max}</td>
+              <td className="p-1.5 border-r border-neutral-300 text-center font-mono">{row.pass}</td>
+              <td className="p-1.5 border-r border-neutral-300 text-center font-mono font-bold">{row.obt}</td>
+              <td className="p-1.5 text-center font-black text-blue-900">{row.grade}</td>
+            </tr>
+          ))}
+          <tr className="bg-neutral-100 font-black border-t-2 border-black">
+            <td className="p-1.5 border-r border-neutral-300">Grand Total</td>
+            <td className="p-1.5 border-r border-neutral-300 text-center font-mono">450</td>
+            <td className="p-1.5 border-r border-neutral-300 text-center font-mono">—</td>
+            <td className="p-1.5 border-r border-neutral-300 text-center font-mono">406</td>
+            <td className="p-1.5 text-center text-emerald-800">90.2% (A+)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div className="pt-4 flex justify-between text-xs font-bold border-t border-slate-300">
+        <span>Class Incharge</span>
+        <span>Exam Controller</span>
+        <span>{school.principalName || 'Principal'}</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 8. Attendance Register — Respects school.attendanceRegisterTemplate
+ */
+function AttendanceRegisterPreview({
+  school,
+  student
+}: {
+  school: SchoolSettings;
+  student: Student;
+}) {
+  const isCompactMono = school.attendanceRegisterTemplate === 'compact-monochrome';
+  const days = ['Mon (07)', 'Tue (08)', 'Wed (09)', 'Thu (10)', 'Fri (11)', 'Sat (12)', 'Sun (13)'];
+
+  return (
+    <div className={`w-full max-w-4xl bg-white text-black p-6 font-sans shadow-2xl space-y-4 ${
+      isCompactMono ? 'border border-black rounded-none' : 'border border-slate-300 rounded-xl'
+    }`}>
+      <div className="text-center border-b-2 border-slate-900 pb-3 space-y-1">
+        <h2 className="text-lg font-black uppercase">{school.schoolName || 'DEMO SCHOOL'}</h2>
+        <div className="flex items-center justify-center gap-2">
+          <span className={`inline-block px-3 py-0.5 text-xs font-black uppercase rounded ${
+            isCompactMono ? 'border-2 border-black text-black bg-white' : 'bg-slate-900 text-white'
+          }`}>
+            OFFICIAL WEEKLY ATTENDANCE REGISTER (STUDENTS)
+          </span>
+          <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-300 text-[10px] font-bold text-slate-700">
+            SESSION {school.session || '2025-2026'}
+          </span>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-[11px] border border-slate-300 border-collapse">
+          <thead>
+            <tr className={isCompactMono ? 'bg-neutral-200 text-black font-bold border-b border-black' : 'bg-slate-900 text-white font-semibold'}>
+              <th className="p-2 border-r border-slate-600 text-left">Student Name</th>
+              <th className="p-2 border-r border-slate-600 text-center">Class</th>
+              {days.map((d) => (
+                <th key={d} className="p-2 border-r border-slate-600 text-center font-mono text-[10px]">
+                  {d}
+                </th>
+              ))}
+              <th className="p-2 text-center font-bold">Att %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[student.name, 'Zainab Bibi', 'Ahmed Raza', 'Fatima Zahra'].map((name, sIdx) => (
+              <tr key={name} className="border-b border-slate-200">
+                <td className="p-2 border-r border-slate-200 font-bold">{name}</td>
+                <td className="p-2 border-r border-slate-200 text-center">{student.class} ({student.section || 'A'})</td>
+                {days.map((d, i) => {
+                  const isSun = i === 6;
+                  const isAbs = !isSun && (i + sIdx) % 5 === 0;
+                  return (
+                    <td key={d} className="p-1.5 border-r border-slate-200 text-center font-mono font-bold">
+                      <span className={`inline-block w-6 py-0.5 rounded text-[10px] ${
+                        isSun
+                          ? 'bg-slate-100 text-slate-400'
+                          : isAbs
+                            ? 'bg-red-100 text-red-800 border border-red-300'
+                            : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      }`}>
+                        {isSun ? '-' : isAbs ? 'A' : 'P'}
+                      </span>
+                    </td>
+                  );
+                })}
+                <td className="p-2 text-center font-black">{sIdx % 2 === 0 ? '100%' : '83%'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="pt-4 flex justify-between text-xs font-bold border-t border-slate-300 text-slate-600">
+        <span>Class Teacher Signature: ____________</span>
+        <span>Principal / Administrator: ____________</span>
+      </div>
+    </div>
+  );
+}
