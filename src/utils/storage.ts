@@ -137,7 +137,11 @@ function noteSyncSuccess(key: string) {
 
 // One backend send. Resolves true only when the server accepted the write
 // (a non-2xx response counts as failure, exactly like a network error).
-function sendCollection(key: string, raw: string | null): Promise<boolean> {
+// `keepalive` is ONLY for the beforeunload flush: browsers cap keepalive
+// request bodies at 64 KiB, so a keepalive PUT of a large collection (e.g.
+// the fee ledger) always fails in a real browser. Normal sends must not use
+// it; the persisted outbox + startup flush cover the window-close case.
+function sendCollection(key: string, raw: string | null, keepalive = false): Promise<boolean> {
   try {
     const url = `/api/collections/${encodeURIComponent(key)}`;
     if (raw === null) {
@@ -148,7 +152,7 @@ function sendCollection(key: string, raw: string | null): Promise<boolean> {
     let value: unknown = raw;
     try { value = JSON.parse(raw); } catch { /* store raw string */ }
     return fetch(url, {
-      method: 'PUT', keepalive: true,
+      method: 'PUT', keepalive,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ value }),
     }).then(r => r.ok).catch(() => false);
@@ -257,15 +261,17 @@ try {
 
 // Fix P1-5: retry triggers for the outbox — when the network returns, when
 // the user comes back to the window, and one final best-effort flush as
-// the window closes (sendCollection uses keepalive fetches, which the
-// browser allows to outlive the page).
+// the window closes (that last flush passes keepalive=true, which lets the
+// fetch outlive the page but is capped at 64 KiB by the browser; anything
+// larger stays in the persisted outbox and is delivered by the startup
+// flush on next launch instead).
 try {
   if (typeof window !== 'undefined' && typeof window.addEventListener === 'function'
       && window.location.protocol.startsWith('http')) {
     window.addEventListener('online', () => { void flushSyncOutbox(); });
     window.addEventListener('beforeunload', () => {
       for (const entry of readOutbox()) {
-        try { void sendCollection(entry.key, localStorage.getItem(entry.key)); } catch { /* page is going away */ }
+        try { void sendCollection(entry.key, localStorage.getItem(entry.key), true); } catch { /* page is going away */ }
       }
     });
     if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
