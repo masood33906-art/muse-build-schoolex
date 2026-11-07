@@ -9,7 +9,8 @@ import {
   ChevronRight,
   ShieldCheck,
   QrCode,
-  Check
+  Check,
+  RectangleVertical
 } from 'lucide-react';
 import { Student, CardTemplateType } from '../types';
 import { generateSingleIdCard, generateAllIdCards, SchoolInfo } from '../utils/pdfGenerator';
@@ -216,6 +217,32 @@ export const IdCardModal: React.FC<IdCardModalProps> = ({
                     </div>
                   )}
                 </button>
+
+                {/* Template 3: Vertical Badge */}
+                <button
+                  type="button"
+                  onClick={() => handleSelectTemplate('vertical-badge')}
+                  className={`text-left p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                    template === 'vertical-badge'
+                      ? 'bg-[#0D2742]/60 border-[#8DB4C8] ring-1 ring-[#8DB4C8]/50'
+                      : 'bg-surface-40 border-edge-37 hover:border-slate-600'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-[#8DB4C8]/20 text-[#8DB4C8] flex items-center justify-center shrink-0">
+                      <RectangleVertical className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-semibold text-white">Vertical Badge</h4>
+                      <p className="text-[11px] text-slate-400">Vertical navy badge with side STUDENT ID strip and barcode, no punch hole</p>
+                    </div>
+                  </div>
+                  {template === 'vertical-badge' && (
+                    <div className="w-5 h-5 rounded-full bg-[#8DB4C8] text-[#0D2742] flex items-center justify-center shrink-0">
+                      <Check className="w-3 h-3 stroke-[3]" />
+                    </div>
+                  )}
+                </button>
               </div>
             </div>
 
@@ -344,7 +371,7 @@ export const IdCardModal: React.FC<IdCardModalProps> = ({
                     </div>
                   </div>
                 </div>
-              ) : (
+              ) : template === 'classic-academic' ? (
                 /* Template 2: Classic Academic Heritage UI */
                 <div className="w-[270px] h-[430px] rounded-2xl bg-[#fbf9f4] border-2 border-[#b89547] text-slate-900 flex flex-col overflow-hidden shadow-2xl relative select-none p-2">
                   <div className="w-full h-full border border-[#d4be7d] rounded-xl flex flex-col p-3 text-center bg-[#fffdfa]">
@@ -416,6 +443,101 @@ export const IdCardModal: React.FC<IdCardModalProps> = ({
                           Principal Signature
                         </span>
                       </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* Template 3: Vertical Badge UI — navy badge, steel-blue side strip & bottom band, NO punch hole */
+                <div className="w-[270px] h-[430px] rounded-2xl text-white shadow-2xl relative overflow-hidden select-none" style={{ backgroundColor: '#0D2742' }}>
+                  {/* Left steel-blue strip with vertical STUDENT ID text (bottom-to-top) */}
+                  <div className="absolute left-0 top-0 bottom-[55px] w-[45px] flex items-center justify-center" style={{ backgroundColor: '#8DB4C8' }}>
+                    <span className="text-[#0D2742] font-black tracking-[0.18em] text-[15px] whitespace-nowrap [writing-mode:vertical-rl] rotate-180">
+                      STUDENT ID
+                    </span>
+                  </div>
+
+                  {/* Bottom steel-blue band: barcode strip + ID (spans full width) */}
+                  <div className="absolute left-0 right-0 bottom-0 h-[55px] flex flex-col items-center justify-center gap-1 px-3" style={{ backgroundColor: '#8DB4C8' }}>
+                    <div className="bg-white rounded-[3px] px-2 py-[5px] w-full flex items-center justify-center overflow-hidden">
+                      <div className="flex items-center space-x-[3px] h-5">
+                        {[2, 1, 2, 1, 1, 2, 1, 3, 1, 1, 2, 1, 2, 1, 1, 2, 3, 1, 2, 1, 1, 2].map((w, i) => (
+                          <div
+                            key={i}
+                            className="bg-black h-full shrink-0"
+                            style={{ width: `${w}px` }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-black text-[#0D2742] tracking-wide leading-none">
+                      ID: {student.id}
+                    </span>
+                  </div>
+
+                  {/* Main content zone: right of the strip, above the band */}
+                  <div className="absolute left-[45px] right-0 top-0 bottom-[55px] flex flex-col items-center px-3 pt-4 text-center">
+                    {/* School logo / monogram */}
+                    {schoolSettings.schoolLogo ? (
+                      <img
+                        src={schoolSettings.schoolLogo}
+                        alt={activeSchool.name}
+                        className="w-10 h-10 rounded-full object-contain shrink-0"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center text-[11px] font-black text-[#0D2742] shrink-0" style={{ backgroundColor: '#8DB4C8' }}>
+                        {activeSchool.name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w.charAt(0).toUpperCase()).join('')}
+                      </div>
+                    )}
+                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-white mt-1.5 leading-tight">
+                      {activeSchool.name}
+                    </p>
+                    <p className="text-[8px] font-semibold tracking-[0.25em] uppercase mt-0.5" style={{ color: '#8DB4C8' }}>
+                      {activeSchool.campus}
+                    </p>
+
+                    {/* Photo with steel-blue frame */}
+                    <div className="w-[95px] h-[95px] mt-3 p-[3px] shrink-0" style={{ backgroundColor: '#8DB4C8' }}>
+                      <img
+                        src={getStudentAvatar(student)}
+                        alt={student.name}
+                        className="w-full h-full object-cover"
+                        style={{ backgroundColor: '#1B3654' }}
+                      />
+                    </div>
+
+                    {/* Student Name */}
+                    <h3 className="text-base font-bold capitalize leading-tight mt-2.5" style={{ color: '#CBE1EE' }}>
+                      {student.name}
+                    </h3>
+
+                    {/* Detail lines — optional fields render only when the record has them */}
+                    <div className="w-full mt-3 space-y-1.5 text-left text-[11px] px-1">
+                      <div className="flex gap-1.5">
+                        <span className="font-bold shrink-0" style={{ color: '#8DB4C8' }}>Session:</span>
+                        <span className="truncate" style={{ color: '#CBE1EE' }}>{activeSchool.session}</span>
+                      </div>
+                      <div className="flex gap-1.5">
+                        <span className="font-bold shrink-0" style={{ color: '#8DB4C8' }}>Class:</span>
+                        <span className="truncate" style={{ color: '#CBE1EE' }}>{student.class} - {student.section}</span>
+                      </div>
+                      {student.dob && (
+                        <div className="flex gap-1.5">
+                          <span className="font-bold shrink-0" style={{ color: '#8DB4C8' }}>DOB:</span>
+                          <span className="truncate" style={{ color: '#CBE1EE' }}>{student.dob}</span>
+                        </div>
+                      )}
+                      {student.rollNo && (
+                        <div className="flex gap-1.5">
+                          <span className="font-bold shrink-0" style={{ color: '#8DB4C8' }}>Roll No:</span>
+                          <span className="truncate" style={{ color: '#CBE1EE' }}>{student.rollNo}</span>
+                        </div>
+                      )}
+                      {student.bloodGroup && (
+                        <div className="flex gap-1.5">
+                          <span className="font-bold shrink-0" style={{ color: '#8DB4C8' }}>Blood Group:</span>
+                          <span className="truncate" style={{ color: '#CBE1EE' }}>{student.bloodGroup}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

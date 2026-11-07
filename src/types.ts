@@ -54,7 +54,7 @@ export interface Student {
   achievementsList?: { id: string; title: string; date: string; category: string }[];
 }
 
-export type CardTemplateType = 'modern-tech' | 'classic-academic';
+export type CardTemplateType = 'modern-tech' | 'classic-academic' | 'vertical-badge';
 
 export type FilterStatus = 'All' | 'Active' | 'Inactive' | 'New Admission';
 

@@ -191,7 +191,7 @@ function renderCardOnPage(doc: jsPDF, student: Student, template: CardTemplateTy
     doc.setTextColor(100, 116, 139);
     doc.text(`Official Student Pass • Verified System ID`, width / 2, 82, { align: 'center' });
 
-  } else {
+  } else if (template === 'classic-academic') {
     // Template 2: Classic Academic Heritage
     // Card Background
     doc.setFillColor(254, 252, 246); // warm antique parchment
@@ -314,6 +314,169 @@ function renderCardOnPage(doc: jsPDF, student: Student, template: CardTemplateTy
     doc.setFontSize(3.5);
     doc.setTextColor(180, 140, 60);
     doc.text('VERIFIED', 13, sigY + 1.2, { align: 'center' });
+  } else if (template === 'vertical-badge') {
+    // Template 3: Vertical Badge (inspired by a vertical navy badge design).
+    // Deep navy card, steel-blue "STUDENT ID" strip down the left edge,
+    // steel-blue barcode band at the bottom. NO punch hole / lanyard slot.
+    // Only fields that exist in the system are printed; optional student
+    // fields (DOB, Roll No, Blood Group) appear only when the record has
+    // them. There is deliberately no "Teacher" line — the system has no
+    // class-teacher field. Front content is centered on the zone right of
+    // the strip (x 9..54), not on the full card width.
+    const NAVY: [number, number, number] = [13, 39, 66]; // #0D2742
+    const STEEL: [number, number, number] = [141, 180, 200]; // #8DB4C8
+    const LIGHT: [number, number, number] = [203, 225, 238]; // pale steel (values / name)
+    const INNER: [number, number, number] = [27, 54, 84]; // lighter navy (photo fallback)
+    const cx = 31.5; // center of the content zone (9..54)
+    const BAND_Y = 75;
+
+    // Card background
+    doc.setFillColor(...NAVY);
+    doc.rect(0, 0, width, height, 'F');
+
+    // Left strip (stops at the bottom band) + bottom band (full width)
+    doc.setFillColor(...STEEL);
+    doc.rect(0, 0, 9, BAND_Y, 'F');
+    doc.rect(0, BAND_Y, width, height - BAND_Y, 'F');
+
+    // "STUDENT ID" written vertically, bottom-to-top, inside the strip
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(...NAVY);
+    const stripText = 'STUDENT ID';
+    const stripTextWidth = doc.getTextWidth(stripText);
+    doc.text(stripText, 6.3, BAND_Y / 2 + stripTextWidth / 2, { angle: 90 });
+
+    // School logo: raster data URL if the school has one, else a steel
+    // monogram disc with the school initials (same try/catch fallback
+    // pattern as the student photo below; SVG preset logos cannot be
+    // embedded by jsPDF, so they take the monogram path).
+    const logoSize = 9;
+    const logoX = cx - logoSize / 2;
+    const logoY = 3;
+    const logo = getSchoolSettings().schoolLogo || '';
+    let renderedLogo = false;
+    if (/^data:image\/(png|jpe?g)/i.test(logo)) {
+      try {
+        doc.addImage(logo, logoX, logoY, logoSize, logoSize);
+        renderedLogo = true;
+      } catch (e) {
+        console.warn('Could not render school logo in PDF, falling back to monogram:', e);
+      }
+    }
+    if (!renderedLogo) {
+      const initials = school.name
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map(w => w.charAt(0).toUpperCase())
+        .join('');
+      doc.setFillColor(...STEEL);
+      doc.circle(cx, logoY + logoSize / 2, logoSize / 2, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6.5);
+      doc.setTextColor(...NAVY);
+      doc.text(initials || 'S', cx, logoY + logoSize / 2 + 1.2, { align: 'center' });
+    }
+
+    // School name (shrinks to fit the content zone) + campus line
+    let nameSize = 8;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(nameSize);
+    const upperName = school.name.toUpperCase();
+    while (doc.getTextWidth(upperName) > 43 && nameSize > 5.5) {
+      nameSize -= 0.5;
+      doc.setFontSize(nameSize);
+    }
+    doc.setTextColor(255, 255, 255);
+    doc.text(upperName, cx, 15.8, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(5.5);
+    doc.setTextColor(...STEEL);
+    doc.text(school.campus.toUpperCase(), cx, 18.8, { align: 'center' });
+
+    // Photo with steel-blue frame / initials fallback
+    const photoSize = 19;
+    const photoX = cx - photoSize / 2;
+    const photoY = 21;
+    doc.setFillColor(...STEEL);
+    doc.rect(photoX - 0.8, photoY - 0.8, photoSize + 1.6, photoSize + 1.6, 'F');
+    doc.setFillColor(...INNER);
+    doc.rect(photoX, photoY, photoSize, photoSize, 'F');
+
+    let renderedPhoto = false;
+    if (student.photo) {
+      try {
+        doc.addImage(student.photo, photoX, photoY, photoSize, photoSize);
+        renderedPhoto = true;
+      } catch (e) {
+        console.warn('Could not render photo in PDF, falling back to initials:', e);
+      }
+    }
+    if (!renderedPhoto) {
+      const initials = student.name.substring(0, 2).toUpperCase();
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(255, 255, 255);
+      doc.text(initials, photoX + photoSize / 2, photoY + photoSize / 2 + 3.5, { align: 'center' });
+    }
+
+    // Student name
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10.5);
+    doc.setTextColor(...LIGHT);
+    const displayName = student.name.length > 22 ? student.name.substring(0, 20) + '...' : student.name;
+    doc.text(displayName, cx, 46.5, { align: 'center' });
+
+    // Detail lines: bold label + regular value on the same baseline.
+    // Session and Class always exist; the rest render ONLY when present.
+    const detailRows: { label: string; val: string }[] = [
+      { label: 'Session:', val: school.session },
+      { label: 'Class:', val: `${student.class} - ${student.section}` }
+    ];
+    if (student.dob) detailRows.push({ label: 'DOB:', val: student.dob });
+    if (student.rollNo) detailRows.push({ label: 'Roll No:', val: student.rollNo });
+    if (student.bloodGroup) detailRows.push({ label: 'Blood Group:', val: student.bloodGroup });
+
+    const detailX = 13;
+    const detailStartY = 51;
+    const detailRowH = 4.4;
+    detailRows.forEach((row, idx) => {
+      const y = detailStartY + idx * detailRowH;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6.5);
+      doc.setTextColor(...STEEL);
+      doc.text(row.label, detailX, y);
+      const valX = detailX + doc.getTextWidth(row.label) + 1.2;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...LIGHT);
+      let val = row.val;
+      const maxValWidth = width - valX - 2;
+      if (doc.getTextWidth(val) > maxValWidth) {
+        while (val.length > 3 && doc.getTextWidth(val + '..') > maxValWidth) {
+          val = val.substring(0, val.length - 1);
+        }
+        val += '..';
+      }
+      doc.text(val, valX, y);
+    });
+
+    // Bottom band: white barcode strip simulated from the student id
+    // (same bar simulation as the modern-tech template) + ID line
+    doc.setFillColor(255, 255, 255);
+    doc.rect(3, BAND_Y + 1.2, 48, 5.4, 'F');
+    doc.setFillColor(0, 0, 0);
+    for (let x = 4.5; x < 49.5; x += 1.2) {
+      if (Math.sin(x * 17) > -0.2) {
+        doc.rect(x, BAND_Y + 1.8, 0.6, 4.2, 'F');
+      }
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...NAVY);
+    doc.text(`ID: ${student.id}`, width / 2, 84.7, { align: 'center' });
   }
 }
 

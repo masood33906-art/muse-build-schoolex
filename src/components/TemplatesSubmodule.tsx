@@ -75,7 +75,8 @@ const DOCUMENTS: DocumentItem[] = [
     settingKey: 'studentIdCardTemplate',
     templates: [
       { id: 'modern-tech', label: 'Modern Tech', description: 'Dark slate & cyan accent identity card' },
-      { id: 'classic-academic', label: 'Classic Academic', description: 'Clean ivory & royal blue crest card' }
+      { id: 'classic-academic', label: 'Classic Academic', description: 'Clean ivory & royal blue crest card' },
+      { id: 'vertical-badge', label: 'Vertical Badge', description: 'Vertical navy badge, side STUDENT ID strip, photo & barcode — no punch hole' }
     ]
   },
   { 
@@ -798,6 +799,131 @@ function StudentIdCardPreview({
   student: Student;
 }) {
   const isClassic = school.studentIdCardTemplate === 'classic-academic';
+  const isVerticalBadge = school.studentIdCardTemplate === 'vertical-badge';
+
+  if (isVerticalBadge) {
+    return (
+      <div className="flex flex-col sm:flex-row items-center gap-6 justify-center">
+        {/* Vertical Badge Front — navy badge, steel side strip & bottom band, NO punch hole */}
+        <div className="w-72 h-[420px] rounded-2xl text-white shadow-2xl relative overflow-hidden font-sans" style={{ backgroundColor: '#0D2742' }}>
+          {/* Left steel-blue strip with vertical STUDENT ID text (bottom-to-top) */}
+          <div className="absolute left-0 top-0 bottom-[52px] w-[46px] flex items-center justify-center" style={{ backgroundColor: '#8DB4C8' }}>
+            <span className="text-[#0D2742] font-black tracking-[0.18em] text-[15px] whitespace-nowrap [writing-mode:vertical-rl] rotate-180">
+              STUDENT ID
+            </span>
+          </div>
+
+          {/* Bottom steel-blue band: white barcode strip + ID line */}
+          <div className="absolute left-0 right-0 bottom-0 h-[52px] flex flex-col items-center justify-center gap-1 px-3" style={{ backgroundColor: '#8DB4C8' }}>
+            <div className="bg-white rounded-[3px] px-2 py-1 w-full flex items-center justify-center overflow-hidden">
+              <Barcode className="w-24 h-5 text-black" />
+            </div>
+            <span className="text-[10px] font-black text-[#0D2742] tracking-wide leading-none">
+              ID: {student.id}
+            </span>
+          </div>
+
+          {/* Content zone: right of the strip, above the band */}
+          <div className="absolute left-[46px] right-0 top-0 bottom-[52px] flex flex-col items-center px-3 pt-4 text-center">
+            {school.schoolLogo ? (
+              <img
+                src={school.schoolLogo}
+                alt={school.schoolName}
+                className="w-10 h-10 rounded-full object-contain shrink-0"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full flex items-center justify-center text-[11px] font-black text-[#0D2742] shrink-0" style={{ backgroundColor: '#8DB4C8' }}>
+                {(school.schoolName || 'S').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w.charAt(0).toUpperCase()).join('')}
+              </div>
+            )}
+            <h2 className="text-[11px] font-black uppercase tracking-wider text-white mt-1.5 leading-tight">
+              {school.schoolName || 'DEMO SCHOOL'}
+            </h2>
+            <span className="text-[8px] font-semibold tracking-[0.25em] uppercase mt-0.5" style={{ color: '#8DB4C8' }}>
+              {school.campusName || 'Main Campus'}
+            </span>
+
+            {/* Photo frame (initial fallback, like the other previews) */}
+            <div className="w-24 h-24 mt-3 p-[3px] shrink-0" style={{ backgroundColor: '#8DB4C8' }}>
+              <div className="w-full h-full flex items-center justify-center text-white text-3xl font-black" style={{ backgroundColor: '#1B3654' }}>
+                {student.name.charAt(0)}
+              </div>
+            </div>
+
+            <h3 className="text-base font-black mt-2.5 text-center leading-tight" style={{ color: '#CBE1EE' }}>{student.name}</h3>
+
+            {/* Detail lines — optional fields only when the record has them */}
+            <div className="w-full mt-3 space-y-1.5 text-left text-[11px] px-1">
+              <div className="flex gap-1.5">
+                <span className="font-bold shrink-0" style={{ color: '#8DB4C8' }}>Session:</span>
+                <span className="truncate" style={{ color: '#CBE1EE' }}>{school.session || '2025 - 2026'}</span>
+              </div>
+              <div className="flex gap-1.5">
+                <span className="font-bold shrink-0" style={{ color: '#8DB4C8' }}>Class:</span>
+                <span className="truncate" style={{ color: '#CBE1EE' }}>{student.class} — {student.section || 'A'}</span>
+              </div>
+              {student.dob && (
+                <div className="flex gap-1.5">
+                  <span className="font-bold shrink-0" style={{ color: '#8DB4C8' }}>DOB:</span>
+                  <span className="truncate" style={{ color: '#CBE1EE' }}>{student.dob}</span>
+                </div>
+              )}
+              {student.rollNo && (
+                <div className="flex gap-1.5">
+                  <span className="font-bold shrink-0" style={{ color: '#8DB4C8' }}>Roll No:</span>
+                  <span className="truncate" style={{ color: '#CBE1EE' }}>{student.rollNo}</span>
+                </div>
+              )}
+              {student.bloodGroup && (
+                <div className="flex gap-1.5">
+                  <span className="font-bold shrink-0" style={{ color: '#8DB4C8' }}>Blood Group:</span>
+                  <span className="truncate" style={{ color: '#CBE1EE' }}>{student.bloodGroup}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Vertical Badge Back — school + holder contact block (preview only; PDFs stay front-only) */}
+        <div className="w-72 h-[420px] rounded-2xl text-white p-5 shadow-2xl flex flex-col font-sans" style={{ backgroundColor: '#0D2742' }}>
+          <div className="text-center">
+            {school.schoolLogo ? (
+              <img
+                src={school.schoolLogo}
+                alt={school.schoolName}
+                className="w-12 h-12 rounded-full object-contain mx-auto"
+              />
+            ) : (
+              <div className="w-12 h-12 rounded-full flex items-center justify-center text-xs font-black text-[#0D2742] mx-auto" style={{ backgroundColor: '#8DB4C8' }}>
+                {(school.schoolName || 'S').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w.charAt(0).toUpperCase()).join('')}
+              </div>
+            )}
+            <h2 className="text-xs font-black uppercase tracking-wider mt-2 leading-tight">
+              {school.schoolName || 'DEMO SCHOOL'}
+            </h2>
+            <span className="text-[9px] font-semibold tracking-[0.25em] uppercase block mt-0.5" style={{ color: '#8DB4C8' }}>
+              {school.campusName || 'Main Campus'}
+            </span>
+          </div>
+
+          <div className="text-center mt-5 space-y-1">
+            <p className="text-sm font-black" style={{ color: '#CBE1EE' }}>{student.name}</p>
+            <p className="text-[11px] text-slate-200">Guardian: {student.family}</p>
+            {student.phone && <p className="text-[11px] font-mono text-slate-200">{student.phone}</p>}
+            {student.address && <p className="text-[10px] text-slate-300 leading-snug px-2">{student.address}</p>}
+          </div>
+
+          <div className="border-t border-white/15 pt-4 text-center space-y-1 mt-auto">
+            <p className="text-[11px] font-black uppercase tracking-wide">{school.schoolName || 'DEMO SCHOOL'}</p>
+            {school.schoolAddress && <p className="text-[10px] leading-snug px-2" style={{ color: '#8DB4C8' }}>{school.schoolAddress}</p>}
+            {school.schoolPhone && <p className="text-[10px] font-mono" style={{ color: '#8DB4C8' }}>{school.schoolPhone}</p>}
+            {school.schoolEmail && <p className="text-[10px]" style={{ color: '#8DB4C8' }}>{school.schoolEmail}</p>}
+            {school.schoolWebsite && <p className="text-[10px]" style={{ color: '#8DB4C8' }}>{school.schoolWebsite}</p>}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isClassic) {
     return (

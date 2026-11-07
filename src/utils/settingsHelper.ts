@@ -1,7 +1,7 @@
 import { loadJSON, saveJSON } from './storage';
 
 export type RollNumberSlipTemplateType = 'minimal-stream' | 'classic-bordered' | 'minimal-professional';
-export type IdCardTemplateSettingType = 'modern-tech' | 'classic-academic';
+export type IdCardTemplateSettingType = 'modern-tech' | 'classic-academic' | 'vertical-badge';
 export type FeeChallanTemplateType = 'standard-3copy' | 'compact-2copy' | 'minimal-professional';
 export type StudentFeeCardTemplateType = 'classic-ledger' | 'minimal-modern' | 'minimal-professional';
 export type StaffSalarySlipTemplateType = 'executive-emerald' | 'minimal-classic' | 'minimal-professional';
