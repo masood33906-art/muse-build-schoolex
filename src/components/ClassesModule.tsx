@@ -20,8 +20,9 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { ClassInfo, Student } from '../types';
-import { exportClassesToCSV, exportClassesToPDF } from '../utils/classExportHelper';
+import { exportClassesToCSV, exportClassesToPDF, countStudentsInClass, studentsAfterClassRename, resolveClassFee, validateClassFeeInput } from '../utils/classExportHelper';
 import { DEFAULT_SCHOOL } from '../utils/pdfGenerator';
+import { getSchoolSettings } from '../utils/settingsHelper';
 import { ClassDetailsPage } from './ClassDetailsPage';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
 import { SecurityDeleteModal } from './SecurityDeleteModal';
@@ -59,7 +60,11 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
   const [editingClass, setEditingClass] = useState<ClassInfo | null>(null);
   const [editName, setEditName] = useState('');
   const [editSections, setEditSections] = useState<string[]>(['A']);
-  const [editFee, setEditFee] = useState<number>(4800);
+  // Fee inputs are kept as raw text (Fix P1-8): an empty field must be
+  // distinguishable from a real fee of 0 (a free class), and no default
+  // amount is ever pre-filled or substituted.
+  const [editFee, setEditFee] = useState<string>('');
+  const [editFeeError, setEditFeeError] = useState('');
   const [editNewSectionInput, setEditNewSectionInput] = useState('');
 
   // Add Class Modal state
@@ -67,7 +72,8 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
   const [newClassName, setNewClassName] = useState('');
   const [newSections, setNewSections] = useState<string[]>(['A']);
   const [newSectionInput, setNewSectionInput] = useState('');
-  const [newClassFee, setNewClassFee] = useState<number>(4800);
+  const [newClassFee, setNewClassFee] = useState<string>('');
+  const [newClassFeeError, setNewClassFeeError] = useState('');
 
   // Organize Classes Modal state & Live Displacement Drag-and-Drop
   const [isReorganizeModalOpen, setIsReorganizeModalOpen] = useState(false);
@@ -98,9 +104,7 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
   } | null>(null);
 
   const handlePromptDeleteClass = (cls: ClassInfo) => {
-    const enrolled = students.filter(
-      s => s.class && s.class.toLowerCase().trim() === cls.name.toLowerCase().trim()
-    ).length;
+    const enrolled = countStudentsInClass(students, cls);
     setSecurityDeleteTarget({
       type: 'Class',
       name: cls.name,
@@ -189,15 +193,16 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
     return list;
   }, [classes, searchQuery, sortOrder]);
 
-  // Handle Export CSV
+  // Handle Export CSV — always exports ALL classes with live counts computed
+  // from the full students array (Fix P0-1); a search filter must not shrink it.
   const handleExportCSV = () => {
-    exportClassesToCSV(filteredClasses, `classes_directory_${new Date().toISOString().slice(0, 10)}.csv`);
+    exportClassesToCSV(classes, students, `classes_directory_${new Date().toISOString().slice(0, 10)}.csv`);
     setIsExportMenuOpen(false);
   };
 
-  // Handle Export PDF
+  // Handle Export PDF — same full-coverage, live-count rule as CSV (Fix P0-1).
   const handleExportPDF = () => {
-    exportClassesToPDF(filteredClasses, DEFAULT_SCHOOL);
+    exportClassesToPDF(classes, students, DEFAULT_SCHOOL);
     setIsExportMenuOpen(false);
   };
 
@@ -206,7 +211,11 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
     setEditingClass(cls);
     setEditName(cls.name);
     setEditSections(cls.sections && cls.sections.length > 0 ? [...cls.sections] : ['A']);
-    setEditFee(cls.fee || 4800);
+    // Fix P1-8: pre-fill the class's REAL fee; a class with no fee set
+    // opens with an empty field (validated on save), never an invented one.
+    const resolvedEditFee = resolveClassFee(cls);
+    setEditFee(resolvedEditFee === null ? '' : String(resolvedEditFee));
+    setEditFeeError('');
     setEditNewSectionInput('');
   };
 
@@ -222,6 +231,16 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
     );
     if (alreadyExists) return;
 
+    // Fix P1-8: fee is a required, validated field at edit too — empty,
+    // non-numeric or negative input blocks the save with a visible
+    // message; 0 is accepted and means the class is free.
+    const feeCheck = validateClassFeeInput(editFee);
+    if ('error' in feeCheck) {
+      setEditFeeError(feeCheck.error);
+      return;
+    }
+    setEditFeeError('');
+
     const sectionsArray = editSections.length > 0 ? editSections : ['A'];
 
     const updated = classes.map(c => {
@@ -231,11 +250,19 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
           name: trimmed,
           sectionsCount: sectionsArray.length,
           sections: sectionsArray,
-          fee: Number(editFee) || c.fee || 4800
+          fee: feeCheck.fee
         };
       }
       return c;
     });
+
+    // Fix P0-3: a rename must not orphan students — apply the shared rename
+    // cascade (id-attached students stay attached; legacy name-only students
+    // of the old name are moved to the new name and stamped with the id).
+    if (onUpdateStudents && trimmed !== editingClass.name) {
+      const nextStudents = studentsAfterClassRename(students, editingClass, trimmed);
+      if (nextStudents !== students) onUpdateStudents(nextStudents);
+    }
 
     onUpdateClasses(updated);
     setEditingClass(null);
@@ -253,27 +280,45 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
     );
     if (alreadyExists) return;
 
+    // Fix P1-8: a class cannot be created without an explicit fee —
+    // empty, non-numeric or negative input blocks the save with a
+    // visible message; 0 is accepted and means the class is free.
+    const feeCheck = validateClassFeeInput(newClassFee);
+    if ('error' in feeCheck) {
+      setNewClassFeeError(feeCheck.error);
+      return;
+    }
+    setNewClassFeeError('');
+
     const newId = `CLS-${Date.now().toString().slice(-4)}`;
     const sectionsToSave = newSections.length > 0 ? newSections : ['A'];
+
+    // Fix P0-4: a new class is stamped with its REAL creation date (today)
+    // and the school's current session from settings — never fixed fake
+    // creation/session metadata.
+    const createdNow = new Date();
+    const createdAtStr = createdNow.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const createdBadgeStr = createdNow.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
 
     const newClass: ClassInfo = {
       id: newId,
       name: trimmedName,
       sectionsCount: sectionsToSave.length,
       sections: sectionsToSave,
-      studentsCount: 0,
-      fee: Number(newClassFee) || 4800,
-      createdAt: '08 Apr 2026',
-      latestSession: 'Jul 2026',
+      // No studentsCount (Fix P0-1): enrollment is computed live from the
+      // students array everywhere; the stored counter is never written again.
+      fee: feeCheck.fee,
+      createdAt: createdAtStr,
+      latestSession: getSchoolSettings().session,
       timeline: [
         {
           id: `TL-NEW-${Date.now()}`,
           type: 'class_created',
           title: `Class "${trimmedName}" created`,
           description: 'Created by Admin',
-          date: '08 Apr 2026',
-          badgeDate: '08 Apr',
-          fee: Number(newClassFee) || 4800,
+          date: createdAtStr,
+          badgeDate: createdBadgeStr,
+          fee: feeCheck.fee,
           author: 'Admin'
         }
       ]
@@ -284,6 +329,8 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
     setNewClassName('');
     setNewSections(['A']);
     setNewSectionInput('');
+    setNewClassFee('');
+    setNewClassFeeError('');
   };
 
   // Helper to add section in Add Class modal
@@ -338,7 +385,7 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
             <button
               type="button"
               onClick={() => setIsExportMenuOpen(prev => !prev)}
-              className="px-3.5 py-1.5 rounded-lg bg-[#141c2b] hover:bg-[#1a2538] border border-[#223046] text-xs font-semibold text-slate-200 hover:text-white flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+              className="px-3.5 py-1.5 rounded-lg bg-surface-21 hover:bg-surface-43 border border-edge-24 text-xs font-semibold text-slate-200 hover:text-white flex items-center gap-2 transition-all cursor-pointer shadow-sm"
               id="btn-export-classes"
             >
               <Download className="w-3.5 h-3.5 text-slate-400" />
@@ -352,7 +399,7 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
                   className="fixed inset-0 z-30" 
                   onClick={() => setIsExportMenuOpen(false)} 
                 />
-                <div className="absolute right-0 mt-1.5 z-40 w-44 bg-[#0e1420] border border-[#223046] rounded-xl shadow-2xl p-1.5 text-left animate-in fade-in slide-in-from-top-1">
+                <div className="absolute right-0 mt-1.5 z-40 w-44 bg-surface-7 border border-edge-24 rounded-xl shadow-2xl p-1.5 text-left animate-in fade-in slide-in-from-top-1">
                   <button
                     type="button"
                     onClick={handleExportCSV}
@@ -382,7 +429,7 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
               setDraggedClassIndex(null);
               setIsReorganizeModalOpen(true);
             }}
-            className="px-3.5 py-1.5 rounded-lg bg-[#141c2b] hover:bg-[#1a2538] border border-[#223046] text-xs font-semibold text-slate-200 hover:text-white flex items-center gap-2 transition-all cursor-pointer shadow-sm group"
+            className="px-3.5 py-1.5 rounded-lg bg-surface-21 hover:bg-surface-43 border border-edge-24 text-xs font-semibold text-slate-200 hover:text-white flex items-center gap-2 transition-all cursor-pointer shadow-sm group"
             id="btn-organize-classes"
             title="Drag and drop to organize classes"
           >
@@ -397,10 +444,11 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
               setNewClassName('');
               setNewSections(['A']);
               setNewSectionInput('');
-              setNewClassFee(4800);
+              setNewClassFee('');
+              setNewClassFeeError('');
               setIsAddClassModalOpen(true);
             }}
-            className="px-3.5 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-[#0c121e] text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md hover:shadow-lg"
+            className="px-3.5 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-surface-6 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md hover:shadow-lg"
             id="btn-add-class"
           >
             <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -453,9 +501,9 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
       </div>
 
       {/* ================= ALL CLASSES TABLE ================= */}
-      <div className="bg-[#101726] border border-[#1d273a] rounded-2xl overflow-hidden shadow-lg">
+      <div className="bg-surface-13 border border-edge-9 rounded-2xl overflow-hidden shadow-lg">
         {/* Table Header Controls */}
-        <div className="px-6 py-4 border-b border-[#1b2638] flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0d1320]">
+        <div className="px-6 py-4 border-b border-edge-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0d1320]">
           <div>
             <h2 className="text-sm font-bold text-white tracking-tight">
               All Classes
@@ -473,7 +521,7 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
               placeholder="Search classes..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-8 py-1.5 rounded-xl bg-[#141c2c] border border-[#232f44] text-white text-xs placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full pl-9 pr-8 py-1.5 rounded-xl bg-surface-23 border border-[#232f44] text-white text-xs placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
             />
             {searchQuery && (
               <button
@@ -491,7 +539,7 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[700px]">
             {/* Header */}
-            <thead className="bg-[#131b28] border-b border-[#1c2637] text-xs font-semibold text-slate-400">
+            <thead className="bg-surface-18 border-b border-[#1c2637] text-xs font-semibold text-slate-400">
               <tr>
                 <th className="py-3.5 px-6">
                   <button
@@ -513,7 +561,7 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
             </thead>
 
             {/* Body */}
-            <tbody className="divide-y divide-[#182232] divide-dashed text-xs">
+            <tbody className="divide-y divide-surface-40 divide-dashed text-xs">
               {filteredClasses.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="py-12 text-center text-slate-500">
@@ -526,7 +574,7 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
                     <tr
                       key={cls.id}
                       onClick={() => setSelectedClassId(cls.id)}
-                      className="hover:bg-[#141d2d] transition-colors group cursor-pointer"
+                      className="hover:bg-surface-26 transition-colors group cursor-pointer"
                       title="Click to view detailed class page"
                     >
                       {/* Class Name */}
@@ -541,14 +589,10 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
                         {cls.sectionsCount || cls.sections?.length || 1}
                       </td>
 
-                      {/* Students Count */}
+                      {/* Students Count — live count only (Fix P0-1); 0 is valid,
+                          no fallback to the legacy stored counter. */}
                       <td className="py-4 px-6 text-slate-300 font-mono">
-                        {(() => {
-                          const enrolled = students.filter(
-                            s => s.class && s.class.toLowerCase().trim() === cls.name.toLowerCase().trim()
-                          ).length;
-                          return enrolled > 0 ? enrolled : (cls.studentsCount || 0);
-                        })()}
+                        {countStudentsInClass(students, cls)}
                       </td>
 
                       {/* Actions: Direct Edit and High-Security Delete Class buttons */}
@@ -560,7 +604,7 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
                               e.stopPropagation();
                               handleOpenEdit(cls);
                             }}
-                            className="px-3 py-1.5 rounded-lg bg-[#162030] hover:bg-[#1e2c44] border border-[#24344d] hover:border-blue-500/50 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                            className="px-3 py-1.5 rounded-lg bg-surface-32 hover:bg-[#1e2c44] border border-edge-34 hover:border-blue-500/50 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
                             id={`btn-edit-class-${cls.id}`}
                             title="Edit Class"
                           >
@@ -590,7 +634,7 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
         </div>
 
         {/* Footer info */}
-        <div className="bg-[#111724] border-t border-[#1b2638] px-6 py-3.5 flex items-center justify-between text-xs text-slate-400">
+        <div className="bg-surface-12 border-t border-edge-6 px-6 py-3.5 flex items-center justify-between text-xs text-slate-400">
           <span>
             Showing <strong className="text-white">{filteredClasses.length}</strong> of {totalClassesCount} classes
           </span>
@@ -607,10 +651,10 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
           onClick={() => setEditingClass(null)}
         >
           <div 
-            className="bg-[#0f1523] border border-[#223046] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95"
+            className="bg-[#0f1523] border border-edge-24 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="bg-[#141b2b] border-b border-[#1f2b3e] px-5 py-4 flex items-center justify-between">
+            <div className="bg-[#141b2b] border-b border-edge-17 px-5 py-4 flex items-center justify-between">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
                 <Pencil className="w-4 h-4 text-sky-400" />
                 <span>Edit Class — {editingClass.name}</span>
@@ -634,7 +678,7 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
                   required
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 rounded-xl bg-[#0a0e17] border text-white focus:outline-none transition-colors ${
+                  className={`w-full px-3.5 py-2.5 rounded-xl bg-abyss border text-white focus:outline-none transition-colors ${
                     isDuplicateEditClassName
                       ? 'border-rose-500 focus:border-rose-500 bg-rose-950/20 text-rose-100 ring-1 ring-rose-500/30'
                       : 'border-[#212d3f] focus:border-blue-500'
@@ -650,16 +694,27 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
 
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">
-                  Fee per Student (PKR)
+                  Fee per Student (PKR) *
                 </label>
                 <input
                   type="number"
                   value={editFee}
-                  onChange={(e) => setEditFee(Number(e.target.value))}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#0a0e17] border border-[#212d3f] text-white focus:outline-none focus:border-blue-500"
+                  onChange={(e) => { setEditFee(e.target.value); setEditFeeError(''); }}
+                  className={`w-full px-3.5 py-2.5 rounded-xl bg-abyss border text-white focus:outline-none transition-colors ${
+                    editFeeError
+                      ? 'border-rose-500 focus:border-rose-500 bg-rose-950/20 text-rose-100 ring-1 ring-rose-500/30'
+                      : 'border-[#212d3f] focus:border-blue-500'
+                  }`}
                   min="0"
                   step="100"
+                  required
                 />
+                {editFeeError && (
+                  <p className="text-xs text-rose-500 font-medium mt-1.5 flex items-center gap-1.5" id="error-edit-fee">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                    <span>{editFeeError}</span>
+                  </p>
+                )}
               </div>
 
               <div>
@@ -670,7 +725,7 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
                   {editSections.map((sec) => (
                     <div
                       key={sec}
-                      className="px-2.5 py-1 rounded-lg bg-[#141e30] border border-[#23334c] text-white text-xs font-bold flex items-center gap-1.5"
+                      className="px-2.5 py-1 rounded-lg bg-surface-29 border border-[#23334c] text-white text-xs font-bold flex items-center gap-1.5"
                     >
                       <span>{sec}</span>
                       {editSections.length > 1 && (
@@ -694,7 +749,7 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
                     value={editNewSectionInput}
                     onChange={(e) => setEditNewSectionInput(e.target.value)}
                     placeholder="New section name (e.g. B)"
-                    className="flex-1 px-3 py-1.5 rounded-lg bg-[#0a0e17] border border-[#212d3f] text-white text-xs uppercase"
+                    className="flex-1 px-3 py-1.5 rounded-lg bg-abyss border border-[#212d3f] text-white text-xs uppercase"
                     maxLength={10}
                   />
                   <button
@@ -713,7 +768,7 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
                 </div>
               </div>
 
-              <div className="pt-3 flex items-center justify-between gap-2.5 border-t border-[#1f2b3e]">
+              <div className="pt-3 flex items-center justify-between gap-2.5 border-t border-edge-17">
                 <button
                   type="button"
                   onClick={() => {
@@ -762,10 +817,10 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
           onClick={() => setIsAddClassModalOpen(false)}
         >
           <div 
-            className="bg-[#0f1523] border border-[#223046] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95"
+            className="bg-[#0f1523] border border-edge-24 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="bg-[#141b2b] border-b border-[#1f2b3e] px-5 py-4 flex items-center justify-between">
+            <div className="bg-[#141b2b] border-b border-edge-17 px-5 py-4 flex items-center justify-between">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
                 <Plus className="w-4 h-4 text-emerald-400" />
                 <span>Create New Class</span>
@@ -791,7 +846,7 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
                   placeholder="e.g. Class 11, Prep Blue, Playgroup"
                   value={newClassName}
                   onChange={(e) => setNewClassName(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 rounded-xl bg-[#0a0e17] border text-xs focus:outline-none transition-all ${
+                  className={`w-full px-3.5 py-2.5 rounded-xl bg-abyss border text-xs focus:outline-none transition-all ${
                     isDuplicateNewClassName
                       ? 'border-rose-500 focus:border-rose-500 text-rose-100 bg-rose-950/20 ring-1 ring-rose-500/30'
                       : 'border-[#212d3f] text-white focus:border-blue-500'
@@ -823,7 +878,7 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
                 </div>
 
                 {/* Section badges */}
-                <div className="flex flex-wrap gap-2 p-2.5 rounded-xl bg-[#0a0e17] border border-[#212d3f] min-h-[44px] items-center mb-2">
+                <div className="flex flex-wrap gap-2 p-2.5 rounded-xl bg-abyss border border-[#212d3f] min-h-[44px] items-center mb-2">
                   {newSections.map((sec) => (
                     <div
                       key={sec}
@@ -851,7 +906,7 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
                     value={newSectionInput}
                     onChange={(e) => setNewSectionInput(e.target.value)}
                     placeholder="Custom section (e.g. B, Rose)"
-                    className="flex-1 px-3 py-1.5 rounded-lg bg-[#0a0e17] border border-[#212d3f] text-white text-xs uppercase"
+                    className="flex-1 px-3 py-1.5 rounded-lg bg-abyss border border-[#212d3f] text-white text-xs uppercase"
                     maxLength={10}
                   />
                   <button
@@ -868,20 +923,31 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
               {/* 3. Base Monthly Fee per Student */}
               <div>
                 <label className="block text-slate-300 font-semibold mb-1.5">
-                  Monthly Fee per Student (PKR)
+                  Monthly Fee per Student (PKR) *
                 </label>
                 <input
                   type="number"
                   value={newClassFee}
-                  onChange={(e) => setNewClassFee(Number(e.target.value))}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#0a0e17] border border-[#212d3f] text-white focus:outline-none focus:border-blue-500 text-xs"
+                  onChange={(e) => { setNewClassFee(e.target.value); setNewClassFeeError(''); }}
+                  className={`w-full px-3.5 py-2.5 rounded-xl bg-abyss border text-white focus:outline-none transition-colors text-xs ${
+                    newClassFeeError
+                      ? 'border-rose-500 focus:border-rose-500 bg-rose-950/20 text-rose-100 ring-1 ring-rose-500/30'
+                      : 'border-[#212d3f] focus:border-blue-500'
+                  }`}
                   min="0"
                   step="100"
+                  required
                 />
+                {newClassFeeError && (
+                  <p className="text-xs text-rose-500 font-medium mt-1.5 flex items-center gap-1.5" id="error-new-class-fee">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                    <span>{newClassFeeError}</span>
+                  </p>
+                )}
               </div>
 
               {/* Form Buttons */}
-              <div className="pt-3 flex items-center justify-end gap-2.5 border-t border-[#1f2b3e]">
+              <div className="pt-3 flex items-center justify-end gap-2.5 border-t border-edge-17">
                 <button
                   type="button"
                   onClick={() => setIsAddClassModalOpen(false)}
@@ -914,10 +980,10 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
           onClick={() => setIsReorganizeModalOpen(false)}
         >
           <div 
-            className="bg-[#0f1523] border border-[#223046] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 max-h-[85vh] flex flex-col"
+            className="bg-[#0f1523] border border-edge-24 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 max-h-[85vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="bg-[#141b2b] border-b border-[#1f2b3e] px-5 py-4 flex items-center justify-between">
+            <div className="bg-[#141b2b] border-b border-edge-17 px-5 py-4 flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
                   <ListOrdered className="w-4 h-4 text-purple-400" />
@@ -963,7 +1029,7 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
                     className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border transition-all duration-150 select-none cursor-grab active:cursor-grabbing group ${
                       isBeingDragged
                         ? 'opacity-30 border-purple-500 bg-purple-950/30 scale-[0.98]'
-                        : 'bg-[#131b2a] hover:bg-[#182338] border-[#202c40] hover:border-purple-500/50 shadow-sm'
+                        : 'bg-[#131b2a] hover:bg-[#182338] border-edge-18 hover:border-purple-500/50 shadow-sm'
                     }`}
                   >
                     {/* Dragging Handle */}
@@ -983,7 +1049,7 @@ export const ClassesModule: React.FC<ClassesModuleProps> = ({
               })}
             </div>
 
-            <div className="p-4 bg-[#141b2b] border-t border-[#1f2b3e] flex items-center justify-between">
+            <div className="p-4 bg-[#141b2b] border-t border-edge-17 flex items-center justify-between">
               <button
                 type="button"
                 onClick={() => {

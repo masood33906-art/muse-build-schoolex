@@ -1,18 +1,25 @@
-import React, { useState } from 'react';
-import { 
-  Printer, 
-  ArrowLeft, 
-  CloudDownload, 
+import React, { useState, useMemo } from 'react';
+import {
+  Printer,
+  ArrowLeft,
+  CloudDownload,
   Receipt,
   CheckCircle2,
   FileCheck,
   Scissors
 } from 'lucide-react';
-import { FeeInvoiceData, generateFeeInvoicePdf } from '../utils/feeInvoicePdfGenerator';
+import { Student } from '../types';
+import { FeeInvoiceData, generateFeeInvoicePdf, rebuildFeeInvoiceData } from '../utils/feeInvoicePdfGenerator';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
 
 interface FeeInvoicePageProps {
   invoiceData: FeeInvoiceData;
+  // When the caller passes the student records, the page rebuilds the
+  // invoice from the LIVE ledger before showing/downloading it, so a
+  // receipt re-opened after further payments shows the current
+  // charges / paid-to-date / balance instead of the frozen snapshot
+  // it was first issued with.
+  students?: Student[];
   onBackToFamily: () => void;
   onBackToFees: () => void;
   onBreadcrumbOverview?: () => void;
@@ -20,12 +27,19 @@ interface FeeInvoicePageProps {
 }
 
 export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
-  invoiceData,
+  invoiceData: snapshotData,
+  students,
   onBackToFamily,
   onBackToFees,
   onBreadcrumbOverview,
   onShowToast
 }) => {
+  const invoiceData = useMemo(
+    () => (students && students.length > 0
+      ? rebuildFeeInvoiceData(snapshotData, students) ?? snapshotData
+      : snapshotData),
+    [snapshotData, students]
+  );
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [selectedPreviewCopy, setSelectedPreviewCopy] = useState<'all' | 'family' | 'school'>('all');
 
@@ -54,7 +68,7 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
     <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 py-6 text-slate-100 animate-in fade-in duration-150" id="fee-invoice-view-root">
       
       {/* ================= 1. SCREEN VIEW HEADER & BREADCRUMBS ================= */}
-      <div className="print:hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-2 border-b border-[#182335]">
+      <div className="print:hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-2 border-b border-edge-3">
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight">
             Invoice
@@ -75,7 +89,7 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
           <button
             type="button"
             onClick={onBackToFamily}
-            className="px-3 py-2 rounded-lg bg-[#141c2b] hover:bg-[#1c273c] border border-[#233149] text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="px-3 py-2 rounded-lg bg-surface-21 hover:bg-[#1c273c] border border-edge-26 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
             title="Return to Family Fee Ledger"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
@@ -87,7 +101,7 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
             type="button"
             onClick={handleDownloadPdf}
             disabled={isGeneratingPdf}
-            className="px-3.5 py-2 rounded-lg bg-[#152033] hover:bg-[#1b2b45] border border-[#253552] text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+            className="px-3.5 py-2 rounded-lg bg-surface-35 hover:bg-[#1b2b45] border border-[#253552] text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
             title="Download PDF containing 1 Family Copy and 2 School Copies"
           >
             <CloudDownload className="w-4 h-4 text-sky-400" />
@@ -98,7 +112,7 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
           <button
             type="button"
             onClick={handlePrint}
-            className="px-4 py-2 rounded-lg bg-[#2563eb] hover:bg-blue-600 active:bg-blue-700 text-white text-xs font-semibold flex items-center gap-2 shadow-lg shadow-blue-900/30 transition-all cursor-pointer"
+            className="px-4 py-2 rounded-lg bg-accent hover:bg-blue-600 active:bg-blue-700 text-white text-xs font-semibold flex items-center gap-2 shadow-lg shadow-blue-900/30 transition-all cursor-pointer"
             id="btn-print-invoice"
           >
             <Printer className="w-4 h-4" />
@@ -108,9 +122,9 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
       </div>
 
       {/* ================= 2. ON-SCREEN DARK INVOICE CONTAINER ================= */}
-      <div className="print:hidden bg-[#0c1322] border border-[#1a2538] rounded-2xl overflow-hidden shadow-2xl mb-12">
+      <div className="print:hidden bg-[#0c1322] border border-surface-43 rounded-2xl overflow-hidden shadow-2xl mb-12">
         {/* Header section with Logo, School details and Invoice metadata */}
-        <div className="p-6 sm:p-8 border-b border-[#182335]">
+        <div className="p-6 sm:p-8 border-b border-edge-3">
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6">
             {/* School Info with Logo */}
             <div className="flex items-start gap-4">
@@ -144,9 +158,15 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
 
             {/* Right side: Paid Badge, Invoice Number, Timestamp */}
             <div className="sm:text-right flex flex-col sm:items-end">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#0e2e21] text-[#22c55e] border border-[#164e35]">
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
+                invoiceData.status === 'Paid'
+                  ? 'bg-[#0e2e21] text-[#22c55e] border-[#164e35]'
+                  : invoiceData.status === 'Partially Paid'
+                    ? 'bg-[#2e240e] text-[#fbbf24] border-[#4d3d10]'
+                    : 'bg-[#2e0e0e] text-[#f87171] border-[#4d1010]'
+              }`}>
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Paid</span>
+                <span>{invoiceData.status}</span>
               </span>
               <div className="text-sm font-bold font-mono text-white tracking-wider mt-2">
                 {invoiceData.invoiceNumber}
@@ -158,7 +178,7 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
           </div>
 
           {/* Invoice From & Invoice To details */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-8 pt-6 border-t border-[#182335]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-8 pt-6 border-t border-edge-3">
             {/* Invoice From */}
             <div>
               <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 block mb-1">
@@ -205,9 +225,9 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
               </div>
 
               {/* Items Table */}
-              <div className="overflow-x-auto rounded-lg border border-[#182335]">
+              <div className="overflow-x-auto rounded-lg border border-edge-3">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-[#0f1726] border-b border-[#182335] text-slate-400">
+                  <thead className="bg-surface-10 border-b border-edge-3 text-slate-400">
                     <tr>
                       <th className="py-3 px-4 font-semibold">Purpose</th>
                       <th className="py-3 px-4 font-semibold">Month</th>
@@ -216,7 +236,7 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
                       <th className="py-3 px-4 font-semibold text-right">Fee</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#162030]">
+                  <tbody className="divide-y divide-surface-32">
                     {stGroup.items.map((item) => (
                       <tr 
                         key={item.id} 
@@ -245,8 +265,10 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
             </div>
           ))}
 
-          {/* Subtotal & Paid Amount Summary */}
-          <div className="pt-4 border-t border-[#182335] flex flex-col items-end gap-1.5">
+          {/* Subtotal / Total Paid / Balance Due Summary — all three are
+              derived from the same live ledger items, so they always
+              agree: Subtotal − Total Paid = Balance Due. */}
+          <div className="pt-4 border-t border-edge-3 flex flex-col items-end gap-1.5">
             <div className="flex items-center gap-8 text-xs text-slate-400">
               <span className="font-semibold">Subtotal</span>
               <span className="font-medium text-slate-200 min-w-[100px] text-right">
@@ -254,16 +276,24 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
               </span>
             </div>
             <div className="flex items-center gap-8 text-sm">
-              <span className="font-bold text-white">Paid Amount</span>
+              <span className="font-bold text-white">Total Paid</span>
               <span className="font-bold text-[#22c55e] min-w-[100px] text-right text-base">
                 {invoiceData.paidAmount.toLocaleString()} PKR
+              </span>
+            </div>
+            <div className="flex items-center gap-8 text-sm">
+              <span className="font-bold text-white">Balance Due</span>
+              <span className={`font-bold min-w-[100px] text-right text-base ${
+                invoiceData.balanceDue > 0 ? 'text-[#f87171]' : 'text-slate-200'
+              }`}>
+                {invoiceData.balanceDue.toLocaleString()} PKR
               </span>
             </div>
           </div>
         </div>
 
         {/* Card Footer notice */}
-        <div className="bg-[#090e1a] border-t border-[#182335] px-6 sm:px-8 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+        <div className="bg-[#090e1a] border-t border-edge-3 px-6 sm:px-8 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
           <div className="flex items-center gap-2">
             <FileCheck className="w-4 h-4 text-emerald-500" />
             <span>Official Receipt generated with 1 Family Copy and 2 School Office Copies.</span>
@@ -415,20 +445,26 @@ const PrintSlipContent: React.FC<{ invoiceData: FeeInvoiceData; copyLabel: strin
       </table>
 
       {/* Footer */}
-      <div className="pt-2 flex items-center justify-between border-t border-slate-200">
+      <div className="pt-2 flex items-start justify-between border-t border-slate-200">
         <div>
           <div className="font-bold text-xs tracking-wider text-slate-900">
-            {copyLabel} (PAID)
+            {copyLabel} ({invoiceData.status === 'Paid' ? 'PAID' : invoiceData.status === 'Partially Paid' ? 'PARTIALLY PAID' : 'UNPAID'})
           </div>
           <div className="text-[9px] text-slate-400">
-            A product of devxcel.com | Get School Software at schooliee.com
+            Generated by SchoolEx
           </div>
         </div>
 
-        <div className="text-right">
-          <span className="font-bold text-xs text-slate-900">
-            Total Paid: &nbsp; &nbsp; {invoiceData.paidAmount.toLocaleString()} PKR
-          </span>
+        <div className="text-right text-[11px] text-slate-700 space-y-0.5">
+          <div>
+            Subtotal: &nbsp; {invoiceData.subtotal.toLocaleString()} PKR
+          </div>
+          <div className="font-bold text-xs text-slate-900">
+            Total Paid: &nbsp; {invoiceData.paidAmount.toLocaleString()} PKR
+          </div>
+          <div className={`font-bold text-xs ${invoiceData.balanceDue > 0 ? 'text-red-700' : 'text-slate-900'}`}>
+            Balance Due: &nbsp; {invoiceData.balanceDue.toLocaleString()} PKR
+          </div>
         </div>
       </div>
     </div>

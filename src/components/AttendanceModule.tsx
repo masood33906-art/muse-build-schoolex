@@ -37,6 +37,7 @@ import {
   exportAttendanceToCSV 
 } from '../utils/attendanceHelper';
 import { loadJSON, saveJSON } from '../utils/storage';
+import { localISODate } from '../utils/dates';
 import { AttendanceSheetModal } from './AttendanceSheetModal';
 
 export const HOLIDAYS_STORAGE_KEY = 'schooliee_attendance_holidays_v1';
@@ -73,8 +74,8 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
   // Tab state: 'students' | 'staff'
   const [activeTab, setActiveTab] = useState<'students' | 'staff'>('students');
 
-  // Selected date (Defaults to 2026-09-13 to match reference image)
-  const [selectedDate, setSelectedDate] = useState<string>('2026-09-13');
+  // Selected date — the day attendance is being marked; defaults to TODAY.
+  const [selectedDate, setSelectedDate] = useState<string>(() => localISODate());
 
   // Attendance Records State (persisted per date)
   const [internalAttendance, setInternalAttendance] = useState<Record<string, AttendanceRecord[]>>(() => loadAttendance());
@@ -781,7 +782,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
             <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
               Attendance
             </h1>
-            <div className="w-8 h-8 rounded-lg bg-[#152033] border border-[#22334e] flex items-center justify-center text-slate-400">
+            <div className="w-8 h-8 rounded-lg bg-surface-35 border border-edge-32 flex items-center justify-center text-slate-400">
               <Video className="w-4 h-4" />
             </div>
           </div>
@@ -800,7 +801,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
           <button
             type="button"
             onClick={handleExportTodayCSV}
-            className="h-7.5 px-3 rounded-xl bg-[#141c2b] hover:bg-[#1b263a] border border-[#223046] text-slate-200 hover:text-white text-[11px] font-semibold flex items-center gap-1.5 cursor-pointer shadow-sm transition-all box-border"
+            className="h-7.5 px-3 rounded-xl bg-surface-21 hover:bg-edge-7 border border-edge-24 text-slate-200 hover:text-white text-[11px] font-semibold flex items-center gap-1.5 cursor-pointer shadow-sm transition-all box-border"
             id="btn-attendance-export-csv"
             title="Export all attendance data of today in CSV format"
           >
@@ -812,11 +813,11 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
           <button
             type="button"
             onClick={() => setIsSheetModalOpen(true)}
-            className="h-7.5 px-3 rounded-xl bg-white hover:bg-slate-100 text-[#0c121e] text-[11px] font-bold flex items-center gap-1.5 shadow-md shadow-white/10 cursor-pointer transition-all box-border"
+            className="h-7.5 px-3 rounded-xl bg-white hover:bg-slate-100 text-surface-6 text-[11px] font-bold flex items-center gap-1.5 shadow-md shadow-white/10 cursor-pointer transition-all box-border"
             id="btn-open-generate-attendance-sheet"
             title="Generate official printable attendance sheet"
           >
-            <FileText className="w-3.5 h-3.5 text-[#0c121e]" />
+            <FileText className="w-3.5 h-3.5 text-surface-6" />
             <span>Generate attendance sheet</span>
           </button>
         </div>
@@ -828,7 +829,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {/* Card 1: Attendance Rate (Dark Blue with glow) */}
         <div 
-          className="bg-[#121927] border border-[#1e2c42] rounded-2xl p-4 sm:p-5 relative overflow-hidden shadow-sm flex flex-col justify-between"
+          className="bg-surface-17 border border-[#1e2c42] rounded-2xl p-4 sm:p-5 relative overflow-hidden shadow-sm flex flex-col justify-between"
           id="stat-card-rate"
         >
           <div className="flex items-center justify-between">
@@ -915,13 +916,13 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
             placeholder={activeTab === 'students' ? 'Search student...' : 'Search staff...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-[#121927] border border-[#1f2c40] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+            className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-surface-17 border border-[#1f2c40] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
             id="input-attendance-search"
           />
         </div>
 
         {/* Attendance Date with floating label style */}
-        <div className="relative border border-[#1f2c40] rounded-xl bg-[#121927] px-3 py-1.5 flex items-center justify-between">
+        <div className="relative border border-[#1f2c40] rounded-xl bg-surface-17 px-3 py-1.5 flex items-center justify-between">
           <div className="flex-1">
             <span className="text-[10px] text-slate-400 block leading-tight font-medium">
               Attendance Date
@@ -946,7 +947,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                 setSelectedClassFilter(e.target.value);
                 setSelectedSectionFilter('All Sections');
               }}
-              className="w-full px-3 py-2.5 rounded-xl bg-[#121927] border border-[#1f2c40] text-xs text-white focus:outline-none focus:border-blue-500 appearance-none cursor-pointer pr-8"
+              className="w-full px-3 py-2.5 rounded-xl bg-surface-17 border border-[#1f2c40] text-xs text-white focus:outline-none focus:border-blue-500 appearance-none cursor-pointer pr-8"
               id="select-filter-class"
             >
               <option value="All Classes">All Classes</option>
@@ -961,7 +962,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
             <select
               value={selectedDepartmentFilter}
               onChange={(e) => setSelectedDepartmentFilter(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl bg-[#121927] border border-[#1f2c40] text-xs text-white focus:outline-none focus:border-blue-500 appearance-none cursor-pointer pr-8"
+              className="w-full px-3 py-2.5 rounded-xl bg-surface-17 border border-[#1f2c40] text-xs text-white focus:outline-none focus:border-blue-500 appearance-none cursor-pointer pr-8"
               id="select-filter-department"
             >
               {staffDepartments.map(dept => (
@@ -978,7 +979,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
             <select
               value={selectedSectionFilter}
               onChange={(e) => setSelectedSectionFilter(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl bg-[#121927] border border-[#1f2c40] text-xs text-white focus:outline-none focus:border-blue-500 appearance-none cursor-pointer pr-8"
+              className="w-full px-3 py-2.5 rounded-xl bg-surface-17 border border-[#1f2c40] text-xs text-white focus:outline-none focus:border-blue-500 appearance-none cursor-pointer pr-8"
               id="select-filter-section"
             >
               {availableSectionsForFilter.map(sec => (
@@ -992,7 +993,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
             <select
               value={selectedRoleFilter}
               onChange={(e) => setSelectedRoleFilter(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl bg-[#121927] border border-[#1f2c40] text-xs text-white focus:outline-none focus:border-blue-500 appearance-none cursor-pointer pr-8"
+              className="w-full px-3 py-2.5 rounded-xl bg-surface-17 border border-[#1f2c40] text-xs text-white focus:outline-none focus:border-blue-500 appearance-none cursor-pointer pr-8"
               id="select-filter-role"
             >
               {staffRoles.map(r => (
@@ -1008,7 +1009,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
           <select
             value={selectedStatusFilter}
             onChange={(e) => setSelectedStatusFilter(e.target.value)}
-            className="w-full px-3 py-2.5 rounded-xl bg-[#121927] border border-[#1f2c40] text-xs text-white focus:outline-none focus:border-blue-500 appearance-none cursor-pointer pr-8"
+            className="w-full px-3 py-2.5 rounded-xl bg-surface-17 border border-[#1f2c40] text-xs text-white focus:outline-none focus:border-blue-500 appearance-none cursor-pointer pr-8"
             id="select-filter-status"
           >
             <option value="All Status">All Status</option>
@@ -1125,7 +1126,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                 ? 'bg-slate-800/60 border border-slate-700 text-slate-500 cursor-not-allowed opacity-60'
                 : unmarkedRemainingCount === 0
                 ? 'bg-emerald-950/40 border border-emerald-800/40 text-emerald-600 cursor-not-allowed'
-                : 'bg-[#059669] hover:bg-[#10b981] text-white cursor-pointer shadow-md shadow-emerald-700/25'
+                : 'bg-[#059669] hover:bg-success text-white cursor-pointer shadow-md shadow-emerald-700/25'
             }`}
             id="btn-mark-all-present"
           >
@@ -1204,11 +1205,11 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
       {/* ======================================================== */}
       {/* 6. ATTENDANCE TABLE (STUDENT OR STAFF)                   */}
       {/* ======================================================== */}
-      <div className="bg-[#101726] border border-[#1d293d] rounded-2xl overflow-hidden shadow-xl">
+      <div className="bg-surface-13 border border-[#1d293d] rounded-2xl overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="border-b border-[#1b273b] bg-[#0c121e] text-slate-400 font-semibold uppercase text-[11px] tracking-wider">
+              <tr className="border-b border-edge-8 bg-surface-6 text-slate-400 font-semibold uppercase text-[11px] tracking-wider">
                 <th className="py-3.5 px-4 font-bold flex items-center gap-1">
                   <span>{activeTab === 'students' ? 'Student Name' : 'Staff Name'}</span>
                   <span className="text-slate-500">↑</span>
@@ -1243,7 +1244,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                     return (
                       <tr 
                         key={s.id} 
-                        className={`transition-colors ${isRowDisabled ? 'bg-[#0f1522]/60 hover:bg-[#111927]' : 'hover:bg-[#131d2e]'}`}
+                        className={`transition-colors ${isRowDisabled ? 'bg-[#0f1522]/60 hover:bg-[#111927]' : 'hover:bg-surface-25'}`}
                         id={`row-student-${s.id}`}
                       >
                         {/* Name + ID Badge */}
@@ -1367,16 +1368,16 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                         <td className="py-3.5 px-4">
                           {isRowDisabled ? (
                             <div className="flex items-center justify-center gap-1.5">
-                              <span className="h-7 px-2.5 rounded-lg text-[11px] font-semibold bg-[#121927] text-slate-600 border border-[#1b2537] cursor-not-allowed flex items-center justify-center box-border">
+                              <span className="h-7 px-2.5 rounded-lg text-[11px] font-semibold bg-surface-17 text-slate-600 border border-edge-4 cursor-not-allowed flex items-center justify-center box-border">
                                 Present
                               </span>
-                              <span className="h-7 px-2.5 rounded-lg text-[11px] font-semibold bg-[#121927] text-slate-600 border border-[#1b2537] cursor-not-allowed flex items-center justify-center box-border">
+                              <span className="h-7 px-2.5 rounded-lg text-[11px] font-semibold bg-surface-17 text-slate-600 border border-edge-4 cursor-not-allowed flex items-center justify-center box-border">
                                 Late
                               </span>
-                              <span className="h-7 px-2.5 rounded-lg text-[11px] font-semibold bg-[#121927] text-slate-600 border border-[#1b2537] cursor-not-allowed flex items-center justify-center box-border">
+                              <span className="h-7 px-2.5 rounded-lg text-[11px] font-semibold bg-surface-17 text-slate-600 border border-edge-4 cursor-not-allowed flex items-center justify-center box-border">
                                 Absent
                               </span>
-                              <span className="h-7 px-2.5 rounded-lg text-[11px] font-semibold bg-[#121927] text-slate-600 border border-[#1b2537] cursor-not-allowed flex items-center justify-center box-border">
+                              <span className="h-7 px-2.5 rounded-lg text-[11px] font-semibold bg-surface-17 text-slate-600 border border-edge-4 cursor-not-allowed flex items-center justify-center box-border">
                                 Leave
                               </span>
                             </div>
@@ -1389,7 +1390,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                                 className={`h-7 px-2.5 rounded-lg text-[11px] font-bold cursor-pointer transition-all flex items-center justify-center box-border ${
                                   draftStatus === 'present'
                                     ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-400'
-                                    : 'bg-[#152132] hover:bg-emerald-950/60 text-slate-300 hover:text-emerald-300 border border-[#22334c]'
+                                    : 'bg-surface-38 hover:bg-emerald-950/60 text-slate-300 hover:text-emerald-300 border border-edge-30'
                                 }`}
                               >
                                 Present
@@ -1402,7 +1403,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                                 className={`h-7 px-2.5 rounded-lg text-[11px] font-bold cursor-pointer transition-all flex items-center justify-center box-border ${
                                   draftStatus === 'late'
                                     ? 'bg-cyan-600 text-white shadow-sm ring-1 ring-cyan-400'
-                                    : 'bg-[#152132] hover:bg-cyan-950/60 text-slate-300 hover:text-cyan-300 border border-[#22334c]'
+                                    : 'bg-surface-38 hover:bg-cyan-950/60 text-slate-300 hover:text-cyan-300 border border-edge-30'
                                 }`}
                               >
                                 Late
@@ -1415,7 +1416,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                                 className={`h-7 px-2.5 rounded-lg text-[11px] font-bold cursor-pointer transition-all flex items-center justify-center box-border ${
                                   draftStatus === 'absent'
                                     ? 'bg-red-600 text-white shadow-sm ring-1 ring-red-400'
-                                    : 'bg-[#152132] hover:bg-red-950/60 text-slate-300 hover:text-red-300 border border-[#22334c]'
+                                    : 'bg-surface-38 hover:bg-red-950/60 text-slate-300 hover:text-red-300 border border-edge-30'
                                 }`}
                               >
                                 Absent
@@ -1428,7 +1429,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                                 className={`h-7 px-2.5 rounded-lg text-[11px] font-bold cursor-pointer transition-all flex items-center justify-center box-border ${
                                   draftStatus === 'leave'
                                     ? 'bg-amber-600 text-white shadow-sm ring-1 ring-amber-400'
-                                    : 'bg-[#152132] hover:bg-amber-950/60 text-slate-300 hover:text-amber-300 border border-[#22334c]'
+                                    : 'bg-surface-38 hover:bg-amber-950/60 text-slate-300 hover:text-amber-300 border border-edge-30'
                                 }`}
                               >
                                 Leave
@@ -1462,7 +1463,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                     return (
                       <tr 
                         key={st.id} 
-                        className={`transition-colors ${isStaffRowDisabled ? 'bg-[#0f1522]/60 hover:bg-[#111927]' : 'hover:bg-[#131d2e]'}`}
+                        className={`transition-colors ${isStaffRowDisabled ? 'bg-[#0f1522]/60 hover:bg-[#111927]' : 'hover:bg-surface-25'}`}
                         id={`row-staff-${st.id}`}
                       >
                         {/* Name + ID Badge */}
@@ -1567,16 +1568,16 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                         <td className="py-3.5 px-4">
                           {isStaffRowDisabled ? (
                             <div className="flex items-center justify-center gap-1.5">
-                              <span className="h-7 px-2.5 rounded-lg text-[11px] font-semibold bg-[#121927] text-slate-600 border border-[#1b2537] cursor-not-allowed flex items-center justify-center box-border">
+                              <span className="h-7 px-2.5 rounded-lg text-[11px] font-semibold bg-surface-17 text-slate-600 border border-edge-4 cursor-not-allowed flex items-center justify-center box-border">
                                 Present
                               </span>
-                              <span className="h-7 px-2.5 rounded-lg text-[11px] font-semibold bg-[#121927] text-slate-600 border border-[#1b2537] cursor-not-allowed flex items-center justify-center box-border">
+                              <span className="h-7 px-2.5 rounded-lg text-[11px] font-semibold bg-surface-17 text-slate-600 border border-edge-4 cursor-not-allowed flex items-center justify-center box-border">
                                 Late
                               </span>
-                              <span className="h-7 px-2.5 rounded-lg text-[11px] font-semibold bg-[#121927] text-slate-600 border border-[#1b2537] cursor-not-allowed flex items-center justify-center box-border">
+                              <span className="h-7 px-2.5 rounded-lg text-[11px] font-semibold bg-surface-17 text-slate-600 border border-edge-4 cursor-not-allowed flex items-center justify-center box-border">
                                 Absent
                               </span>
-                              <span className="h-7 px-2.5 rounded-lg text-[11px] font-semibold bg-[#121927] text-slate-600 border border-[#1b2537] cursor-not-allowed flex items-center justify-center box-border">
+                              <span className="h-7 px-2.5 rounded-lg text-[11px] font-semibold bg-surface-17 text-slate-600 border border-edge-4 cursor-not-allowed flex items-center justify-center box-border">
                                 Leave
                               </span>
                             </div>
@@ -1589,7 +1590,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                                 className={`h-7 px-2.5 rounded-lg text-[11px] font-bold cursor-pointer transition-all flex items-center justify-center box-border ${
                                   draftStatus === 'present'
                                     ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-400'
-                                    : 'bg-[#152132] hover:bg-emerald-950/60 text-slate-300 hover:text-emerald-300 border border-[#22334c]'
+                                    : 'bg-surface-38 hover:bg-emerald-950/60 text-slate-300 hover:text-emerald-300 border border-edge-30'
                                 }`}
                               >
                                 Present
@@ -1602,7 +1603,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                                 className={`h-7 px-2.5 rounded-lg text-[11px] font-bold cursor-pointer transition-all flex items-center justify-center box-border ${
                                   draftStatus === 'late'
                                     ? 'bg-cyan-600 text-white shadow-sm ring-1 ring-cyan-400'
-                                    : 'bg-[#152132] hover:bg-cyan-950/60 text-slate-300 hover:text-cyan-300 border border-[#22334c]'
+                                    : 'bg-surface-38 hover:bg-cyan-950/60 text-slate-300 hover:text-cyan-300 border border-edge-30'
                                 }`}
                               >
                                 Late
@@ -1615,7 +1616,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                                 className={`h-7 px-2.5 rounded-lg text-[11px] font-bold cursor-pointer transition-all flex items-center justify-center box-border ${
                                   draftStatus === 'absent'
                                     ? 'bg-red-600 text-white shadow-sm ring-1 ring-red-400'
-                                    : 'bg-[#152132] hover:bg-red-950/60 text-slate-300 hover:text-red-300 border border-[#22334c]'
+                                    : 'bg-surface-38 hover:bg-red-950/60 text-slate-300 hover:text-red-300 border border-edge-30'
                                 }`}
                               >
                                 Absent
@@ -1628,7 +1629,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                                 className={`h-7 px-2.5 rounded-lg text-[11px] font-bold cursor-pointer transition-all flex items-center justify-center box-border ${
                                   draftStatus === 'leave'
                                     ? 'bg-amber-600 text-white shadow-sm ring-1 ring-amber-400'
-                                    : 'bg-[#152132] hover:bg-amber-950/60 text-slate-300 hover:text-amber-300 border border-[#22334c]'
+                                    : 'bg-surface-38 hover:bg-amber-950/60 text-slate-300 hover:text-amber-300 border border-edge-30'
                                 }`}
                               >
                                 Leave
@@ -1648,7 +1649,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
         {/* Table Footer Save Bar for Student & Staff Attendance */}
         {((activeTab === 'students' && filteredStudents.length > 0) ||
           (activeTab === 'staff' && filteredStaff.length > 0)) && (
-          <div className="px-4 py-3 border-t border-[#1b273b] bg-[#0c121e] flex flex-wrap items-center justify-between gap-3">
+          <div className="px-4 py-3 border-t border-edge-8 bg-surface-6 flex flex-wrap items-center justify-between gap-3">
             <div className="text-xs text-slate-400">
               {unsavedMemberIds.size > 0 ? (
                 <span className="text-blue-400 font-semibold">
@@ -1690,9 +1691,9 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
       {/* ======================================================== */}
       {isHolidayModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0f172a] border border-[#1e293b] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 text-white">
+          <div className="bg-surface-15 border border-edge-13 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 text-white">
             {/* Modal Header */}
-            <div className="px-6 py-4.5 border-b border-[#1e293b] flex items-center justify-between bg-[#0b1120]">
+            <div className="px-6 py-4.5 border-b border-edge-13 flex items-center justify-between bg-[#0b1120]">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center font-bold">
                   <Calendar className="w-4 h-4" />
@@ -1723,7 +1724,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                   value={holidayReason}
                   onChange={(e) => setHolidayReason(e.target.value)}
                   placeholder="e.g. Independence Day, Eid Holiday, Weather Alert"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#131d2e] border border-[#22334c] text-white focus:outline-none focus:border-blue-500 text-xs"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-25 border border-edge-30 text-white focus:outline-none focus:border-blue-500 text-xs"
                   id="input-holiday-reason"
                   autoFocus
                 />
@@ -1734,7 +1735,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                       key={sug}
                       type="button"
                       onClick={() => setHolidayReason(sug)}
-                      className="px-2 py-0.5 rounded-md bg-[#162235] hover:bg-blue-950 text-slate-400 hover:text-blue-300 border border-[#22334c] text-[10px] cursor-pointer transition-colors"
+                      className="px-2 py-0.5 rounded-md bg-[#162235] hover:bg-blue-950 text-slate-400 hover:text-blue-300 border border-edge-30 text-[10px] cursor-pointer transition-colors"
                     >
                       {sug}
                     </button>
@@ -1754,7 +1755,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                     className={`py-2 px-3 rounded-xl border text-center font-bold text-xs cursor-pointer transition-all ${
                       holidayApplyTo === 'both'
                         ? 'bg-blue-600/30 border-blue-500 text-white shadow-sm'
-                        : 'bg-[#131d2e] border-[#22334c] text-slate-400 hover:text-white'
+                        : 'bg-surface-25 border-edge-30 text-slate-400 hover:text-white'
                     }`}
                   >
                     Both (Default)
@@ -1765,7 +1766,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                     className={`py-2 px-3 rounded-xl border text-center font-bold text-xs cursor-pointer transition-all ${
                       holidayApplyTo === 'student'
                         ? 'bg-blue-600/30 border-blue-500 text-white shadow-sm'
-                        : 'bg-[#131d2e] border-[#22334c] text-slate-400 hover:text-white'
+                        : 'bg-surface-25 border-edge-30 text-slate-400 hover:text-white'
                     }`}
                   >
                     Students
@@ -1776,7 +1777,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                     className={`py-2 px-3 rounded-xl border text-center font-bold text-xs cursor-pointer transition-all ${
                       holidayApplyTo === 'staff'
                         ? 'bg-blue-600/30 border-blue-500 text-white shadow-sm'
-                        : 'bg-[#131d2e] border-[#22334c] text-slate-400 hover:text-white'
+                        : 'bg-surface-25 border-edge-30 text-slate-400 hover:text-white'
                     }`}
                   >
                     Staff
@@ -1797,7 +1798,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                         setHolidayClass(e.target.value);
                         setHolidaySection('All Sections');
                       }}
-                      className="w-full px-3 py-2 rounded-xl bg-[#131d2e] border border-[#22334c] text-white focus:outline-none focus:border-blue-500 appearance-none cursor-pointer"
+                      className="w-full px-3 py-2 rounded-xl bg-surface-25 border border-edge-30 text-white focus:outline-none focus:border-blue-500 appearance-none cursor-pointer"
                       id="select-holiday-class"
                     >
                       <option value="All Classes">All Classes</option>
@@ -1817,8 +1818,8 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                       disabled={holidayClass === 'All Classes'}
                       className={`w-full px-3 py-2 rounded-xl border appearance-none ${
                         holidayClass === 'All Classes'
-                          ? 'bg-[#0f1724] border-[#1b2537] text-slate-600 cursor-not-allowed'
-                          : 'bg-[#131d2e] border-[#22334c] text-white focus:outline-none focus:border-blue-500 cursor-pointer'
+                          ? 'bg-[#0f1724] border-edge-4 text-slate-600 cursor-not-allowed'
+                          : 'bg-surface-25 border-edge-30 text-white focus:outline-none focus:border-blue-500 cursor-pointer'
                       }`}
                       id="select-holiday-section"
                     >
@@ -1836,7 +1837,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
             </div>
 
             {/* Modal Footer */}
-            <div className="px-6 py-4 border-t border-[#1e293b] flex items-center justify-end gap-2.5 bg-[#0b1120]">
+            <div className="px-6 py-4 border-t border-edge-13 flex items-center justify-end gap-2.5 bg-[#0b1120]">
               <button
                 type="button"
                 onClick={() => setIsHolidayModalOpen(false)}

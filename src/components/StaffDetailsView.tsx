@@ -41,10 +41,19 @@ import {
 import { getAvatarColor, getInitials } from '../data/initialStudents';
 import { MemberAttendanceSection } from './MemberAttendanceSection';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
-import { getStaffSalaryAccrualInfo } from '../utils/salaryAccrualHelper';
 import { addLedgerTransaction } from '../utils/ledgerStore';
-import { disburseSalary } from '../utils/payrollService';
 import { getSchoolSettings } from '../utils/settingsHelper';
+import {
+  PayrollRecord,
+  PayrollPayment,
+  applyPayrollSync,
+  buildSlipBreakdown,
+  createBulkPayrollPayments,
+  getStaffPayroll,
+} from '../utils/payrollApi';
+import { monthLabelFromKey, localISODate } from '../utils/dates';
+import { DEFAULT_SCHOOL } from '../utils/pdfGenerator';
+import { generateMonthlyIndividualSlipsCombinedPdf } from '../utils/staffPdfGenerator';
 import { putFile, getFile, deleteFile } from '../utils/blobStore';
 import { nextSequential } from '../utils/ids';
 import jsPDF from 'jspdf';
@@ -154,50 +163,82 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
   const transactions: StaffTransaction[] = staff.transactions || [];
   const loanBalance = staff.loanBalance || 0;
 
-  // Salary Accrual Calculation
-  const accrualInfo = getStaffSalaryAccrualInfo(staff);
+  // Payroll (PAYROLL_PLAN §3.5): salary history and disbursal now come from
+  // the server payroll tables — records carry their own snapshot salary and
+  // derived status; payments are written in one transaction with the ledger.
+  const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>([]);
+  const [payrollPayments, setPayrollPayments] = useState<PayrollPayment[]>([]);
+  const [payrollUnavailable, setPayrollUnavailable] = useState(false);
   const [isSalaryDisbursalPopupOpen, setIsSalaryDisbursalPopupOpen] = useState(false);
-  const [selectedPopupMonths, setSelectedPopupMonths] = useState<string[]>([]);
+  const [selectedPopupPeriods, setSelectedPopupPeriods] = useState<string[]>([]);
   const [popupPaymentMethod, setPopupPaymentMethod] = useState<'Bank Transfer' | 'Cash' | 'Cheque'>(
     staff.paymentMethod || 'Bank Transfer'
   );
   const [popupNotes, setPopupNotes] = useState('');
+  const [popupBusy, setPopupBusy] = useState(false);
+  const [popupError, setPopupError] = useState('');
+
+  const loadPayroll = async () => {
+    try {
+      const data = await getStaffPayroll(staff.id);
+      setPayrollRecords(data.records);
+      setPayrollPayments(data.payments);
+      setPayrollUnavailable(false);
+    } catch {
+      setPayrollUnavailable(true);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'salary') void loadPayroll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, staff.id]);
+
+  const outstandingRecords = payrollRecords.filter(r => r.outstanding > 0);
 
   const handleOpenSalaryDisbursalPopup = () => {
-    setSelectedPopupMonths([...accrualInfo.owedMonths]);
+    setPopupError('');
+    setSelectedPopupPeriods(outstandingRecords.map(r => r.periodKey));
     setIsSalaryDisbursalPopupOpen(true);
   };
 
-  const handleTogglePopupMonth = (monthLabel: string) => {
-    setSelectedPopupMonths(prev =>
-      prev.includes(monthLabel)
-        ? prev.filter(m => m !== monthLabel)
-        : accrualInfo.owedMonths.filter(m => prev.includes(m) || m === monthLabel)
+  const handleTogglePopupMonth = (periodKey: string) => {
+    setSelectedPopupPeriods(prev =>
+      prev.includes(periodKey) ? prev.filter(k => k !== periodKey) : [...prev, periodKey]
     );
   };
 
-  const handleProceedToPayPopup = () => {
-    if (selectedPopupMonths.length === 0) return;
-
-    const schoolSettings = getSchoolSettings();
-    const paidByLabel = schoolSettings.principalName || schoolSettings.schoolName || 'Accounts Office';
-
-    const nextStaff = disburseSalary(
-      [staff],
-      new Map([[staff.id, selectedPopupMonths]]),
-      {
+  const handleProceedToPayPopup = async () => {
+    const chosen = payrollRecords.filter(r => selectedPopupPeriods.includes(r.periodKey) && r.outstanding > 0);
+    if (chosen.length === 0) return;
+    setPopupBusy(true);
+    setPopupError('');
+    try {
+      const schoolSettings = getSchoolSettings();
+      const paidByLabel = schoolSettings.principalName || schoolSettings.schoolName || 'Accounts Office';
+      const result = await createBulkPayrollPayments({
+        items: chosen.map(r => ({ recordId: r.id, remarks: popupNotes.trim() || undefined })),
         method: popupPaymentMethod,
-        paidBy: paidByLabel,
-        adjustments: new Map([[staff.id, { note: popupNotes.trim() || undefined }]])
-      }
-    );
-
-    if (nextStaff[0]) {
-      onUpdateStaff(nextStaff[0]);
+        paidDate: localISODate(),
+        createdBy: paidByLabel,
+      });
+      applyPayrollSync(result);
+      const updated = result.staff.find(s => s.id === staff.id);
+      if (updated) onUpdateStaff(updated);
+      await loadPayroll();
+      setPopupNotes('');
+      setIsSalaryDisbursalPopupOpen(false);
+    } catch (e) {
+      setPopupError(e instanceof Error ? e.message : 'Payment failed — nothing was recorded');
+    } finally {
+      setPopupBusy(false);
     }
+  };
 
-    setPopupNotes('');
-    setIsSalaryDisbursalPopupOpen(false);
+  const handlePrintSlip = (record: PayrollRecord) => {
+    const label = monthLabelFromKey(record.periodKey);
+    const bd = buildSlipBreakdown(record, label, payrollPayments);
+    generateMonthlyIndividualSlipsCombinedPdf([staff], label, staff.id, DEFAULT_SCHOOL, new Map([[staff.id, bd]]));
   };
 
   // Add Document Handler
@@ -343,6 +384,11 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
 
+    // The certificate carries the school's REAL identity from Settings —
+    // never a hard-coded name. Blank settings simply omit those lines.
+    const certSettings = getSchoolSettings();
+    const certSchoolName = certSettings.schoolName || '';
+
     // Institution Header
     doc.setFillColor(15, 23, 42); // slate-900
     doc.rect(0, 0, pageWidth, 40, 'F');
@@ -350,7 +396,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
-    doc.text('DEMO SCHOOL SCHOOLIEE PAKISTAN', pageWidth / 2, 18, { align: 'center' });
+    doc.text(certSchoolName.toUpperCase(), pageWidth / 2, 18, { align: 'center' });
 
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
@@ -382,7 +428,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
 
     doc.setFont('helvetica', 'normal');
     const introText = `This is to officially certify that ${staff.gender === 'Female' ? 'Ms./Mrs.' : 'Mr.'} ${staff.name.toUpperCase()}, ` +
-      `bearing CNIC No. ${staff.cnic || 'N/A'} (Staff ID: ${staff.id}), has been an esteemed employee of Demo School Schooliee Pakistan ` +
+      `bearing CNIC No. ${staff.cnic || 'N/A'} (Staff ID: ${staff.id}), has been an esteemed employee${certSchoolName ? ` of ${certSchoolName}` : ''} ` +
       `serving as ${staff.role} in the department of ${staff.department}.`;
 
     const splitIntro = doc.splitTextToSize(introText, pageWidth - 40);
@@ -406,12 +452,12 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
     doc.text('Authorized Signatory', 25, 225);
     doc.setFont('helvetica', 'normal');
     doc.text('Head of Human Resources', 25, 231);
-    doc.text('Demo School Schooliee Pakistan', 25, 237);
+    doc.text(certSchoolName, 25, 237);
 
     doc.setFont('helvetica', 'bold');
     doc.text('Principal / Director', pageWidth - 75, 225);
     doc.setFont('helvetica', 'normal');
-    doc.text('Demo School Schooliee Pakistan', pageWidth - 75, 231);
+    doc.text(certSchoolName, pageWidth - 75, 231);
     doc.text('Official Stamp & Seal', pageWidth - 75, 237);
 
     // Dotted signature lines
@@ -423,7 +469,11 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
     // Footer
     doc.setFontSize(8);
     doc.setTextColor(148, 163, 184);
-    doc.text('This document is electronically verified. For authenticity queries: hr@schoollee.com', pageWidth / 2, 280, { align: 'center' });
+    doc.text(
+      certSettings.schoolEmail
+        ? `This document is electronically verified. For authenticity queries: ${certSettings.schoolEmail}`
+        : 'This document is electronically verified.',
+      pageWidth / 2, 280, { align: 'center' });
 
     doc.save(`Experience_Letter_${staff.id}_${staff.name.replace(/\s+/g, '_')}.pdf`);
   };
@@ -495,7 +545,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                 onOpenPayModal(staff);
               }
             }}
-            className="h-8 px-3 rounded-lg bg-[#141b28] hover:bg-[#1a2334] border border-[#222e44] text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer box-border"
+            className="h-8 px-3 rounded-lg bg-surface-19 hover:bg-surface-42 border border-[#222e44] text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer box-border"
             id="btn-details-salary-slip"
           >
             <FileText className="w-3.5 h-3.5 text-slate-300" />
@@ -506,7 +556,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
           <button
             type="button"
             onClick={handleGenerateExperienceLetter}
-            className="h-8 px-3 rounded-lg bg-[#141b28] hover:bg-[#1a2334] border border-[#222e44] text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer box-border"
+            className="h-8 px-3 rounded-lg bg-surface-19 hover:bg-surface-42 border border-[#222e44] text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer box-border"
             id="btn-details-exp-letter"
           >
             <Mail className="w-3.5 h-3.5 text-slate-300" />
@@ -517,7 +567,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
           <button
             type="button"
             onClick={() => onOpenIdCardModal(staff)}
-            className="h-8 px-3 rounded-lg bg-[#141b28] hover:bg-[#1a2334] border border-[#222e44] text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer box-border"
+            className="h-8 px-3 rounded-lg bg-surface-19 hover:bg-surface-42 border border-[#222e44] text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer box-border"
             id="btn-details-id-card"
           >
             <IdCard className="w-3.5 h-3.5 text-slate-300" />
@@ -528,7 +578,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
           <button
             type="button"
             onClick={() => onOpenEditModal(staff)}
-            className="h-8 px-3 rounded-lg bg-[#141b28] hover:bg-[#1a2334] border border-[#222e44] text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer box-border"
+            className="h-8 px-3 rounded-lg bg-surface-19 hover:bg-surface-42 border border-[#222e44] text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer box-border"
             id="btn-details-edit"
           >
             <Edit3 className="w-3.5 h-3.5 text-slate-300" />
@@ -555,7 +605,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
       {/* Two Main Cards Side by Side */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Left Card: Current balance / Loans */}
-        <div className="bg-[#101724] border border-[#1b2537] rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden shadow-xl min-h-[260px]">
+        <div className="bg-[#101724] border border-edge-4 rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden shadow-xl min-h-[260px]">
           {/* Subtle background ambient blur */}
           <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-bl from-blue-900/10 via-transparent to-transparent rounded-full pointer-events-none" />
 
@@ -579,7 +629,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsLoanModalOpen('repay')}
-              className="px-4 py-2 rounded-full bg-[#172030] hover:bg-[#1f2b40] border border-[#25344d] text-slate-200 text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all shadow-sm"
+              className="px-4 py-2 rounded-full bg-surface-34 hover:bg-[#1f2b40] border border-[#25344d] text-slate-200 text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all shadow-sm"
               id="btn-repay-loan"
             >
               <div className="w-5 h-5 rounded-full bg-slate-700/60 flex items-center justify-center text-slate-300">
@@ -591,7 +641,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsLoanModalOpen('issue')}
-              className="px-4 py-2 rounded-full bg-[#172030] hover:bg-[#1f2b40] border border-[#25344d] text-slate-200 text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all shadow-sm"
+              className="px-4 py-2 rounded-full bg-surface-34 hover:bg-[#1f2b40] border border-[#25344d] text-slate-200 text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all shadow-sm"
               id="btn-issue-loan"
             >
               <div className="w-5 h-5 rounded-full bg-slate-700/60 flex items-center justify-center text-slate-300">
@@ -603,13 +653,13 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
         </div>
 
         {/* Right Card: Staff Information */}
-        <div className="bg-[#101724] border border-[#1b2537] rounded-2xl p-6 shadow-xl relative">
-          <div className="flex items-center justify-between pb-4 border-b border-[#1a2334]">
+        <div className="bg-[#101724] border border-edge-4 rounded-2xl p-6 shadow-xl relative">
+          <div className="flex items-center justify-between pb-4 border-b border-surface-42">
             <h3 className="text-sm font-bold text-white tracking-tight">Staff Information</h3>
             <button
               type="button"
               onClick={() => onOpenEditModal(staff)}
-              className="px-2.5 py-1 rounded-md bg-[#162030] hover:bg-[#1e2a3f] border border-[#24344d] text-slate-300 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-2.5 py-1 rounded-md bg-surface-32 hover:bg-[#1e2a3f] border border-edge-34 text-slate-300 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
               id="btn-edit-staff-info"
             >
               <Edit3 className="w-3 h-3" />
@@ -617,7 +667,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
             </button>
           </div>
 
-          <div className="divide-y divide-[#162030] text-xs">
+          <div className="divide-y divide-surface-32 text-xs">
             {/* Full name */}
             <div className="py-2.5 flex items-center justify-between">
               <div className="flex items-center gap-2 text-slate-400">
@@ -705,9 +755,9 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
       </div>
 
       {/* Bottom Section: Tabbed Panel */}
-      <div className="bg-[#101724] border border-[#1b2537] rounded-2xl overflow-hidden shadow-xl">
+      <div className="bg-[#101724] border border-edge-4 rounded-2xl overflow-hidden shadow-xl">
         {/* Tab Headers */}
-        <div className="flex items-center border-b border-[#1b2537] px-5 bg-[#0e1420] overflow-x-auto">
+        <div className="flex items-center border-b border-edge-4 px-5 bg-surface-7 overflow-x-auto">
           <button
             type="button"
             onClick={() => setActiveTab('transactions')}
@@ -787,7 +837,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
               <div className="flex items-center gap-3 w-full sm:w-auto">
                 <button
                   type="button"
-                  className="px-3 py-1.5 rounded-lg bg-[#141b27] border border-[#1e2a3c] text-xs text-slate-300 font-medium flex items-center gap-2 cursor-pointer hover:bg-[#1a2332]"
+                  className="px-3 py-1.5 rounded-lg bg-[#141b27] border border-edge-14 text-xs text-slate-300 font-medium flex items-center gap-2 cursor-pointer hover:bg-[#1a2332]"
                 >
                   <span>01 - 11 Sep 2026</span>
                   <ChevronDown className="w-3 h-3 text-slate-400" />
@@ -800,7 +850,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                     value={transactionSearch}
                     onChange={(e) => setTransactionSearch(e.target.value)}
                     placeholder="Search..."
-                    className="w-full bg-[#141b27] border border-[#1e2a3c] rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-[#141b27] border border-edge-14 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   />
                 </div>
               </div>
@@ -808,7 +858,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsAddTransactionModalOpen(true)}
-                className="px-3 py-1.5 rounded-lg bg-[#141b27] hover:bg-[#1c2738] border border-[#1e2a3c] text-xs font-semibold text-slate-200 flex items-center gap-1.5 cursor-pointer ml-auto"
+                className="px-3 py-1.5 rounded-lg bg-[#141b27] hover:bg-surface-45 border border-edge-14 text-xs font-semibold text-slate-200 flex items-center gap-1.5 cursor-pointer ml-auto"
               >
                 <Plus className="w-3.5 h-3.5 text-blue-400" />
                 <span>Add Transaction</span>
@@ -816,9 +866,9 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
             </div>
 
             {/* Transactions Table */}
-            <div className="overflow-x-auto border border-[#1b2537] rounded-xl">
+            <div className="overflow-x-auto border border-edge-4 rounded-xl">
               <table className="w-full text-left border-collapse min-w-[700px]">
-                <thead className="bg-[#0e1420] border-b border-[#1b2537] text-[11px] font-semibold text-slate-400">
+                <thead className="bg-surface-7 border-b border-edge-4 text-[11px] font-semibold text-slate-400">
                   <tr>
                     <th className="py-3 px-4">Created By</th>
                     <th className="py-3 px-4">Amount</th>
@@ -829,7 +879,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                     <th className="py-3 px-4">Created At</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#162030] text-xs">
+                <tbody className="divide-y divide-surface-32 text-xs">
                   {transactions.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="py-16 text-center text-slate-400">
@@ -844,7 +894,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                         t.type.toLowerCase().includes(transactionSearch.toLowerCase())
                       )
                       .map((t) => (
-                        <tr key={t.id} className="hover:bg-[#141b28] transition-colors">
+                        <tr key={t.id} className="hover:bg-surface-19 transition-colors">
                           <td className="py-3 px-4 text-slate-300 font-medium">{t.createdBy}</td>
                           <td className="py-3 px-4 font-bold text-white">{t.amount.toLocaleString()} PKR</td>
                           <td className="py-3 px-4 text-slate-300">{t.reason}</td>
@@ -877,72 +927,89 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                 <h4 className="text-sm font-bold text-white">Monthly Payroll Disbursements</h4>
                 <p className="text-xs text-slate-400 mt-0.5">Historical salary records, allowances, and slips</p>
               </div>
-              <button
-                type="button"
-                onClick={() => onOpenPayModal(staff)}
-                className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
-              >
-                <span>Pay Salary</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {outstandingRecords.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleOpenSalaryDisbursalPopup}
+                    className="px-3.5 py-1.5 rounded-lg bg-[#192436] hover:bg-[#202e46] border border-edge-39 text-slate-200 text-xs font-bold cursor-pointer"
+                  >
+                    Pay Outstanding ({outstandingRecords.length})
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onOpenPayModal(staff)}
+                  className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  <span>Pay Salary</span>
+                </button>
+              </div>
             </div>
 
-            <div className="overflow-x-auto border border-[#1b2537] rounded-xl">
-              <table className="w-full text-left border-collapse min-w-[700px]">
-                <thead className="bg-[#0e1420] border-b border-[#1b2537] text-[11px] font-semibold text-slate-400">
+            <div className="overflow-x-auto border border-edge-4 rounded-xl">
+              <table className="w-full text-left border-collapse min-w-[860px]">
+                <thead className="bg-surface-7 border-b border-edge-4 text-[11px] font-semibold text-slate-400">
                   <tr>
                     <th className="py-3 px-4">Month</th>
                     <th className="py-3 px-4">Basic Pay</th>
-                    <th className="py-3 px-4">Net Paid</th>
+                    <th className="py-3 px-4">Amount Paid</th>
+                    <th className="py-3 px-4">Net Payable</th>
+                    <th className="py-3 px-4">Outstanding</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4">Method</th>
                     <th className="py-3 px-4">Date</th>
                     <th className="py-3 px-4 text-right">Slip</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#162030] text-xs">
-                  <tr className="hover:bg-[#141b28]">
-                    <td className="py-3 px-4 font-bold text-white">September 2026</td>
-                    <td className="py-3 px-4 text-slate-300">{staff.salary?.toLocaleString()} PKR</td>
-                    <td className="py-3 px-4 font-extrabold text-emerald-400">{staff.salary?.toLocaleString()} PKR</td>
-                    <td className="py-3 px-4">
-                      <span className="px-2 py-0.5 rounded bg-[#0e2c20] text-[#4ade80] text-[10px] font-semibold border border-[#164e3b]">
-                        Paid
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-slate-400">{staff.paymentMethod || 'Bank Transfer'}</td>
-                    <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">{staff.lastPaidDate || '2026-09-01'}</td>
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => onOpenPayModal(staff)}
-                        className="text-xs text-blue-400 hover:text-blue-300 underline font-medium cursor-pointer"
-                      >
-                        Print Slip
-                      </button>
-                    </td>
-                  </tr>
-
-                  <tr className="hover:bg-[#141b28]">
-                    <td className="py-3 px-4 font-bold text-white">August 2026</td>
-                    <td className="py-3 px-4 text-slate-300">{staff.salary?.toLocaleString()} PKR</td>
-                    <td className="py-3 px-4 font-extrabold text-emerald-400">{staff.salary?.toLocaleString()} PKR</td>
-                    <td className="py-3 px-4">
-                      <span className="px-2 py-0.5 rounded bg-[#0e2c20] text-[#4ade80] text-[10px] font-semibold border border-[#164e3b]">
-                        Paid
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-slate-400">Bank Transfer</td>
-                    <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">2026-08-01</td>
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => onOpenPayModal(staff)}
-                        className="text-xs text-blue-400 hover:text-blue-300 underline font-medium cursor-pointer"
-                      >
-                        Print Slip
-                      </button>
-                    </td>
-                  </tr>
+                <tbody className="divide-y divide-surface-32 text-xs">
+                  {payrollUnavailable ? (
+                    <tr>
+                      <td colSpan={9} className="py-8 text-center text-amber-300">
+                        Payroll requires the SchoolEx app server — salary history is stored in the app database and is not available in the browser-only demo.
+                      </td>
+                    </tr>
+                  ) : payrollRecords.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-8 text-center text-slate-500">
+                        No payroll records yet. Prepare a month's payroll in Pay Staff to start this employee's salary history (older history can be imported there via “Import Legacy History”).
+                      </td>
+                    </tr>
+                  ) : [...payrollRecords].reverse().map(record => {
+                    const monthPayments = payrollPayments.filter(p => p.recordId === record.id);
+                    const latest = monthPayments[0];
+                    return (
+                      <tr key={record.id} className="hover:bg-surface-19">
+                        <td className="py-3 px-4 font-bold text-white">{monthLabelFromKey(record.periodKey)}</td>
+                        <td className="py-3 px-4 text-slate-300">{record.baseSalary.toLocaleString()} PKR</td>
+                        <td className="py-3 px-4 font-extrabold text-emerald-400">{record.paid.toLocaleString()} PKR</td>
+                        <td className="py-3 px-4 text-slate-300">{record.due.toLocaleString()} PKR</td>
+                        <td className={`py-3 px-4 font-semibold ${record.outstanding > 0 ? 'text-amber-300' : 'text-slate-500'}`}>{record.outstanding.toLocaleString()} PKR</td>
+                        <td className="py-3 px-4">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                            record.status === 'Paid'
+                              ? 'bg-[#0e2c20] text-[#4ade80] border-[#164e3b]'
+                              : record.status === 'Partial'
+                                ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                                : 'bg-rose-500/10 text-rose-300 border-rose-500/30'
+                          }`}>
+                            {record.status}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-slate-400">{latest ? latest.method : '—'}</td>
+                        <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">{latest ? latest.paidDate : '—'}</td>
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handlePrintSlip(record)}
+                            className="text-xs text-blue-400 hover:text-blue-300 underline font-medium cursor-pointer"
+                          >
+                            Print Slip
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -984,7 +1051,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                     value={docSearch}
                     onChange={(e) => setDocSearch(e.target.value)}
                     placeholder="Search documents..."
-                    className="bg-[#141b27] border border-[#1e2a3c] rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="bg-[#141b27] border border-edge-14 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   />
                 </div>
 
@@ -1001,7 +1068,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
             </div>
 
             {documents.length === 0 ? (
-              <div className="text-center py-16 border border-dashed border-[#1f2b3e] rounded-xl">
+              <div className="text-center py-16 border border-dashed border-edge-17 rounded-xl">
                 <FileText className="w-10 h-10 text-slate-500 mx-auto mb-2" />
                 <h5 className="text-sm font-semibold text-slate-300">No documents uploaded yet</h5>
                 <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
@@ -1010,7 +1077,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsAddDocModalOpen(true)}
-                  className="mt-4 px-4 py-2 rounded-lg bg-[#192436] hover:bg-[#202e46] border border-[#263753] text-xs font-semibold text-slate-200 inline-flex items-center gap-2 cursor-pointer"
+                  className="mt-4 px-4 py-2 rounded-lg bg-[#192436] hover:bg-[#202e46] border border-edge-39 text-xs font-semibold text-slate-200 inline-flex items-center gap-2 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5 text-blue-400" />
                   <span>Upload First Document</span>
@@ -1023,13 +1090,13 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                   .map((doc) => (
                     <div 
                       key={doc.id}
-                      className="bg-[#131b28] border border-[#1e2a3c] hover:border-[#2b3c56] rounded-xl p-4 flex flex-col justify-between transition-all group"
+                      className="bg-surface-18 border border-edge-14 hover:border-[#2b3c56] rounded-xl p-4 flex flex-col justify-between transition-all group"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="w-9 h-9 rounded-lg bg-blue-950/60 border border-blue-800/40 text-blue-400 flex items-center justify-center shrink-0">
                           <FileCheck className="w-5 h-5" />
                         </div>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#1a2436] text-slate-300 border border-[#24334a]">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#1a2436] text-slate-300 border border-edge-31">
                           {doc.type}
                         </span>
                       </div>
@@ -1046,7 +1113,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                         </p>
                       </div>
 
-                      <div className="flex items-center justify-end gap-1.5 mt-4 pt-3 border-t border-[#1b2537]">
+                      <div className="flex items-center justify-end gap-1.5 mt-4 pt-3 border-t border-edge-4">
                         <button
                           type="button"
                           onClick={() => setPreviewDoc(doc)}
@@ -1066,7 +1133,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                               url = doc.fileData;
                             }
                             if (!url) {
-                              const file = new Blob([`Official Schoollee Document: ${doc.title}\nEmployee: ${staff.name} (${staff.id})\nType: ${doc.type}\nUploaded: ${doc.uploadedAt}`], {type: 'text/plain'});
+                              const file = new Blob([`Official SchoolEx Document: ${doc.title}\nEmployee: ${staff.name} (${staff.id})\nType: ${doc.type}\nUploaded: ${doc.uploadedAt}`], {type: 'text/plain'});
                               url = URL.createObjectURL(file);
                             }
                             const element = document.createElement("a");
@@ -1115,7 +1182,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                     value={activitySearch}
                     onChange={(e) => setActivitySearch(e.target.value)}
                     placeholder="Search activities..."
-                    className="bg-[#141b27] border border-[#1e2a3c] rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="bg-[#141b27] border border-edge-14 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   />
                 </div>
 
@@ -1132,7 +1199,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
             </div>
 
             {activities.length === 0 ? (
-              <div className="text-center py-16 border border-dashed border-[#1f2b3e] rounded-xl">
+              <div className="text-center py-16 border border-dashed border-edge-17 rounded-xl">
                 <Clock className="w-10 h-10 text-slate-500 mx-auto mb-2" />
                 <h5 className="text-sm font-semibold text-slate-300">No activity notes recorded yet</h5>
                 <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
@@ -1141,22 +1208,22 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsAddActivityModalOpen(true)}
-                  className="mt-4 px-4 py-2 rounded-lg bg-[#192436] hover:bg-[#202e46] border border-[#263753] text-xs font-semibold text-slate-200 inline-flex items-center gap-2 cursor-pointer"
+                  className="mt-4 px-4 py-2 rounded-lg bg-[#192436] hover:bg-[#202e46] border border-edge-39 text-xs font-semibold text-slate-200 inline-flex items-center gap-2 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Log First Activity</span>
                 </button>
               </div>
             ) : (
-              <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#1f2b3e]">
+              <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-edge-17">
                 {activities
                   .filter(a => !activitySearch || a.note.toLowerCase().includes(activitySearch.toLowerCase()) || (a.type || '').toLowerCase().includes(activitySearch.toLowerCase()))
                   .map((act) => (
                     <div key={act.id} className="relative group">
                       {/* Timeline dot */}
-                      <div className="absolute -left-6 top-1.5 w-3.5 h-3.5 rounded-full bg-[#182335] border-2 border-emerald-500 shadow-sm shadow-emerald-500/20" />
+                      <div className="absolute -left-6 top-1.5 w-3.5 h-3.5 rounded-full bg-edge-3 border-2 border-emerald-500 shadow-sm shadow-emerald-500/20" />
 
-                      <div className="bg-[#131b28] border border-[#1e2a3c] rounded-xl p-4 hover:border-[#2b3c56] transition-colors">
+                      <div className="bg-surface-18 border border-edge-14 rounded-xl p-4 hover:border-[#2b3c56] transition-colors">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1.5">
                           <div className="flex items-center gap-2">
                             <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-950/60 text-emerald-300 border border-emerald-800/40">
@@ -1188,8 +1255,8 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
       {/* MODAL 1: Upload / Add Document */}
       {isAddDocModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-[#121927] border border-[#223048] rounded-2xl w-full max-w-md p-6 shadow-2xl">
-            <div className="flex items-center justify-between pb-4 border-b border-[#1b263a] mb-4">
+          <div className="bg-surface-17 border border-[#223048] rounded-2xl w-full max-w-md p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-edge-7 mb-4">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-lg bg-blue-950/60 text-blue-400 border border-blue-800/40">
                   <UploadCloud className="w-4 h-4" />
@@ -1216,7 +1283,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                   value={newDoc.title}
                   onChange={(e) => setNewDoc(prev => ({ ...prev, title: e.target.value }))}
                   placeholder="e.g. Master Degree Transcript, CNIC Copy"
-                  className="w-full bg-[#162030] border border-[#24334a] rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -1227,7 +1294,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                 <select
                   value={newDoc.type}
                   onChange={(e) => setNewDoc(prev => ({ ...prev, type: e.target.value }))}
-                  className="w-full bg-[#162030] border border-[#24334a] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                 >
                   <option value="CNIC Copy">CNIC Copy</option>
                   <option value="Contract">Employment Contract</option>
@@ -1274,11 +1341,11 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#1b263a]">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-edge-7">
                 <button
                   type="button"
                   onClick={() => setIsAddDocModalOpen(false)}
-                  className="px-3.5 py-2 rounded-lg bg-[#182234] text-slate-300 font-semibold hover:bg-[#202d44]"
+                  className="px-3.5 py-2 rounded-lg bg-surface-41 text-slate-300 font-semibold hover:bg-surface-48"
                 >
                   Cancel
                 </button>
@@ -1297,8 +1364,8 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
       {/* MODAL 2: Add Activity Note */}
       {isAddActivityModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-[#121927] border border-[#223048] rounded-2xl w-full max-w-md p-6 shadow-2xl">
-            <div className="flex items-center justify-between pb-4 border-b border-[#1b263a] mb-4">
+          <div className="bg-surface-17 border border-[#223048] rounded-2xl w-full max-w-md p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-edge-7 mb-4">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-lg bg-emerald-950/60 text-emerald-400 border border-emerald-800/40">
                   <Clock className="w-4 h-4" />
@@ -1322,7 +1389,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                 <select
                   value={newActivity.type}
                   onChange={(e) => setNewActivity(prev => ({ ...prev, type: e.target.value }))}
-                  className="w-full bg-[#162030] border border-[#24334a] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
                 >
                   <option value="General Note">General Note</option>
                   <option value="Performance Feedback">Performance Feedback</option>
@@ -1344,7 +1411,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                   value={newActivity.note}
                   onChange={(e) => setNewActivity(prev => ({ ...prev, note: e.target.value }))}
                   placeholder="Write activity note, supervisor remarks, or details here..."
-                  className="w-full bg-[#162030] border border-[#24334a] rounded-lg p-3 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 leading-relaxed"
+                  className="w-full bg-surface-32 border border-edge-31 rounded-lg p-3 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 leading-relaxed"
                 />
               </div>
 
@@ -1356,15 +1423,15 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                   type="text"
                   value={newActivity.author}
                   onChange={(e) => setNewActivity(prev => ({ ...prev, author: e.target.value }))}
-                  className="w-full bg-[#162030] border border-[#24334a] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#1b263a]">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-edge-7">
                 <button
                   type="button"
                   onClick={() => setIsAddActivityModalOpen(false)}
-                  className="px-3.5 py-2 rounded-lg bg-[#182234] text-slate-300 font-semibold hover:bg-[#202d44]"
+                  className="px-3.5 py-2 rounded-lg bg-surface-41 text-slate-300 font-semibold hover:bg-surface-48"
                 >
                   Cancel
                 </button>
@@ -1380,11 +1447,83 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
         </div>
       )}
 
+      {/* MODAL: Pay outstanding payroll months (API-backed, one transaction with the ledger) */}
+      {isSalaryDisbursalPopupOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-surface-17 border border-[#223048] rounded-2xl w-full max-w-md p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-edge-7 mb-4">
+              <h3 className="text-base font-bold text-white">Pay Outstanding Salary — {staff.name}</h3>
+              <button type="button" onClick={() => setIsSalaryDisbursalPopupOpen(false)} className="text-slate-400 hover:text-white p-1">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-3 text-xs">
+              <p className="text-slate-400">
+                Pays the full outstanding amount of each selected month. The payment and the ledger
+                expense are recorded together by the server — both or neither.
+              </p>
+              <div className="space-y-1.5 max-h-56 overflow-y-auto">
+                {outstandingRecords.map(r => (
+                  <label key={r.id} className="flex items-center justify-between gap-2 bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 cursor-pointer">
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedPopupPeriods.includes(r.periodKey)}
+                        onChange={() => handleTogglePopupMonth(r.periodKey)}
+                        className="accent-emerald-500"
+                      />
+                      <span className="font-semibold text-slate-100">{monthLabelFromKey(r.periodKey)}</span>
+                    </span>
+                    <span className="text-amber-300 font-bold">{r.outstanding.toLocaleString()} PKR outstanding</span>
+                  </label>
+                ))}
+                {outstandingRecords.length === 0 && (
+                  <p className="text-slate-500">Nothing outstanding — all prepared months are fully paid.</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Payment Method</label>
+                <select
+                  value={popupPaymentMethod}
+                  onChange={e => setPopupPaymentMethod(e.target.value as 'Bank Transfer' | 'Cash' | 'Cheque')}
+                  className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Cash">Cash</option>
+                  <option value="Cheque">Cheque</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Notes (optional)</label>
+                <input
+                  type="text" value={popupNotes} onChange={e => setPopupNotes(e.target.value)}
+                  placeholder="e.g. Salary disbursement"
+                  className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              {popupError && <p className="text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2">{popupError}</p>}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-edge-7">
+                <button type="button" onClick={() => setIsSalaryDisbursalPopupOpen(false)} className="px-3.5 py-2 rounded-lg bg-surface-41 text-slate-300 font-semibold hover:bg-surface-48">
+                  Cancel
+                </button>
+                <button
+                  type="button" onClick={handleProceedToPayPopup}
+                  disabled={popupBusy || selectedPopupPeriods.length === 0}
+                  className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-bold cursor-pointer"
+                >
+                  {popupBusy ? 'Paying…' : 'Pay Selected Months'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL 3: Issue or Repay Loan */}
       {isLoanModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-[#121927] border border-[#223048] rounded-2xl w-full max-w-md p-6 shadow-2xl">
-            <div className="flex items-center justify-between pb-4 border-b border-[#1b263a] mb-4">
+          <div className="bg-surface-17 border border-[#223048] rounded-2xl w-full max-w-md p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-edge-7 mb-4">
               <div className="flex items-center gap-2">
                 <div className={`p-2 rounded-lg ${isLoanModalOpen === 'issue' ? 'bg-blue-950/60 text-blue-400' : 'bg-emerald-950/60 text-emerald-400'}`}>
                   {isLoanModalOpen === 'issue' ? <Plus className="w-4 h-4" /> : <Minus className="w-4 h-4" />}
@@ -1403,7 +1542,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
             </div>
 
             <div className="space-y-4 text-xs">
-              <div className="p-3 rounded-lg bg-[#162030] border border-[#202d44]">
+              <div className="p-3 rounded-lg bg-surface-32 border border-surface-48">
                 <span className="text-slate-400">Current Loan Balance:</span>{' '}
                 <span className="font-bold text-white">{loanBalance.toLocaleString()} PKR</span>
               </div>
@@ -1418,7 +1557,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                   step="500"
                   value={loanAmount}
                   onChange={(e) => setLoanAmount(Number(e.target.value))}
-                  className="w-full bg-[#162030] border border-[#24334a] rounded-lg px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-blue-500"
+                  className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -1431,15 +1570,15 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                   value={loanReason}
                   onChange={(e) => setLoanReason(e.target.value)}
                   placeholder={isLoanModalOpen === 'issue' ? 'e.g. Medical emergency advance' : 'e.g. Monthly salary installment deduction'}
-                  className="w-full bg-[#162030] border border-[#24334a] rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#1b263a]">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-edge-7">
                 <button
                   type="button"
                   onClick={() => setIsLoanModalOpen(null)}
-                  className="px-3.5 py-2 rounded-lg bg-[#182234] text-slate-300 font-semibold hover:bg-[#202d44]"
+                  className="px-3.5 py-2 rounded-lg bg-surface-41 text-slate-300 font-semibold hover:bg-surface-48"
                 >
                   Cancel
                 </button>
@@ -1461,8 +1600,8 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
       {/* MODAL 4: Add Custom Transaction */}
       {isAddTransactionModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-[#121927] border border-[#223048] rounded-2xl w-full max-w-md p-6 shadow-2xl">
-            <div className="flex items-center justify-between pb-4 border-b border-[#1b263a] mb-4">
+          <div className="bg-surface-17 border border-[#223048] rounded-2xl w-full max-w-md p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-edge-7 mb-4">
               <h3 className="text-base font-bold text-white">Add Staff Transaction</h3>
               <button 
                 type="button" 
@@ -1484,7 +1623,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                   min="1"
                   value={newTransaction.amount}
                   onChange={(e) => setNewTransaction(prev => ({ ...prev, amount: Number(e.target.value) }))}
-                  className="w-full bg-[#162030] border border-[#24334a] rounded-lg px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-blue-500"
+                  className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -1498,7 +1637,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                   value={newTransaction.reason}
                   onChange={(e) => setNewTransaction(prev => ({ ...prev, reason: e.target.value }))}
                   placeholder="e.g. Fuel allowance reimbursement, bonus"
-                  className="w-full bg-[#162030] border border-[#24334a] rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -1510,7 +1649,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                   <select
                     value={newTransaction.type}
                     onChange={(e) => setNewTransaction(prev => ({ ...prev, type: e.target.value }))}
-                    className="w-full bg-[#162030] border border-[#24334a] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                   >
                     <option value="Debit">Debit</option>
                     <option value="Credit">Credit</option>
@@ -1527,7 +1666,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                   <select
                     value={newTransaction.payment}
                     onChange={(e) => setNewTransaction(prev => ({ ...prev, payment: e.target.value }))}
-                    className="w-full bg-[#162030] border border-[#24334a] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                   >
                     <option value="Bank Transfer">Bank Transfer</option>
                     <option value="Cash">Cash</option>
@@ -1537,11 +1676,11 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#1b263a]">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-edge-7">
                 <button
                   type="button"
                   onClick={() => setIsAddTransactionModalOpen(false)}
-                  className="px-3.5 py-2 rounded-lg bg-[#182234] text-slate-300 font-semibold hover:bg-[#202d44]"
+                  className="px-3.5 py-2 rounded-lg bg-surface-41 text-slate-300 font-semibold hover:bg-surface-48"
                 >
                   Cancel
                 </button>
@@ -1560,8 +1699,8 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
       {/* MODAL 5: Document Preview */}
       {previewDoc && (
         <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-[#121927] border border-[#223048] rounded-2xl w-full max-w-lg p-6 shadow-2xl">
-            <div className="flex items-center justify-between pb-4 border-b border-[#1b263a] mb-4">
+          <div className="bg-surface-17 border border-[#223048] rounded-2xl w-full max-w-lg p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-edge-7 mb-4">
               <div className="flex items-center gap-2">
                 <FileCheck className="w-5 h-5 text-blue-400" />
                 <h3 className="text-base font-bold text-white">{previewDoc.title}</h3>
@@ -1575,12 +1714,12 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
               </button>
             </div>
 
-            <div className="p-5 rounded-xl bg-[#162030] border border-[#202e46] text-center space-y-3">
+            <div className="p-5 rounded-xl bg-surface-32 border border-[#202e46] text-center space-y-3">
               {(previewBlobUrl || previewDoc.fileData) && /\.(png|jpe?g|webp|gif)$/i.test(previewDoc.fileName) ? (
                 <img
                   src={previewBlobUrl || previewDoc.fileData}
                   alt={previewDoc.title}
-                  className="max-h-56 mx-auto object-contain rounded-lg border border-[#23354e]"
+                  className="max-h-56 mx-auto object-contain rounded-lg border border-edge-35"
                 />
               ) : (
                 <div className="w-16 h-16 rounded-full bg-blue-950/80 border border-blue-800/60 text-blue-400 flex items-center justify-center mx-auto">
@@ -1595,15 +1734,15 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
               <div className="p-3 bg-[#0f1522] rounded-lg text-xs text-slate-300 border border-[#1b273a] text-left font-mono">
                 [Certified Document Record]<br/>
                 Employee: {staff.name} ({staff.id})<br/>
-                Verification Status: Verified by Demo School Human Resources
+                Verification Status: Verified by {getSchoolSettings().schoolName || 'School'} Human Resources
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-[#1b263a]">
+            <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-edge-7">
               <button
                 type="button"
                 onClick={() => setPreviewDoc(null)}
-                className="px-4 py-2 rounded-lg bg-[#182234] text-slate-300 font-semibold hover:bg-[#202d44]"
+                className="px-4 py-2 rounded-lg bg-surface-41 text-slate-300 font-semibold hover:bg-surface-48"
               >
                 Close
               </button>

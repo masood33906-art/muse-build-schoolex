@@ -86,7 +86,7 @@ School Administration System
         id="modal-document-preview"
       >
         {/* Header */}
-        <div className="px-5 py-3.5 bg-[#121b2b] border-b border-[#1b283d] flex items-center justify-between">
+        <div className="px-5 py-3.5 bg-surface-20 border-b border-edge-11 flex items-center justify-between">
           <div className="flex items-center gap-2 font-bold text-sm text-white">
             <FileText className="w-4 h-4 text-emerald-400" />
             <span>Document Preview • {doc?.name || 'Voucher Invoice'}</span>
@@ -95,7 +95,7 @@ School Administration System
             <button
               type="button"
               onClick={handlePrint}
-              className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-[#1a2538] transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-surface-43 transition-colors cursor-pointer"
               title="Print Document"
             >
               <Printer className="w-4 h-4" />
@@ -103,7 +103,7 @@ School Administration System
             <button
               type="button"
               onClick={handleDownload}
-              className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-[#1a2538] transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-surface-43 transition-colors cursor-pointer"
               title="Download Document"
             >
               <Download className="w-4 h-4" />
@@ -111,7 +111,7 @@ School Administration System
             <button
               type="button"
               onClick={onClose}
-              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-[#1a2538] transition-colors cursor-pointer ml-1"
+              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-surface-43 transition-colors cursor-pointer ml-1"
             >
               <X className="w-4 h-4" />
             </button>

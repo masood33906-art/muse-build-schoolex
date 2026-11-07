@@ -19,6 +19,7 @@ import {
   StudentFeeBreakdownItem 
 } from '../utils/feeHelper';
 import { getSchoolSettings } from '../utils/settingsHelper';
+import { monthKeyOf, monthLabelFromKey } from '../utils/dates';
 
 // WhatsApp icon SVG component
 const WhatsAppIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (
@@ -85,7 +86,7 @@ export const FeeReminderModal: React.FC<FeeReminderModalProps> = ({
           lines: [
             {
               description: 'Monthly Fee',
-              month: 'September 2026',
+              month: monthLabelFromKey(monthKeyOf()),
               pendingAmount: amountDue
             }
           ]
@@ -107,7 +108,7 @@ export const FeeReminderModal: React.FC<FeeReminderModalProps> = ({
         lines: [
           {
             description: 'Monthly Fee',
-            month: 'September 2026',
+            month: monthLabelFromKey(monthKeyOf()),
             pendingAmount: amountDue
           }
         ]
@@ -212,10 +213,10 @@ export const FeeReminderModal: React.FC<FeeReminderModalProps> = ({
       id="modal-fee-reminder"
     >
       <div 
-        className="w-full max-w-xl bg-[#0f1725] border border-[#202f47] rounded-2xl shadow-2xl overflow-hidden text-slate-100 flex flex-col animate-in zoom-in-95 duration-200 max-h-[92vh]"
+        className="w-full max-w-xl bg-surface-9 border border-[#202f47] rounded-2xl shadow-2xl overflow-hidden text-slate-100 flex flex-col animate-in zoom-in-95 duration-200 max-h-[92vh]"
       >
         {/* Header - Minimal & Direct */}
-        <div className="px-5 py-3.5 bg-[#141e30] border-b border-[#1f2e46] flex items-center justify-between">
+        <div className="px-5 py-3.5 bg-surface-29 border-b border-edge-23 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
               <Send className="w-4 h-4" />
@@ -232,7 +233,7 @@ export const FeeReminderModal: React.FC<FeeReminderModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#1f2b3e] transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-edge-17 transition-colors cursor-pointer"
             id="btn-close-fee-reminder-modal"
           >
             <X className="w-5 h-5" />
@@ -242,7 +243,7 @@ export const FeeReminderModal: React.FC<FeeReminderModalProps> = ({
         {/* Body */}
         <div className="p-5 space-y-4 overflow-y-auto flex-1">
           {/* Minimal Required Info Block (No extraneous metadata) */}
-          <div className="p-3.5 bg-[#162134] border border-[#22334e] rounded-xl flex items-center justify-between gap-4">
+          <div className="p-3.5 bg-[#162134] border border-edge-32 rounded-xl flex items-center justify-between gap-4">
             <div>
               <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
                 {entryType === 'student' ? 'Student' : 'Family'}
@@ -294,7 +295,7 @@ export const FeeReminderModal: React.FC<FeeReminderModalProps> = ({
                 value={customPhone}
                 onChange={(e) => setCustomPhone(e.target.value)}
                 placeholder="e.g. 03025364738"
-                className="w-full px-3 py-2 rounded-lg bg-[#141e30] border border-[#243753] text-white text-xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 font-mono"
+                className="w-full px-3 py-2 rounded-lg bg-surface-29 border border-[#243753] text-white text-xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 font-mono"
                 id="input-reminder-phone"
               />
             </div>
@@ -309,7 +310,7 @@ export const FeeReminderModal: React.FC<FeeReminderModalProps> = ({
                 value={customEmail}
                 onChange={(e) => setCustomEmail(e.target.value)}
                 placeholder="e.g. parent@gmail.com"
-                className="w-full px-3 py-2 rounded-lg bg-[#141e30] border border-[#243753] text-white text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                className="w-full px-3 py-2 rounded-lg bg-surface-29 border border-[#243753] text-white text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
                 id="input-reminder-email"
               />
             </div>
@@ -388,7 +389,7 @@ export const FeeReminderModal: React.FC<FeeReminderModalProps> = ({
               value={messageText}
               onChange={(e) => setMessageText(e.target.value)}
               placeholder="Type or edit your fee reminder message..."
-              className="w-full p-3.5 bg-[#0b101a] border border-[#23354e] focus:border-blue-500/60 rounded-xl text-xs text-slate-200 font-mono whitespace-pre-wrap leading-relaxed focus:outline-none transition-colors"
+              className="w-full p-3.5 bg-surface-5 border border-edge-35 focus:border-blue-500/60 rounded-xl text-xs text-slate-200 font-mono whitespace-pre-wrap leading-relaxed focus:outline-none transition-colors"
               id="textarea-reminder-message"
             />
             <p className="text-[10px] text-slate-500 mt-1">
@@ -398,11 +399,11 @@ export const FeeReminderModal: React.FC<FeeReminderModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 bg-[#141e30] border-t border-[#1f2e46] flex items-center justify-end">
+        <div className="px-5 py-3 bg-surface-29 border-t border-edge-23 flex items-center justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-1.5 rounded-xl bg-[#1c2738] hover:bg-[#25344a] text-slate-300 hover:text-white text-xs font-semibold transition-colors cursor-pointer"
+            className="px-4 py-1.5 rounded-xl bg-surface-45 hover:bg-[#25344a] text-slate-300 hover:text-white text-xs font-semibold transition-colors cursor-pointer"
             id="btn-close-fee-reminder"
           >
             Close

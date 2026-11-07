@@ -260,7 +260,7 @@ export const ExamModule: React.FC<ExamModuleProps> = ({
           <button
             type="button"
             onClick={() => setIsRollSlipsModalOpen(true)}
-            className="px-4 py-2 bg-[#121c2e] hover:bg-[#19263c] border border-blue-500/30 text-blue-300 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm hover:border-blue-500/60"
+            className="px-4 py-2 bg-surface-22 hover:bg-[#19263c] border border-blue-500/30 text-blue-300 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm hover:border-blue-500/60"
             id="btn-export-roll-slips"
           >
             <FileText className="w-3.5 h-3.5 text-blue-400" />
@@ -272,7 +272,7 @@ export const ExamModule: React.FC<ExamModuleProps> = ({
             <button
               type="button"
               onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
-              className="px-4 py-2 bg-[#121c2e] hover:bg-[#19263c] border border-[#233550] text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+              className="px-4 py-2 bg-surface-22 hover:bg-[#19263c] border border-edge-36 text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm"
               id="btn-export-exams"
             >
               <Download className="w-3.5 h-3.5 text-blue-400" />
@@ -304,7 +304,7 @@ export const ExamModule: React.FC<ExamModuleProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsRollSlipsModalOpen(true)}
-                  className="w-full text-left px-4 py-2 text-xs text-amber-300 hover:text-white hover:bg-[#18263e] flex items-center gap-2.5 transition-colors border-t border-[#1a2840] mt-1 pt-1.5"
+                  className="w-full text-left px-4 py-2 text-xs text-amber-300 hover:text-white hover:bg-[#18263e] flex items-center gap-2.5 transition-colors border-t border-edge-12 mt-1 pt-1.5"
                 >
                   <GraduationCap className="w-4 h-4 text-amber-400" />
                   <span>Roll Number Slips</span>
@@ -381,7 +381,7 @@ export const ExamModule: React.FC<ExamModuleProps> = ({
           return (
             <div 
               key={group.name}
-              className="bg-[#0e1626] border border-[#1e2e46] rounded-2xl overflow-hidden shadow-md transition-all"
+              className="bg-surface-8 border border-[#1e2e46] rounded-2xl overflow-hidden shadow-md transition-all"
             >
               {/* Minimal Exam Entry Header: ONLY the Name of it with Down Arrow */}
               <button
@@ -390,7 +390,7 @@ export const ExamModule: React.FC<ExamModuleProps> = ({
                 className={`w-full px-5 py-4 flex items-center justify-between text-left transition-colors cursor-pointer select-none group ${
                   isExpanded
                     ? 'bg-[#142238] border-b border-blue-500/30'
-                    : 'hover:bg-[#121c2e]'
+                    : 'hover:bg-surface-22'
                 }`}
               >
                 <div className="flex items-center gap-3">
@@ -413,7 +413,7 @@ export const ExamModule: React.FC<ExamModuleProps> = ({
 
               {/* Expanded Classes Section with all attributes like before */}
               {isExpanded && (
-                <div className="p-3 sm:p-5 bg-[#090f1a] animate-in fade-in duration-150">
+                <div className="p-3 sm:p-5 bg-surface-4 animate-in fade-in duration-150">
                   <div className="rounded-xl border border-[#1f304a] bg-[#0c1424] overflow-hidden shadow-inner">
                     {/* Inner Header Bar */}
                     <div className="px-4 py-2.5 bg-[#111c2f] border-b border-[#1e2e46] flex flex-wrap items-center justify-between gap-2">
@@ -432,18 +432,18 @@ export const ExamModule: React.FC<ExamModuleProps> = ({
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
-                          <tr className="bg-[#0e1728] text-slate-400 font-semibold border-b border-[#1b2b42] text-[11px]">
-                            <th className="p-3 pl-4 border-r border-[#1b2b42] min-w-[140px]">Class</th>
-                            <th className="p-3 border-r border-[#1b2b42] min-w-[90px]">Section</th>
-                            <th className="p-3 border-r border-[#1b2b42] min-w-[200px]">Subjects</th>
-                            <th className="p-3 border-r border-[#1b2b42] min-w-[90px]">Tags</th>
-                            <th className="p-3 border-r border-[#1b2b42] min-w-[90px] text-center">Results</th>
-                            <th className="p-3 border-r border-[#1b2b42] min-w-[120px]">Created By</th>
-                            <th className="p-3 border-r border-[#1b2b42] min-w-[110px]">Created At</th>
+                          <tr className="bg-[#0e1728] text-slate-400 font-semibold border-b border-edge-15 text-[11px]">
+                            <th className="p-3 pl-4 border-r border-edge-15 min-w-[140px]">Class</th>
+                            <th className="p-3 border-r border-edge-15 min-w-[90px]">Section</th>
+                            <th className="p-3 border-r border-edge-15 min-w-[200px]">Subjects</th>
+                            <th className="p-3 border-r border-edge-15 min-w-[90px]">Tags</th>
+                            <th className="p-3 border-r border-edge-15 min-w-[90px] text-center">Results</th>
+                            <th className="p-3 border-r border-edge-15 min-w-[120px]">Created By</th>
+                            <th className="p-3 border-r border-edge-15 min-w-[110px]">Created At</th>
                             <th className="p-3 w-28 text-center">Actions</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-[#152238]">
+                        <tbody className="divide-y divide-edge-2">
                           {group.entries.map((exam) => (
                             <tr 
                               key={exam.id}
@@ -451,7 +451,7 @@ export const ExamModule: React.FC<ExamModuleProps> = ({
                               className="hover:bg-[#132034] transition-colors cursor-pointer group"
                             >
                               {/* Class with icon */}
-                              <td className="p-3.5 pl-4 border-r border-[#152238]">
+                              <td className="p-3.5 pl-4 border-r border-edge-2">
                                 <div className="flex items-center gap-2">
                                   <div className="w-6 h-6 rounded-md bg-blue-600/20 text-blue-400 flex items-center justify-center shrink-0">
                                     <GraduationCap className="w-3.5 h-3.5" />
@@ -468,14 +468,14 @@ export const ExamModule: React.FC<ExamModuleProps> = ({
                               </td>
 
                               {/* Section */}
-                              <td className="p-3.5 text-slate-200 font-semibold border-r border-[#152238]">
-                                <span className="px-2 py-0.5 rounded bg-[#16243a] border border-[#233550] text-slate-300">
+                              <td className="p-3.5 text-slate-200 font-semibold border-r border-edge-2">
+                                <span className="px-2 py-0.5 rounded bg-[#16243a] border border-edge-36 text-slate-300">
                                   Sec {exam.section}
                                 </span>
                               </td>
 
                               {/* Subjects Chips */}
-                              <td className="p-3.5 border-r border-[#152238]">
+                              <td className="p-3.5 border-r border-edge-2">
                                 <div className="flex flex-wrap gap-1.5">
                                   {exam.subjects.map(s => (
                                     <span
@@ -489,11 +489,11 @@ export const ExamModule: React.FC<ExamModuleProps> = ({
                               </td>
 
                               {/* Tags */}
-                              <td className="p-3.5 text-slate-400 border-r border-[#152238]">
+                              <td className="p-3.5 text-slate-400 border-r border-edge-2">
                                 {exam.tags && exam.tags.length > 0 ? (
                                   <div className="flex flex-wrap gap-1">
                                     {exam.tags.map(t => (
-                                      <span key={t} className="px-1.5 py-0.5 bg-[#142033] border border-[#243550] text-[10px] rounded text-slate-300">
+                                      <span key={t} className="px-1.5 py-0.5 bg-surface-33 border border-edge-38 text-[10px] rounded text-slate-300">
                                         #{t}
                                       </span>
                                     ))}
@@ -504,19 +504,19 @@ export const ExamModule: React.FC<ExamModuleProps> = ({
                               </td>
 
                               {/* Results Count Pill */}
-                              <td className="p-3.5 text-center border-r border-[#152238]">
+                              <td className="p-3.5 text-center border-r border-edge-2">
                                 <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                                   {exam.resultsCount}
                                 </span>
                               </td>
 
                               {/* Created By */}
-                              <td className="p-3.5 text-slate-300 font-medium border-r border-[#152238]">
+                              <td className="p-3.5 text-slate-300 font-medium border-r border-edge-2">
                                 {exam.createdBy}
                               </td>
 
                               {/* Created At */}
-                              <td className="p-3.5 text-slate-400 whitespace-nowrap border-r border-[#152238]">
+                              <td className="p-3.5 text-slate-400 whitespace-nowrap border-r border-edge-2">
                                 {exam.createdAt}
                               </td>
 
@@ -555,7 +555,7 @@ export const ExamModule: React.FC<ExamModuleProps> = ({
         })}
 
         {examGroups.length === 0 && (
-          <div className="p-8 text-center text-slate-400 bg-[#0e1626] border border-[#1e2e46] rounded-2xl">
+          <div className="p-8 text-center text-slate-400 bg-surface-8 border border-[#1e2e46] rounded-2xl">
             No examinations match the selected search or filter criteria.
           </div>
         )}

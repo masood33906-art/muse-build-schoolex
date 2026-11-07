@@ -59,7 +59,6 @@ import { groupStudentsIntoFamilies } from '../utils/familyHelper';
 import { getStudentFeeDefaults } from '../utils/feeHelper';
 import { loadAllLedgerItems } from '../utils/studentFeeLedgerHelper';
 import { addCharge, listPayments } from '../utils/paymentStore';
-import { daysSinceBackup, downloadBackup } from '../utils/backup';
 import { getStoredExams, Exam } from '../utils/examStore';
 import { 
   StudentInquiry, 
@@ -76,7 +75,8 @@ import {
 import { RecordTransactionModal } from './RecordTransactionModal';
 import { AppModule } from './VerticalNavBar';
 import { getAvatarColor, getInitials } from '../data/initialStudents';
-import { getStaffSalaryAccrualInfo } from '../utils/salaryAccrualHelper';
+import { listPayrollPeriods, listPayrollRecords } from '../utils/payrollApi';
+import { monthKeyOf } from '../utils/dates';
 
 export type DashboardDateRange = 'this-month' | 'last-30' | 'this-week' | 'today' | 'academic-year';
 
@@ -128,16 +128,41 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
   const [inquiries, setInquiries] = useState<StudentInquiry[]>(() => getStoredInquiries());
   const [announcements, setAnnouncements] = useState<Announcement[]>(() => getStoredAnnouncements());
   const [exams, setExams] = useState<Exam[]>(() => getStoredExams());
-  const [backupAgeDays, setBackupAgeDays] = useState<number>(() => daysSinceBackup());
+
+  // Salary-due aggregate from the payroll tables (PAYROLL_PLAN §3.5): the sum
+  // of outstanding over all prepared periods up to the current month. Zeros
+  // until the first period is prepared, and when the app server is
+  // unreachable (browser-only demo) — never an accrual estimate.
+  const [payrollDue, setPayrollDue] = useState<{ total: number; unpaidIds: Set<string>; owedRecords: number }>({
+    total: 0, unpaidIds: new Set(), owedRecords: 0,
+  });
 
   useEffect(() => {
-    const refreshBackupAge = () => setBackupAgeDays(daysSinceBackup());
-    window.addEventListener('backupCompleted', refreshBackupAge);
-    window.addEventListener('storage', refreshBackupAge);
-    return () => {
-      window.removeEventListener('backupCompleted', refreshBackupAge);
-      window.removeEventListener('storage', refreshBackupAge);
-    };
+    let cancelled = false;
+    (async () => {
+      try {
+        const key = monthKeyOf();
+        const periods = await listPayrollPeriods();
+        const due = periods.filter(p => p.periodKey <= key);
+        let total = 0;
+        let owedRecords = 0;
+        const unpaidIds = new Set<string>();
+        for (const p of due) {
+          const { records } = await listPayrollRecords(p.periodKey);
+          for (const r of records) {
+            if (r.outstanding > 0) {
+              total += r.outstanding;
+              owedRecords += 1;
+              unpaidIds.add(r.staffId);
+            }
+          }
+        }
+        if (!cancelled) setPayrollDue({ total, unpaidIds, owedRecords });
+      } catch {
+        /* server unreachable → keep zeros */
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   // Shared Ledger Graph states (Two-way synced with LedgerModule)
@@ -297,25 +322,14 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
     };
   }, [students]);
 
-  // Staff breakdown using real salary accrual rules
+  // Staff breakdown; salary-due figures come from the payroll aggregate
+  // fetched above (prepared periods only, derived from actual payments).
   const staffMetrics = useMemo(() => {
     const total = staff.length;
     const teachers = staff.filter(s => s.category === 'Teacher' || s.role.toLowerCase().includes('teacher')).length;
     const support = total - teachers;
     const onLeave = staff.filter(s => s.status === 'On Leave');
-
-    let totalSalaryDue = 0;
-    let totalOwedMonthsCount = 0;
-    const unpaidStaff: StaffMember[] = [];
-
-    staff.forEach(member => {
-      const accrual = getStaffSalaryAccrualInfo(member);
-      if (accrual.hasCompletedOneFullMonth && accrual.totalOwedAmount > 0) {
-        unpaidStaff.push(member);
-        totalSalaryDue += accrual.totalOwedAmount;
-        totalOwedMonthsCount += accrual.owedMonths.length;
-      }
-    });
+    const unpaidStaff = staff.filter(member => payrollDue.unpaidIds.has(member.id));
 
     return {
       total,
@@ -323,10 +337,10 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
       support,
       onLeave,
       unpaidStaff,
-      totalSalaryDue,
-      totalOwedMonthsCount
+      totalSalaryDue: payrollDue.total,
+      totalOwedMonthsCount: payrollDue.owedRecords
     };
-  }, [staff]);
+  }, [staff, payrollDue]);
 
   // Unified real-time Ledger Graph & Summary Calculations (matches LedgerModule)
   const ledgerGraphData = useMemo(() => {
@@ -568,7 +582,10 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
     // 3. Attendance Not Marked Check
     const todayKey = new Date().toISOString().slice(0, 10);
     const missingAttendanceClasses = classes.filter(c => {
-      const classAttendance = (allAttendance[todayKey] || allAttendance['2026-09-15'] || []).filter(r => r.class === c.name && r.status !== 'not_marked');
+      // Fix P0-4: "today" means today only. If no attendance is recorded for
+      // today, the class honestly counts as pending below — another day's
+      // records are never substituted for today's.
+      const classAttendance = (allAttendance[todayKey] || []).filter(r => r.class === c.name && r.status !== 'not_marked');
       return classAttendance.length === 0;
     });
 
@@ -844,35 +861,10 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
 
   return (
     <div className="w-full space-y-5 pb-16 text-slate-100 font-sans selection:bg-blue-600 selection:text-white" id="schoolex-overview-dashboard">
-      {backupAgeDays > 7 && (
-        <div
-          className="px-4 py-3 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2"
-          id="banner-backup-reminder"
-        >
-          <div className="flex items-center gap-2 font-semibold">
-            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>
-              No backup for {Number.isFinite(backupAgeDays) ? `${backupAgeDays} days` : '7+ days'} — Download now
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={async () => {
-              await downloadBackup();
-              setBackupAgeDays(daysSinceBackup());
-              onShowToast?.('Full backup downloaded', 'success');
-            }}
-            className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs cursor-pointer transition-colors self-start sm:self-auto"
-          >
-            Download now
-          </button>
-        </div>
-      )}
-
       {/* ========================================================================= */}
       {/* TOP HEADER                                                                */}
       {/* ========================================================================= */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-[#1e293b]">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-edge-13">
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
@@ -890,7 +882,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
             type="button"
             onClick={reloadData}
             disabled={isRefreshing}
-            className="p-2 rounded-lg bg-[#111726] border border-[#1e293b] hover:border-slate-600 text-slate-300 hover:text-white transition-all cursor-pointer"
+            className="p-2 rounded-lg bg-surface-14 border border-edge-13 hover:border-slate-600 text-slate-300 hover:text-white transition-all cursor-pointer"
             title="Refresh dashboard data"
           >
             <RotateCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-blue-400' : ''}`} />
@@ -903,7 +895,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
       {/* ========================================================================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Students */}
-        <div className="bg-[#111726] border border-[#1e293b] rounded-xl p-4 shadow-sm">
+        <div className="bg-surface-14 border border-edge-13 rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Students</span>
             <div className="w-8 h-8 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-400 flex items-center justify-center">
@@ -916,7 +908,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
         </div>
 
         {/* Total Families */}
-        <div className="bg-[#111726] border border-[#1e293b] rounded-xl p-4 shadow-sm">
+        <div className="bg-surface-14 border border-edge-13 rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Families</span>
             <div className="w-8 h-8 rounded-lg bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 flex items-center justify-center">
@@ -929,7 +921,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
         </div>
 
         {/* Total Staff */}
-        <div className="bg-[#111726] border border-[#1e293b] rounded-xl p-4 shadow-sm">
+        <div className="bg-surface-14 border border-edge-13 rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Staff</span>
             <div className="w-8 h-8 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-400 flex items-center justify-center">
@@ -942,7 +934,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
         </div>
 
         {/* New Students */}
-        <div className="bg-[#111726] border border-[#1e293b] rounded-xl p-4 shadow-sm">
+        <div className="bg-surface-14 border border-edge-13 rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">New Students</span>
             <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center">
@@ -960,7 +952,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
       {/* ========================================================================= */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Fees Collected */}
-        <div className="bg-[#111726] border border-[#1e293b] rounded-xl p-4 shadow-sm">
+        <div className="bg-surface-14 border border-edge-13 rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center">
@@ -977,7 +969,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
             Rs. {financialMetrics.totalCollected.toLocaleString()}
           </div>
 
-          <div className="mt-3 w-full bg-[#1e293b] h-2 rounded-full overflow-hidden">
+          <div className="mt-3 w-full bg-edge-13 h-2 rounded-full overflow-hidden">
             <div 
               className="bg-emerald-500 h-full rounded-full transition-all duration-500" 
               style={{ width: `${Math.min(financialMetrics.collectionRate, 100)}%` }}
@@ -986,7 +978,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
         </div>
 
         {/* Outstanding Fees */}
-        <div className="bg-[#111726] border border-[#1e293b] rounded-xl p-4 shadow-sm">
+        <div className="bg-surface-14 border border-edge-13 rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center">
@@ -1003,7 +995,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
             Rs. {financialMetrics.totalOutstanding.toLocaleString()}
           </div>
 
-          <div className="mt-3 w-full bg-[#1e293b] h-2 rounded-full overflow-hidden">
+          <div className="mt-3 w-full bg-edge-13 h-2 rounded-full overflow-hidden">
             <div 
               className="bg-amber-500 h-full rounded-full transition-all duration-500" 
               style={{ width: `${Math.min((financialMetrics.totalOutstanding / (financialMetrics.totalBilled || 1)) * 100, 100)}%` }}
@@ -1012,7 +1004,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
         </div>
 
         {/* Staff Payments Due */}
-        <div className="bg-[#111726] border border-[#1e293b] rounded-xl p-4 shadow-sm">
+        <div className="bg-surface-14 border border-edge-13 rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center">
@@ -1033,7 +1025,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
             Rs. {staffMetrics.totalSalaryDue.toLocaleString()}
           </div>
 
-          <div className="mt-3 w-full bg-[#1e293b] h-2 rounded-full overflow-hidden">
+          <div className="mt-3 w-full bg-edge-13 h-2 rounded-full overflow-hidden">
             <div 
               className="bg-rose-500 h-full rounded-full transition-all duration-500" 
               style={{ width: `${staffMetrics.total ? (staffMetrics.unpaidStaff.length / staffMetrics.total) * 100 : 0}%` }}
@@ -1048,7 +1040,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
       {/* ========================================================================= */}
       {/* 3. QUICK ACTIONS (6 Core Institutional Actions)                           */}
       {/* ========================================================================= */}
-      <div className="bg-[#111726] border border-[#1e293b] rounded-xl p-4">
+      <div className="bg-surface-14 border border-edge-13 rounded-xl p-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-blue-400" />
@@ -1062,7 +1054,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
             type="button"
             onClick={onOpenAddStudent}
             id="quick-btn-add-student"
-            className="flex flex-col items-center justify-center text-center p-3 rounded-lg bg-[#151e30] hover:bg-[#1b263d] border border-[#23334e] hover:border-blue-500 text-slate-200 hover:text-white transition-all cursor-pointer group shadow-sm"
+            className="flex flex-col items-center justify-center text-center p-3 rounded-lg bg-surface-30 hover:bg-[#1b263d] border border-[#23334e] hover:border-blue-500 text-slate-200 hover:text-white transition-all cursor-pointer group shadow-sm"
           >
             <div className="w-9 h-9 rounded-lg bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
               <UserPlus className="w-4 h-4" />
@@ -1075,7 +1067,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
             type="button"
             onClick={onOpenAddStaff}
             id="quick-btn-add-staff"
-            className="flex flex-col items-center justify-center text-center p-3 rounded-lg bg-[#151e30] hover:bg-[#1b263d] border border-[#23334e] hover:border-purple-500 text-slate-200 hover:text-white transition-all cursor-pointer group shadow-sm"
+            className="flex flex-col items-center justify-center text-center p-3 rounded-lg bg-surface-30 hover:bg-[#1b263d] border border-[#23334e] hover:border-purple-500 text-slate-200 hover:text-white transition-all cursor-pointer group shadow-sm"
           >
             <div className="w-9 h-9 rounded-lg bg-purple-600/20 text-purple-400 border border-purple-500/30 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
               <Briefcase className="w-4 h-4" />
@@ -1091,7 +1083,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
               else onNavigateModule('staff');
             }}
             id="quick-btn-pay-staff"
-            className="flex flex-col items-center justify-center text-center p-3 rounded-lg bg-[#151e30] hover:bg-[#1b263d] border border-[#23334e] hover:border-emerald-500 text-slate-200 hover:text-white transition-all cursor-pointer group shadow-sm"
+            className="flex flex-col items-center justify-center text-center p-3 rounded-lg bg-surface-30 hover:bg-[#1b263d] border border-[#23334e] hover:border-emerald-500 text-slate-200 hover:text-white transition-all cursor-pointer group shadow-sm"
           >
             <div className="w-9 h-9 rounded-lg bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
               <Banknote className="w-4 h-4" />
@@ -1104,7 +1096,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
             type="button"
             onClick={() => setIsAddFineModalOpen(true)}
             id="quick-btn-add-fine"
-            className="flex flex-col items-center justify-center text-center p-3 rounded-lg bg-[#151e30] hover:bg-[#1b263d] border border-[#23334e] hover:border-amber-500 text-slate-200 hover:text-white transition-all cursor-pointer group shadow-sm"
+            className="flex flex-col items-center justify-center text-center p-3 rounded-lg bg-surface-30 hover:bg-[#1b263d] border border-[#23334e] hover:border-amber-500 text-slate-200 hover:text-white transition-all cursor-pointer group shadow-sm"
           >
             <div className="w-9 h-9 rounded-lg bg-amber-600/20 text-amber-400 border border-amber-500/30 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
               <ShieldAlert className="w-4 h-4" />
@@ -1117,7 +1109,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
             type="button"
             onClick={() => setIsSendAnnouncementModalOpen(true)}
             id="quick-btn-send-announcement"
-            className="flex flex-col items-center justify-center text-center p-3 rounded-lg bg-[#151e30] hover:bg-[#1b263d] border border-[#23334e] hover:border-sky-500 text-slate-200 hover:text-white transition-all cursor-pointer group shadow-sm"
+            className="flex flex-col items-center justify-center text-center p-3 rounded-lg bg-surface-30 hover:bg-[#1b263d] border border-[#23334e] hover:border-sky-500 text-slate-200 hover:text-white transition-all cursor-pointer group shadow-sm"
           >
             <div className="w-9 h-9 rounded-lg bg-sky-600/20 text-sky-400 border border-sky-500/30 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
               <Send className="w-4 h-4" />
@@ -1133,7 +1125,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
               setIsRecordModalOpen(true);
             }}
             id="quick-btn-income-expense"
-            className="flex flex-col items-center justify-center text-center p-3 rounded-lg bg-[#151e30] hover:bg-[#1b263d] border border-[#23334e] hover:border-cyan-500 text-slate-200 hover:text-white transition-all cursor-pointer group shadow-sm"
+            className="flex flex-col items-center justify-center text-center p-3 rounded-lg bg-surface-30 hover:bg-[#1b263d] border border-[#23334e] hover:border-cyan-500 text-slate-200 hover:text-white transition-all cursor-pointer group shadow-sm"
           >
             <div className="w-9 h-9 rounded-lg bg-cyan-600/20 text-cyan-400 border border-cyan-500/30 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
               <DollarSign className="w-4 h-4" />
@@ -1150,7 +1142,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
         
         {/* Left: Real-Time Ledger Financial Graph (7 cols - Synced with Ledger Module) */}
         <div 
-          className="lg:col-span-7 bg-[#111726] border border-[#1e293b] rounded-xl p-5 flex flex-col justify-between shadow-lg"
+          className="lg:col-span-7 bg-surface-14 border border-edge-13 rounded-xl p-5 flex flex-col justify-between shadow-lg"
           id="overview-ledger-graph-card"
         >
           <div>
@@ -1175,7 +1167,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsLedgerDateRangeOpen(!isLedgerDateRangeOpen)}
-                    className="px-3 py-1.5 rounded-lg bg-[#152033] hover:bg-[#1d2c45] border border-[#23344d] text-xs font-medium text-slate-200 flex items-center gap-1.5 transition-all cursor-pointer"
+                    className="px-3 py-1.5 rounded-lg bg-surface-35 hover:bg-[#1d2c45] border border-[#23344d] text-xs font-medium text-slate-200 flex items-center gap-1.5 transition-all cursor-pointer"
                     id="btn-overview-ledger-date-range"
                   >
                     <Calendar className="w-3.5 h-3.5 text-blue-400" />
@@ -1194,7 +1186,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
                             setIsLedgerDateRangeOpen(false);
                           }}
                           className={`w-full text-left px-3.5 py-2 hover:bg-[#182538] transition-colors cursor-pointer ${
-                            ledgerDateRange === opt ? 'text-blue-400 font-bold bg-[#142033]' : 'text-slate-300'
+                            ledgerDateRange === opt ? 'text-blue-400 font-bold bg-surface-33' : 'text-slate-300'
                           }`}
                         >
                           {LEDGER_DATE_RANGE_LABELS[opt]}
@@ -1222,7 +1214,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
                 <button
                   type="button"
                   onClick={() => onNavigateModule('ledger')}
-                  className="text-xs font-semibold text-blue-400 hover:text-white px-2.5 py-1.5 rounded-lg bg-[#182338] border border-[#263753] hover:border-blue-500 cursor-pointer transition-colors"
+                  className="text-xs font-semibold text-blue-400 hover:text-white px-2.5 py-1.5 rounded-lg bg-[#182338] border border-edge-39 hover:border-blue-500 cursor-pointer transition-colors"
                 >
                   Open Ledger
                 </button>
@@ -1238,7 +1230,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
                 className={`p-3 rounded-xl border text-left flex items-center gap-3 transition-all cursor-pointer ${
                   ledgerGraphMode === 'income'
                     ? 'bg-[#142236] border-blue-500/60 ring-1 ring-blue-500/40 shadow-md shadow-blue-900/20'
-                    : 'bg-[#121b2b] border-[#1d2a3e] hover:bg-[#162234] hover:border-slate-700'
+                    : 'bg-surface-20 border-[#1d2a3e] hover:bg-[#162234] hover:border-slate-700'
                 }`}
                 id="btn-overview-graph-income"
               >
@@ -1260,7 +1252,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
                 className={`p-3 rounded-xl border text-left flex items-center gap-3 transition-all cursor-pointer ${
                   ledgerGraphMode === 'expenses'
                     ? 'bg-[#291b1b] border-amber-500/60 ring-1 ring-amber-500/40 shadow-md shadow-amber-950/20'
-                    : 'bg-[#121b2b] border-[#1d2a3e] hover:bg-[#162234] hover:border-slate-700'
+                    : 'bg-surface-20 border-[#1d2a3e] hover:bg-[#162234] hover:border-slate-700'
                 }`}
                 id="btn-overview-graph-expenses"
               >
@@ -1416,7 +1408,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
                     top: `${Math.max(12, (hoveredLedgerPoint.y / 160) * 100)}%`
                   }}
                 >
-                  <div className="text-slate-300 font-bold border-b border-[#1e293b] pb-1 mb-1">
+                  <div className="text-slate-300 font-bold border-b border-edge-13 pb-1 mb-1">
                     {hoveredLedgerPoint.date}
                   </div>
                   <div className="flex items-center justify-between gap-3 text-[11px]">
@@ -1461,7 +1453,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
         </div>
 
         {/* Right: Ledger Profit Radial & Fee Collection Breakdown (5 cols) */}
-        <div className="lg:col-span-5 bg-[#111726] border border-[#1e293b] rounded-xl p-5 flex flex-col justify-between shadow-lg">
+        <div className="lg:col-span-5 bg-surface-14 border border-edge-13 rounded-xl p-5 flex flex-col justify-between shadow-lg">
           <div>
             <div className="flex items-center justify-between gap-2 mb-3">
               <h3 className="text-sm font-bold text-white">
@@ -1469,7 +1461,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
               </h3>
 
               {/* Switch between Ledger Profit Radial & Fee Collection Doughnut */}
-              <div className="flex items-center bg-[#151e30] border border-[#22314a] rounded-lg p-0.5 text-xs">
+              <div className="flex items-center bg-surface-30 border border-[#22314a] rounded-lg p-0.5 text-xs">
                 <button
                   type="button"
                   onClick={() => setRightChartView('ledger-radial')}
@@ -1609,10 +1601,10 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
                     type="button"
                     onMouseEnter={() => setHoveredRadialStrip('profit')}
                     onMouseLeave={() => setHoveredRadialStrip(null)}
-                    className="p-2 rounded-lg bg-[#141c2c] border border-[#202d42] hover:border-emerald-500/50 text-left transition-colors cursor-pointer"
+                    className="p-2 rounded-lg bg-surface-23 border border-edge-20 hover:border-emerald-500/50 text-left transition-colors cursor-pointer"
                   >
                     <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-[#10b981]" />
+                      <span className="w-2 h-2 rounded-full bg-success" />
                       <span className="text-[11px] text-slate-300 font-semibold">Profit</span>
                     </div>
                     <div className="font-mono text-[11px] font-bold text-white mt-1 truncate">
@@ -1624,7 +1616,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
                     type="button"
                     onMouseEnter={() => setHoveredRadialStrip('expense')}
                     onMouseLeave={() => setHoveredRadialStrip(null)}
-                    className="p-2 rounded-lg bg-[#141c2c] border border-[#202d42] hover:border-amber-500/50 text-left transition-colors cursor-pointer"
+                    className="p-2 rounded-lg bg-surface-23 border border-edge-20 hover:border-amber-500/50 text-left transition-colors cursor-pointer"
                   >
                     <div className="flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-[#f97316]" />
@@ -1639,7 +1631,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
                     type="button"
                     onMouseEnter={() => setHoveredRadialStrip('income')}
                     onMouseLeave={() => setHoveredRadialStrip(null)}
-                    className="p-2 rounded-lg bg-[#141c2c] border border-[#202d42] hover:border-yellow-500/50 text-left transition-colors cursor-pointer"
+                    className="p-2 rounded-lg bg-surface-23 border border-edge-20 hover:border-yellow-500/50 text-left transition-colors cursor-pointer"
                   >
                     <div className="flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-[#eab308]" />
@@ -1723,7 +1715,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
                     className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
                       selectedDonutOption === 'collected'
                         ? 'bg-sky-500/10 border-sky-500 text-white shadow-sm ring-1 ring-sky-500/30'
-                        : 'bg-[#141c2c] border-[#202d42] text-slate-300 hover:border-slate-600'
+                        : 'bg-surface-23 border-edge-20 text-slate-300 hover:border-slate-600'
                     }`}
                   >
                     <div className="flex items-center gap-1.5 mb-1">
@@ -1741,11 +1733,11 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
                     className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
                       selectedDonutOption === 'due'
                         ? 'bg-amber-500/10 border-amber-500 text-white shadow-sm ring-1 ring-amber-500/30'
-                        : 'bg-[#141c2c] border-[#202d42] text-slate-300 hover:border-slate-600'
+                        : 'bg-surface-23 border-edge-20 text-slate-300 hover:border-slate-600'
                     }`}
                   >
                     <div className="flex items-center gap-1.5 mb-1">
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#f59e0b] shrink-0" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-warning shrink-0" />
                       <span className="font-semibold text-xs">Current Due</span>
                     </div>
                     <div className="font-mono text-xs font-bold text-white mt-0.5">
@@ -1763,7 +1755,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
       {/* ========================================================================= */}
       {/* 5. FEE DEFAULTERS TABLE/LIST                                              */}
       {/* ========================================================================= */}
-      <div className="bg-[#111726] border border-[#1e293b] rounded-xl p-4" id="section-fee-defaulters">
+      <div className="bg-surface-14 border border-edge-13 rounded-xl p-4" id="section-fee-defaulters">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center">
@@ -1781,7 +1773,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
 
           {/* Filter and View All Link */}
           <div className="flex items-center gap-2">
-            <div className="flex items-center bg-[#151e30] border border-[#22314a] rounded-lg p-0.5 text-xs">
+            <div className="flex items-center bg-surface-30 border border-[#22314a] rounded-lg p-0.5 text-xs">
               <button
                 type="button"
                 onClick={() => setDefaulterFilter('all')}
@@ -1814,7 +1806,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
             <button
               type="button"
               onClick={() => onNavigateModule('fees')}
-              className="text-xs font-semibold text-blue-400 hover:text-white flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#182338] border border-[#263753] hover:border-blue-500 cursor-pointer transition-colors"
+              className="text-xs font-semibold text-blue-400 hover:text-white flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#182338] border border-edge-39 hover:border-blue-500 cursor-pointer transition-colors"
             >
               <span>View All</span>
               <ChevronRight className="w-3.5 h-3.5" />
@@ -1826,7 +1818,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-300 border-collapse">
             <thead>
-              <tr className="border-b border-[#1e293b] text-slate-400 text-[11px] uppercase tracking-wider bg-[#131b2e]/50">
+              <tr className="border-b border-edge-13 text-slate-400 text-[11px] uppercase tracking-wider bg-[#131b2e]/50">
                 <th className="py-2.5 px-3 font-semibold">Student Name & ID</th>
                 <th className="py-2.5 px-3 font-semibold">Class / Section</th>
                 <th className="py-2.5 px-3 font-semibold">Guardian / Family</th>
@@ -1836,7 +1828,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
                 <th className="py-2.5 px-3 font-semibold text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#1e293b]/70">
+            <tbody className="divide-y divide-edge-13/70">
               {displayedDefaulters.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-slate-500">
@@ -1942,7 +1934,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         
         {/* Left: Attendance Trend Chart (7 cols) */}
-        <div className="lg:col-span-7 bg-[#111726] border border-[#1e293b] rounded-xl p-4 flex flex-col justify-between">
+        <div className="lg:col-span-7 bg-surface-14 border border-edge-13 rounded-xl p-4 flex flex-col justify-between">
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
               <div className="flex items-center gap-2">
@@ -1952,7 +1944,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
 
               {/* Student vs Staff toggle & View All */}
               <div className="flex items-center gap-2">
-                <div className="flex items-center bg-[#151e30] border border-[#22314a] rounded-lg p-0.5 text-xs">
+                <div className="flex items-center bg-surface-30 border border-[#22314a] rounded-lg p-0.5 text-xs">
                   <button
                     type="button"
                     onClick={() => setAttendanceTarget('students')}
@@ -2000,7 +1992,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
             {/* Draggable Monthly Attendance Graph with Pinned Y-Axis Rail */}
             <div className="flex items-stretch gap-1.5">
               {/* Pinned left Y-Axis values rail */}
-              <div className="w-10 shrink-0 flex flex-col justify-between py-2 text-[10px] font-mono font-semibold text-slate-400 select-none border-r border-[#1e293b]/60 pr-1 text-right">
+              <div className="w-10 shrink-0 flex flex-col justify-between py-2 text-[10px] font-mono font-semibold text-slate-400 select-none border-r border-edge-13/60 pr-1 text-right">
                 {attendanceCurveData.yTicks.map(t => (
                   <span key={t.val}>{t.label}</span>
                 ))}
@@ -2129,7 +2121,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
                           top: `${Math.max(10, (attendanceCurveData.points[activeAttendanceHoverIndex].y / attendanceCurveData.height) * 100)}%`
                         }}
                       >
-                        <div className="font-bold text-white flex items-center justify-between gap-3 border-b border-[#1e293b] pb-1.5">
+                        <div className="font-bold text-white flex items-center justify-between gap-3 border-b border-edge-13 pb-1.5">
                           <span className="text-slate-100">{attendanceCurveData.points[activeAttendanceHoverIndex].data.month}</span>
                           <span className="text-[10px] font-mono px-1.5 py-0.5 rounded font-bold text-emerald-400 bg-emerald-500/10">
                             {attendanceCurveData.points[activeAttendanceHoverIndex].data.rate}%
@@ -2142,7 +2134,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
                               {attendanceCurveData.points[activeAttendanceHoverIndex].data.rate}%
                             </span>
                           </div>
-                          <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-[#1e293b]/60">
+                          <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-edge-13/60">
                             <span>Status:</span>
                             <span className={attendanceCurveData.points[activeAttendanceHoverIndex].data.rate >= 95 ? "font-semibold text-emerald-400" : "font-semibold text-amber-400"}>
                               {attendanceCurveData.points[activeAttendanceHoverIndex].data.rate >= 95 ? 'Target Met (≥95%)' : 'Needs Attention'}
@@ -2180,7 +2172,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
         </div>
 
         {/* Right: Recent Inquiries / Admissions (5 cols) */}
-        <div className="lg:col-span-5 bg-[#111726] border border-[#1e293b] rounded-xl p-4 flex flex-col justify-between">
+        <div className="lg:col-span-5 bg-surface-14 border border-edge-13 rounded-xl p-4 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -2202,7 +2194,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
                 <button
                   type="button"
                   onClick={() => onNavigateModule('students')}
-                  className="text-xs font-semibold text-blue-400 hover:text-white px-2.5 py-1 rounded-lg bg-[#182338] border border-[#263753] hover:border-blue-500 cursor-pointer transition-colors"
+                  className="text-xs font-semibold text-blue-400 hover:text-white px-2.5 py-1 rounded-lg bg-[#182338] border border-edge-39 hover:border-blue-500 cursor-pointer transition-colors"
                 >
                   View All
                 </button>
@@ -2215,7 +2207,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
                 <div
                   key={inq.id}
                   onClick={() => setSelectedInquiry(inq)}
-                  className="p-2.5 rounded-lg bg-[#141c2c] hover:bg-[#1a253a] border border-[#202d42] hover:border-blue-500/50 cursor-pointer transition-all group flex items-center justify-between gap-2"
+                  className="p-2.5 rounded-lg bg-surface-23 hover:bg-[#1a253a] border border-edge-20 hover:border-blue-500/50 cursor-pointer transition-all group flex items-center justify-between gap-2"
                 >
                   <div className="min-w-0">
                     <div className="font-bold text-white text-xs group-hover:text-blue-300 transition-colors truncate">
@@ -2246,7 +2238,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
             </div>
           </div>
 
-          <div className="mt-3 pt-2.5 border-t border-[#1e293b] flex items-center justify-between text-xs text-slate-400">
+          <div className="mt-3 pt-2.5 border-t border-edge-13 flex items-center justify-between text-xs text-slate-400">
             <span>
               {inquiries.filter(i => i.status === 'Pending Review').length} awaiting review
             </span>
@@ -2259,7 +2251,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
       {/* ========================================================================= */}
       {/* 8. NEEDS ATTENTION                                                        */}
       {/* ========================================================================= */}
-      <div className="bg-[#111726] border border-[#1e293b] rounded-xl p-4 flex flex-col justify-between">
+      <div className="bg-surface-14 border border-edge-13 rounded-xl p-4 flex flex-col justify-between">
         <div>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -2279,7 +2271,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
                 key={item.id}
                 type="button"
                 onClick={item.onAction}
-                className="p-3.5 rounded-xl bg-[#141c2c] hover:bg-[#182338] border border-[#202d42] hover:border-blue-500/60 flex items-center justify-between gap-3 transition-all cursor-pointer text-left group shadow-sm hover:shadow-md active:scale-[0.99] w-full"
+                className="p-3.5 rounded-xl bg-surface-23 hover:bg-[#182338] border border-edge-20 hover:border-blue-500/60 flex items-center justify-between gap-3 transition-all cursor-pointer text-left group shadow-sm hover:shadow-md active:scale-[0.99] w-full"
                 title={`Click to open ${item.title}`}
               >
                 <div className="flex items-start gap-2.5 min-w-0">
@@ -2313,7 +2305,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
           </div>
         </div>
 
-        <div className="mt-4 pt-3 border-t border-[#1e293b] flex items-center justify-between text-xs text-slate-400">
+        <div className="mt-4 pt-3 border-t border-edge-13 flex items-center justify-between text-xs text-slate-400">
           <span>All institutional checkpoints monitored</span>
           <span className="text-emerald-400 font-medium">Status Normal</span>
         </div>
@@ -2425,8 +2417,8 @@ const AddFineModal: React.FC<AddFineModalProps> = ({ students, isOpen, onClose, 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-[#111726] border border-[#24334a] rounded-xl w-full max-w-md overflow-hidden shadow-2xl text-slate-100">
-        <div className="p-4 border-b border-[#1e293b] flex items-center justify-between bg-[#151e30]">
+      <div className="bg-surface-14 border border-edge-31 rounded-xl w-full max-w-md overflow-hidden shadow-2xl text-slate-100">
+        <div className="p-4 border-b border-edge-13 flex items-center justify-between bg-surface-30">
           <div className="flex items-center gap-2">
             <ShieldAlert className="w-5 h-5 text-amber-400" />
             <h3 className="font-bold text-white text-sm">Issue Student Fine / Surcharge</h3>
@@ -2442,7 +2434,7 @@ const AddFineModal: React.FC<AddFineModalProps> = ({ students, isOpen, onClose, 
             <select
               value={selectedStudentId}
               onChange={(e) => setSelectedStudentId(e.target.value)}
-              className="w-full bg-[#182234] border border-[#2a3c57] rounded-lg px-3 py-2 text-white font-medium focus:outline-hidden focus:border-blue-500"
+              className="w-full bg-surface-41 border border-edge-41 rounded-lg px-3 py-2 text-white font-medium focus:outline-hidden focus:border-blue-500"
             >
               {students.length === 0 ? (
                 <option value="">-- No students available in system --</option>
@@ -2461,7 +2453,7 @@ const AddFineModal: React.FC<AddFineModalProps> = ({ students, isOpen, onClose, 
             <select
               value={fineType}
               onChange={(e) => setFineType(e.target.value)}
-              className="w-full bg-[#182234] border border-[#2a3c57] rounded-lg px-3 py-2 text-white font-medium focus:outline-hidden focus:border-blue-500"
+              className="w-full bg-surface-41 border border-edge-41 rounded-lg px-3 py-2 text-white font-medium focus:outline-hidden focus:border-blue-500"
             >
               <option value="Late Fee Fine">Late Fee Surcharge</option>
               <option value="Library Overdue Book">Library Overdue Book</option>
@@ -2480,7 +2472,7 @@ const AddFineModal: React.FC<AddFineModalProps> = ({ students, isOpen, onClose, 
                 value={customReason}
                 onChange={(e) => setCustomReason(e.target.value)}
                 placeholder="e.g. Broken laboratory glassware"
-                className="w-full bg-[#182234] border border-[#2a3c57] rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500"
+                className="w-full bg-surface-41 border border-edge-41 rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500"
               />
             </div>
           )}
@@ -2493,15 +2485,15 @@ const AddFineModal: React.FC<AddFineModalProps> = ({ students, isOpen, onClose, 
               step="50"
               value={amount}
               onChange={(e) => setAmount(Number(e.target.value))}
-              className="w-full bg-[#182234] border border-[#2a3c57] rounded-lg px-3 py-2 text-white font-mono font-bold text-sm focus:outline-hidden focus:border-blue-500"
+              className="w-full bg-surface-41 border border-edge-41 rounded-lg px-3 py-2 text-white font-mono font-bold text-sm focus:outline-hidden focus:border-blue-500"
             />
           </div>
 
-          <div className="pt-2 flex items-center justify-end gap-2 border-t border-[#1e293b]">
+          <div className="pt-2 flex items-center justify-end gap-2 border-t border-edge-13">
             <button
               type="button"
               onClick={onClose}
-              className="px-3.5 py-1.5 rounded-lg bg-[#182234] text-slate-300 hover:text-white cursor-pointer font-medium"
+              className="px-3.5 py-1.5 rounded-lg bg-surface-41 text-slate-300 hover:text-white cursor-pointer font-medium"
             >
               Cancel
             </button>
@@ -2558,8 +2550,8 @@ const SendAnnouncementModal: React.FC<SendAnnouncementModalProps> = ({ isOpen, o
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-[#111726] border border-[#24334a] rounded-xl w-full max-w-lg overflow-hidden shadow-2xl text-slate-100">
-        <div className="p-4 border-b border-[#1e293b] flex items-center justify-between bg-[#151e30]">
+      <div className="bg-surface-14 border border-edge-31 rounded-xl w-full max-w-lg overflow-hidden shadow-2xl text-slate-100">
+        <div className="p-4 border-b border-edge-13 flex items-center justify-between bg-surface-30">
           <div className="flex items-center gap-2">
             <Send className="w-5 h-5 text-sky-400" />
             <h3 className="font-bold text-white text-sm">Broadcast Institutional Announcement</h3>
@@ -2578,7 +2570,7 @@ const SendAnnouncementModal: React.FC<SendAnnouncementModalProps> = ({ isOpen, o
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Schedule for Sports Gala / Parent-Teacher Conference"
-              className="w-full bg-[#182234] border border-[#2a3c57] rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500"
+              className="w-full bg-surface-41 border border-edge-41 rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500"
             />
           </div>
 
@@ -2588,7 +2580,7 @@ const SendAnnouncementModal: React.FC<SendAnnouncementModalProps> = ({ isOpen, o
               <select
                 value={audience}
                 onChange={(e) => setAudience(e.target.value as any)}
-                className="w-full bg-[#182234] border border-[#2a3c57] rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500"
+                className="w-full bg-surface-41 border border-edge-41 rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500"
               >
                 <option value="All">All School (Parents, Staff & Students)</option>
                 <option value="Parents">Guardians & Parents Only</option>
@@ -2601,7 +2593,7 @@ const SendAnnouncementModal: React.FC<SendAnnouncementModalProps> = ({ isOpen, o
               <select
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as any)}
-                className="w-full bg-[#182234] border border-[#2a3c57] rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500"
+                className="w-full bg-surface-41 border border-edge-41 rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500"
               >
                 <option value="Normal">Normal Notice</option>
                 <option value="High">High Priority</option>
@@ -2621,7 +2613,7 @@ const SendAnnouncementModal: React.FC<SendAnnouncementModalProps> = ({ isOpen, o
                   className={`px-3 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer transition-colors ${
                     channels.includes(ch)
                       ? 'bg-blue-600/20 border-blue-500 text-blue-300'
-                      : 'bg-[#182234] border-[#2a3c57] text-slate-400'
+                      : 'bg-surface-41 border-edge-41 text-slate-400'
                   }`}
                 >
                   {channels.includes(ch) ? '✓ ' : '+ '}{ch}
@@ -2638,15 +2630,15 @@ const SendAnnouncementModal: React.FC<SendAnnouncementModalProps> = ({ isOpen, o
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder="Enter official institutional notice text..."
-              className="w-full bg-[#182234] border border-[#2a3c57] rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500"
+              className="w-full bg-surface-41 border border-edge-41 rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500"
             />
           </div>
 
-          <div className="pt-2 flex items-center justify-end gap-2 border-t border-[#1e293b]">
+          <div className="pt-2 flex items-center justify-end gap-2 border-t border-edge-13">
             <button
               type="button"
               onClick={onClose}
-              className="px-3.5 py-1.5 rounded-lg bg-[#182234] text-slate-300 hover:text-white cursor-pointer"
+              className="px-3.5 py-1.5 rounded-lg bg-surface-41 text-slate-300 hover:text-white cursor-pointer"
             >
               Discard
             </button>
@@ -2684,8 +2676,8 @@ const InquiryDetailsModal: React.FC<InquiryDetailsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-[#111726] border border-[#24334a] rounded-xl w-full max-w-lg overflow-hidden shadow-2xl text-slate-100">
-        <div className="p-4 border-b border-[#1e293b] flex items-center justify-between bg-[#151e30]">
+      <div className="bg-surface-14 border border-edge-31 rounded-xl w-full max-w-lg overflow-hidden shadow-2xl text-slate-100">
+        <div className="p-4 border-b border-edge-13 flex items-center justify-between bg-surface-30">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-400 flex items-center justify-center">
               <UserCheck className="w-4 h-4" />
@@ -2701,7 +2693,7 @@ const InquiryDetailsModal: React.FC<InquiryDetailsModalProps> = ({
         </div>
 
         <div className="p-4 space-y-4 text-xs">
-          <div className="grid grid-cols-2 gap-3 bg-[#141c2c] p-3 rounded-lg border border-[#202d42]">
+          <div className="grid grid-cols-2 gap-3 bg-surface-23 p-3 rounded-lg border border-edge-20">
             <div>
               <span className="text-[10px] text-slate-400 uppercase font-semibold">Applicant Name</span>
               <div className="text-sm font-bold text-white mt-0.5">{inquiry.applicantName}</div>
@@ -2730,7 +2722,7 @@ const InquiryDetailsModal: React.FC<InquiryDetailsModalProps> = ({
 
           <div>
             <span className="text-[10px] text-slate-400 uppercase font-semibold">Admission Remarks & Notes</span>
-            <div className="p-2.5 rounded-lg bg-[#141c2c] border border-[#202d42] text-slate-300 text-xs mt-1">
+            <div className="p-2.5 rounded-lg bg-surface-23 border border-edge-20 text-slate-300 text-xs mt-1">
               {inquiry.notes || 'No administrative notes attached to this application file.'}
             </div>
           </div>
@@ -2747,7 +2739,7 @@ const InquiryDetailsModal: React.FC<InquiryDetailsModalProps> = ({
                   className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer border ${
                     inquiry.status === st
                       ? 'bg-blue-600 border-blue-500 text-white'
-                      : 'bg-[#182234] border-[#2a3c57] text-slate-300 hover:text-white'
+                      : 'bg-surface-41 border-edge-41 text-slate-300 hover:text-white'
                   }`}
                 >
                   {st}
@@ -2756,11 +2748,11 @@ const InquiryDetailsModal: React.FC<InquiryDetailsModalProps> = ({
             </div>
           </div>
 
-          <div className="pt-3 border-t border-[#1e293b] flex items-center justify-between">
+          <div className="pt-3 border-t border-edge-13 flex items-center justify-between">
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-1.5 rounded-lg bg-[#182234] text-slate-300 hover:text-white cursor-pointer"
+              className="px-3 py-1.5 rounded-lg bg-surface-41 text-slate-300 hover:text-white cursor-pointer"
             >
               Close
             </button>
@@ -2818,8 +2810,8 @@ const AddInquiryModal: React.FC<AddInquiryModalProps> = ({ classes, isOpen, onCl
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-[#111726] border border-[#24334a] rounded-xl w-full max-w-md overflow-hidden shadow-2xl text-slate-100">
-        <div className="p-4 border-b border-[#1e293b] flex items-center justify-between bg-[#151e30]">
+      <div className="bg-surface-14 border border-edge-31 rounded-xl w-full max-w-md overflow-hidden shadow-2xl text-slate-100">
+        <div className="p-4 border-b border-edge-13 flex items-center justify-between bg-surface-30">
           <div className="flex items-center gap-2">
             <Plus className="w-5 h-5 text-blue-400" />
             <h3 className="font-bold text-white text-sm">New Admission Inquiry</h3>
@@ -2838,7 +2830,7 @@ const AddInquiryModal: React.FC<AddInquiryModalProps> = ({ classes, isOpen, onCl
               value={applicantName}
               onChange={(e) => setApplicantName(e.target.value)}
               placeholder="e.g. Aayan Tariq"
-              className="w-full bg-[#182234] border border-[#2a3c57] rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500"
+              className="w-full bg-surface-41 border border-edge-41 rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500"
             />
           </div>
 
@@ -2848,7 +2840,7 @@ const AddInquiryModal: React.FC<AddInquiryModalProps> = ({ classes, isOpen, onCl
               <select
                 value={gender}
                 onChange={(e) => setGender(e.target.value as any)}
-                className="w-full bg-[#182234] border border-[#2a3c57] rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500"
+                className="w-full bg-surface-41 border border-edge-41 rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500"
               >
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
@@ -2859,7 +2851,7 @@ const AddInquiryModal: React.FC<AddInquiryModalProps> = ({ classes, isOpen, onCl
               <select
                 value={appliedClass}
                 onChange={(e) => setAppliedClass(e.target.value)}
-                className="w-full bg-[#182234] border border-[#2a3c57] rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500"
+                className="w-full bg-surface-41 border border-edge-41 rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500"
               >
                 {classes.length === 0 ? (
                   <option value="">-- No classes available --</option>
@@ -2881,7 +2873,7 @@ const AddInquiryModal: React.FC<AddInquiryModalProps> = ({ classes, isOpen, onCl
                 value={guardianName}
                 onChange={(e) => setGuardianName(e.target.value)}
                 placeholder="Father / Guardian"
-                className="w-full bg-[#182234] border border-[#2a3c57] rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500"
+                className="w-full bg-surface-41 border border-edge-41 rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500"
               />
             </div>
             <div>
@@ -2891,7 +2883,7 @@ const AddInquiryModal: React.FC<AddInquiryModalProps> = ({ classes, isOpen, onCl
                 value={guardianPhone}
                 onChange={(e) => setGuardianPhone(e.target.value)}
                 placeholder="+92 300 1234567"
-                className="w-full bg-[#182234] border border-[#2a3c57] rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500"
+                className="w-full bg-surface-41 border border-edge-41 rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500"
               />
             </div>
           </div>
@@ -2903,15 +2895,15 @@ const AddInquiryModal: React.FC<AddInquiryModalProps> = ({ classes, isOpen, onCl
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="e.g. Previous school, transfer certificate status"
-              className="w-full bg-[#182234] border border-[#2a3c57] rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500"
+              className="w-full bg-surface-41 border border-edge-41 rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-blue-500"
             />
           </div>
 
-          <div className="pt-2 flex items-center justify-end gap-2 border-t border-[#1e293b]">
+          <div className="pt-2 flex items-center justify-end gap-2 border-t border-edge-13">
             <button
               type="button"
               onClick={onClose}
-              className="px-3.5 py-1.5 rounded-lg bg-[#182234] text-slate-300 hover:text-white cursor-pointer"
+              className="px-3.5 py-1.5 rounded-lg bg-surface-41 text-slate-300 hover:text-white cursor-pointer"
             >
               Cancel
             </button>

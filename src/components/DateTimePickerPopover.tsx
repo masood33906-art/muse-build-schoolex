@@ -23,9 +23,11 @@ export const DateTimePickerPopover: React.FC<DateTimePickerPopoverProps> = ({
   onSelect,
   onClose
 }) => {
-  const [currentYear, setCurrentYear] = useState(2026);
-  const [currentMonth, setCurrentMonth] = useState(8); // September (0-indexed)
-  const [selectedDay, setSelectedDay] = useState(18);
+  // Fallback selection (when no initial value is supplied) is the CURRENT
+  // date — never a fixed calendar constant.
+  const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear());
+  const [currentMonth, setCurrentMonth] = useState(() => new Date().getMonth()); // 0-indexed
+  const [selectedDay, setSelectedDay] = useState(() => new Date().getDate());
   const [selectedHour, setSelectedHour] = useState('09');
   const [selectedMinute, setSelectedMinute] = useState('00');
   const [selectedPeriod, setSelectedPeriod] = useState<'AM' | 'PM'>('AM');
@@ -56,6 +58,12 @@ export const DateTimePickerPopover: React.FC<DateTimePickerPopoverProps> = ({
         setCurrentMonth(parseInt(dateMatch[2], 10) - 1);
         setSelectedDay(parseInt(dateMatch[3], 10));
       }
+    } else if (isOpen) {
+      // No value to open on: re-anchor the picker to today at open time.
+      const today = new Date();
+      setCurrentYear(today.getFullYear());
+      setCurrentMonth(today.getMonth());
+      setSelectedDay(today.getDate());
     }
   }, [initialValue, isOpen]);
 
@@ -98,7 +106,7 @@ export const DateTimePickerPopover: React.FC<DateTimePickerPopoverProps> = ({
       onClick={onClose}
     >
       <div 
-        className="w-full max-w-[460px] bg-[#111927] border border-[#1e2d45] rounded-2xl shadow-2xl overflow-hidden p-5 flex flex-col gap-4 text-white"
+        className="w-full max-w-[460px] bg-[#111927] border border-edge-21 rounded-2xl shadow-2xl overflow-hidden p-5 flex flex-col gap-4 text-white"
         onClick={e => e.stopPropagation()}
       >
         {/* Main Content: Left Calendar + Right Time Columns */}
@@ -118,7 +126,7 @@ export const DateTimePickerPopover: React.FC<DateTimePickerPopoverProps> = ({
                 </button>
 
                 {showMonthYearPicker && (
-                  <div className="absolute top-full left-0 mt-1 z-20 bg-[#162236] border border-[#233550] rounded-xl p-2 shadow-xl grid grid-cols-3 gap-1 w-52 max-h-48 overflow-y-auto">
+                  <div className="absolute top-full left-0 mt-1 z-20 bg-[#162236] border border-edge-36 rounded-xl p-2 shadow-xl grid grid-cols-3 gap-1 w-52 max-h-48 overflow-y-auto">
                     {MONTH_NAMES.map((name, idx) => (
                       <button
                         key={name}
@@ -144,14 +152,14 @@ export const DateTimePickerPopover: React.FC<DateTimePickerPopoverProps> = ({
                 <button
                   type="button"
                   onClick={handlePrevMonth}
-                  className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-[#1a2840] transition-colors cursor-pointer"
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-edge-12 transition-colors cursor-pointer"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <button
                   type="button"
                   onClick={handleNextMonth}
-                  className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-[#1a2840] transition-colors cursor-pointer"
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-edge-12 transition-colors cursor-pointer"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>

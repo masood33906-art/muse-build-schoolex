@@ -78,7 +78,8 @@ export function runStorageAndAttendanceTests() {
   assert(cleaned['2026-09-08'] === undefined, 'Expected 2026-09-08 to be deleted when all seeded rows removed');
   assert(cleaned['2026-10-01']?.length === 1, 'Expected non-seed date 2026-10-01 to be untouched');
 
-  // 4. loadJSON preserves corrupt JSON, creates __corrupt_ backup, records fault, and blocks saveJSON
+  // 4. loadJSON preserves corrupt JSON, creates __corrupt_ backup, records fault;
+  //    the quarantined key stays writable via saveJSON (Fix P1-6)
   resetStorage();
   const key = 'schoollee_offline_students_clean_v1';
   localStorage.setItem(key, '{bad json');
@@ -98,10 +99,13 @@ export function runStorageAndAttendanceTests() {
   }
   assert(corruptBackupFound, 'Expected __corrupt_<timestamp> backup key to exist with raw data');
 
-  // Attempt to overwrite faulted key via saveJSON -> blocked!
+  // Fix P1-6: after quarantine the key accepts saves again — the __corrupt_
+  // copy preserves the corrupt data, and the fault stays registered (for
+  // StorageFaultScreen) until the user dismisses it.
   const saved = saveJSON(key, [{ id: 'DEMO-1' }]);
-  assert(saved === false, 'Expected saveJSON to return false for faulted key');
-  assert(localStorage.getItem(key) === '{bad json', 'Expected faulted key not to be overwritten by saveJSON');
+  assert(saved === true, 'Expected saveJSON to succeed for a quarantined key (Fix P1-6)');
+  assert(localStorage.getItem(key) === JSON.stringify([{ id: 'DEMO-1' }]), 'Expected quarantined key to be overwritten by saveJSON');
+  assert(getFaults().includes(key), 'Expected fault to stay registered until dismissed');
 
   // Clearing fault with removeKey=true removes the corrupt key
   clearFault(key, true);

@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Student, StaffMember, AttendanceRecord, AttendanceStatus } from '../types';
-import { DEFAULT_SCHOOL, SchoolInfo } from './pdfGenerator';
+import { DEFAULT_SCHOOL, SchoolInfo, joinInfoParts } from './pdfGenerator';
 import { getSchoolSettings } from './settingsHelper';
 import { loadJSON } from './storage';
 
@@ -264,6 +264,10 @@ export function generateWeeklyAttendancePdf(
 ) {
   const liveSettings = getSchoolSettings();
   const isCompactMono = liveSettings.attendanceRegisterTemplate === 'compact-monochrome';
+  // minimal-professional: same FULL register (all columns/rows/footers as
+  // official-weekly) in strict black & white — black text, thin black grid
+  // lines, white (paper) background, no fills, no colour-coded statuses.
+  const isMinimalProfessional = liveSettings.attendanceRegisterTemplate === 'minimal-professional';
 
   const doc = new jsPDF({
     orientation: 'landscape',
@@ -276,27 +280,29 @@ export function generateWeeklyAttendancePdf(
   // Header
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
-  doc.setTextColor(15, 23, 42);
+  doc.setTextColor(isMinimalProfessional ? 0 : 15, isMinimalProfessional ? 0 : 23, isMinimalProfessional ? 0 : 42);
   doc.text(school.name.toUpperCase(), 148, 14, { align: 'center' });
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
-  doc.setTextColor(100, 116, 139);
-  doc.text(`${school.campus} • ${school.address} • Contact: ${school.phone}`, 148, 19, { align: 'center' });
+  doc.setTextColor(isMinimalProfessional ? 0 : 100, isMinimalProfessional ? 0 : 116, isMinimalProfessional ? 0 : 139);
+  doc.text(joinInfoParts([school.campus, school.address, school.phone ? `Contact: ${school.phone}` : '']), 148, 19, { align: 'center' });
 
-  // Title Box
-  doc.setDrawColor(isCompactMono ? 0 : 203, isCompactMono ? 0 : 213, isCompactMono ? 0 : 225);
-  doc.setFillColor(isCompactMono ? 255 : 241, isCompactMono ? 255 : 245, isCompactMono ? 255 : 249);
-  doc.roundedRect(14, 23, 269, 14, isCompactMono ? 0 : 2, isCompactMono ? 0 : 2, 'FD');
+  // Title Box (minimal-professional: thin black outline only, no fill at all)
+  doc.setDrawColor(isMinimalProfessional || isCompactMono ? 0 : 203, isMinimalProfessional || isCompactMono ? 0 : 213, isMinimalProfessional || isCompactMono ? 0 : 225);
+  if (!isMinimalProfessional) {
+    doc.setFillColor(isCompactMono ? 255 : 241, isCompactMono ? 255 : 245, isCompactMono ? 255 : 249);
+  }
+  doc.roundedRect(14, 23, 269, 14, isMinimalProfessional || isCompactMono ? 0 : 2, isMinimalProfessional || isCompactMono ? 0 : 2, isMinimalProfessional ? 'S' : 'FD');
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
-  doc.setTextColor(15, 23, 42);
+  doc.setTextColor(isMinimalProfessional ? 0 : 15, isMinimalProfessional ? 0 : 23, isMinimalProfessional ? 0 : 42);
   doc.text(`OFFICIAL WEEKLY ATTENDANCE REGISTER (${entityLabel.toUpperCase()})`, 148, 29, { align: 'center' });
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
-  doc.setTextColor(71, 85, 105);
+  doc.setTextColor(isMinimalProfessional ? 0 : 71, isMinimalProfessional ? 0 : 85, isMinimalProfessional ? 0 : 105);
   doc.text(
     `Week: ${weekRangeStr}    |    Scope: ${scopeLabel}    |    Total Enrolled: ${memberSummaries.length}    |    Week Attendance Avg: ${totals.averageRate}%`,
     148,
@@ -360,23 +366,26 @@ export function generateWeeklyAttendancePdf(
     foot: [footRow],
     theme: 'grid',
     headStyles: {
-      fillColor: isCompactMono ? [230, 230, 230] : [15, 23, 42],
-      textColor: isCompactMono ? [0, 0, 0] : [255, 255, 255],
+      fillColor: isMinimalProfessional ? [255, 255, 255] : isCompactMono ? [230, 230, 230] : [15, 23, 42],
+      textColor: isMinimalProfessional ? [0, 0, 0] : isCompactMono ? [0, 0, 0] : [255, 255, 255],
       fontStyle: 'bold',
       fontSize: 7.5,
-      halign: 'center'
+      halign: 'center',
+      ...(isMinimalProfessional ? { lineColor: [0, 0, 0], lineWidth: 0.1 } : {})
     },
     footStyles: {
-      fillColor: isCompactMono ? [245, 245, 245] : [241, 245, 249],
-      textColor: [15, 23, 42],
+      fillColor: isMinimalProfessional ? [255, 255, 255] : isCompactMono ? [245, 245, 245] : [241, 245, 249],
+      textColor: isMinimalProfessional ? [0, 0, 0] : [15, 23, 42],
       fontStyle: 'bold',
       fontSize: 7.5,
-      halign: 'center'
+      halign: 'center',
+      ...(isMinimalProfessional ? { lineColor: [0, 0, 0], lineWidth: 0.1 } : {})
     },
     styles: {
       fontSize: 7.5,
-      cellPadding: isCompactMono ? 1.5 : 2,
-      textColor: [30, 41, 59]
+      cellPadding: isMinimalProfessional ? 1.2 : isCompactMono ? 1.5 : 2,
+      textColor: isMinimalProfessional ? [0, 0, 0] : [30, 41, 59],
+      ...(isMinimalProfessional ? { fillColor: [255, 255, 255], lineColor: [0, 0, 0], lineWidth: 0.1 } : {})
     },
     columnStyles: {
       0: { halign: 'center', cellWidth: 8 },
@@ -400,6 +409,21 @@ export function generateWeeklyAttendancePdf(
       16: { halign: 'center', cellWidth: 15, fontStyle: 'bold' }
     },
     didParseCell: (data) => {
+      if (isMinimalProfessional) {
+        // Strict B&W end-to-end: black text, paper-white cells, black grid.
+        // Status letters (P/A/L/Lv) are distinguished by bold weight only —
+        // never by colour or fill.
+        data.cell.styles.textColor = [0, 0, 0];
+        data.cell.styles.fillColor = [255, 255, 255];
+        data.cell.styles.lineColor = [0, 0, 0];
+        if (data.section === 'body' && data.column.index >= 5 && data.column.index <= 11) {
+          const val = String(data.cell.raw);
+          if (val === 'P' || val === 'A' || val === 'L' || val === 'Lv') {
+            data.cell.styles.fontStyle = 'bold';
+          }
+        }
+        return;
+      }
       // Color coding for status values in body
       if (data.section === 'body' && data.column.index >= 5 && data.column.index <= 11) {
         const val = String(data.cell.raw);
@@ -421,8 +445,8 @@ export function generateWeeklyAttendancePdf(
     didDrawPage: (data) => {
       const pageHeight = doc.internal.pageSize.height;
       doc.setFontSize(7.5);
-      doc.setTextColor(100, 116, 139);
-      doc.text(`Generated on ${new Date().toLocaleDateString()} via Schooliee Management System • Confidential Official Record`, 14, pageHeight - 8);
+      doc.setTextColor(isMinimalProfessional ? 0 : 100, isMinimalProfessional ? 0 : 116, isMinimalProfessional ? 0 : 139);
+      doc.text(`Generated on ${new Date().toLocaleDateString()} via SchoolEx • Confidential Official Record`, 14, pageHeight - 8);
       doc.text(`Page ${data.pageNumber}`, 283, pageHeight - 8, { align: 'right' });
     }
   });
@@ -433,7 +457,7 @@ export function generateWeeklyAttendancePdf(
   if (finalY < pageHeight - 20) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
-    doc.setTextColor(30, 41, 59);
+    doc.setTextColor(isMinimalProfessional ? 0 : 30, isMinimalProfessional ? 0 : 41, isMinimalProfessional ? 0 : 59);
     doc.text('Class Teacher / Incharge: ______________________', 25, finalY);
     doc.text('Principal / Administrator: ______________________', 190, finalY);
   }

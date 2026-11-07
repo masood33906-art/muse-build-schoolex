@@ -78,6 +78,7 @@ export async function generateBulkA4RollNumberSlipsPDF(
 
   const school = schoolSettings || getSchoolSettings();
   const activeTemplate = school.rollNumberSlipTemplate || 'minimal-stream';
+  const isMinimalProfessional = activeTemplate === 'minimal-professional';
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -108,7 +109,7 @@ export async function generateBulkA4RollNumberSlipsPDF(
     const rowCount = Math.max(1, slip.dateSheet.length);
     const tableHeight = 7 + rowCount * 6.5;
     const cardHeight =
-      activeTemplate === 'classic-bordered'
+      activeTemplate === 'classic-bordered' || isMinimalProfessional
         ? 18 + 28 + 10 + tableHeight + 14 + 16
         : 14 + 28 + 10 + tableHeight + 16; // Dynamic height matching content
 
@@ -123,6 +124,19 @@ export async function generateBulkA4RollNumberSlipsPDF(
 
     if (activeTemplate === 'classic-bordered') {
       renderClassicBorderedSlipPDF(
+        doc,
+        slip,
+        school,
+        marginX,
+        currentY,
+        cardWidth,
+        cardHeight,
+        i + 1,
+        totalSlips,
+        avatarDataUrl
+      );
+    } else if (isMinimalProfessional) {
+      renderMinimalProfessionalSlipPDF(
         doc,
         slip,
         school,
@@ -187,7 +201,7 @@ function renderMinimalStreamSlipPDF(
   doc.setFontSize(7.5);
   doc.setTextColor(90, 90, 90);
   doc.text(`SLIP #${index} OF ${total}`, innerX, curY);
-  doc.text(`SESSION: ${school.session || '2025 - 2026'}`, innerX + innerW, curY, { align: 'right' });
+  doc.text(`SESSION: ${school.session}`, innerX + innerW, curY, { align: 'right' });
 
   // School Name (Centered, bold uppercase)
   curY += 5.5;
@@ -432,7 +446,7 @@ function renderClassicBorderedSlipPDF(
   doc.setFontSize(7.5);
   doc.setTextColor(70, 70, 70);
   doc.text(`ADMIT CARD #${index} OF ${total}`, innerX, curY);
-  doc.text(`SESSION: ${school.session || '2025 - 2026'}`, innerX + innerW, curY, { align: 'right' });
+  doc.text(`SESSION: ${school.session}`, innerX + innerW, curY, { align: 'right' });
 
   // School Name & Campus
   curY += 5.5;
@@ -446,7 +460,7 @@ function renderClassicBorderedSlipPDF(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(80, 80, 80);
-  doc.text(`${school.campusName || 'Main Campus'} • ${school.schoolAddress || 'Official Examination Center'}`, x + w / 2, curY, { align: 'center' });
+  doc.text([school.campusName, school.schoolAddress].filter(Boolean).join(' • '), x + w / 2, curY, { align: 'center' });
 
   // Exam Title Banner
   curY += 2.2;
@@ -633,5 +647,259 @@ function renderClassicBorderedSlipPDF(
   doc.setTextColor(0, 0, 0);
   doc.text('CANDIDATE SIGNATURE', innerX + signLineW / 2, footerLineY + 4, { align: 'center' });
   doc.text('CONTROLLER OF EXAMINATIONS', innerX + innerW - signLineW / 2, footerLineY + 4, { align: 'center' });
+}
+
+/**
+ * Renders the Minimal Professional Roll Number Slip card on the PDF.
+ * Strict black & white only: black text, thin black borders/dividers, white
+ * background. No fills of any kind (this renderer never calls setFillColor),
+ * no decoration — hierarchy comes from font weight/size/alignment only.
+ * Shows the union of every field shown by the other templates: slip index,
+ * session, school name, campus & address, exam title, student name,
+ * father/guardian, class & section, roll number & student ID, photo, the
+ * 6-column schedule (incl. Room), instructions, student ID and signatures.
+ * Vertical offsets mirror the Classic Bordered renderer so the shared
+ * pagination/card-height logic applies unchanged.
+ */
+function renderMinimalProfessionalSlipPDF(
+  doc: jsPDF,
+  slip: RollSlipData,
+  school: SchoolSettings,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  index: number,
+  total: number,
+  avatarDataUrl: string | null
+): void {
+  const pad = 5;
+  const innerX = x + pad;
+  const innerW = w - pad * 2;
+
+  // Single thin outer card border (stroke only, no fill)
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.35);
+  doc.rect(x, y, w, h);
+
+  let curY = y + 6.5;
+
+  // Top Metadata Row: SLIP #X OF Y (left) | SESSION (right)
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text(`SLIP #${index} OF ${total}`, innerX, curY);
+  doc.text(`SESSION: ${school.session}`, innerX + innerW, curY, { align: 'right' });
+
+  // School Name (centered, bold uppercase) + Campus / Address line
+  curY += 5.5;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(0, 0, 0);
+  const schoolName = (school.schoolName || 'DEMO SCHOOL SYSTEM').toUpperCase();
+  doc.text(schoolName, x + w / 2, curY, { align: 'center' });
+
+  curY += 3.8;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(0, 0, 0);
+  doc.text([school.campusName, school.schoolAddress].filter(Boolean).join(' • '), x + w / 2, curY, { align: 'center' });
+
+  // Exam Title Box: outlined only — black border, black text, no fill
+  curY += 2.2;
+  const examTitleText = `ROLL NUMBER SLIP — ${(slip.folderName || 'EXAMINATION').toUpperCase()}`;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  const badgeTextW = doc.getTextWidth(examTitleText);
+  const badgeW = Math.min(innerW, badgeTextW + 12);
+  const badgeH = 5.2;
+  const badgeX = x + (w - badgeW) / 2;
+
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.3);
+  doc.rect(badgeX, curY, badgeW, badgeH);
+  doc.setTextColor(0, 0, 0);
+  doc.text(examTitleText, x + w / 2, curY + 3.7, { align: 'center' });
+
+  // Header bottom border line
+  curY += badgeH + 3;
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.25);
+  doc.line(innerX, curY, innerX + innerW, curY);
+
+  // Student Info (2x2 Grid on Left) + Photo Frame on Right
+  const sectionTopY = curY + 3;
+  const photoW = 20;
+  const photoH = 24;
+  const photoX = innerX + innerW - photoW;
+  const photoY = sectionTopY;
+
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.25);
+  doc.rect(photoX, photoY, photoW, photoH);
+
+  if (avatarDataUrl) {
+    try {
+      doc.addImage(avatarDataUrl, 'PNG', photoX + 0.4, photoY + 0.4, photoW - 0.8, photoH - 0.8);
+    } catch {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.setTextColor(0, 0, 0);
+      doc.text(slip.student.name.charAt(0).toUpperCase(), photoX + photoW / 2, photoY + photoH / 2 + 2, { align: 'center' });
+    }
+  } else {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.text(slip.student.name.charAt(0).toUpperCase(), photoX + photoW / 2, photoY + photoH / 2 + 2, { align: 'center' });
+  }
+
+  const gridW = innerW - photoW - 6;
+  const col1X = innerX;
+  const col2X = innerX + gridW / 2;
+
+  // Row 1: STUDENT NAME | FATHER / GUARDIAN
+  let rowY = sectionTopY + 4;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(0, 0, 0);
+  doc.text('STUDENT NAME', col1X, rowY);
+  doc.text('FATHER / GUARDIAN', col2X, rowY);
+
+  rowY += 4.2;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(0, 0, 0);
+  const studentNameStr = (slip.student.name || '-').toUpperCase();
+  const fatherNameStr = (slip.student.fatherName || slip.student.family || '-').toUpperCase();
+  doc.text(doc.splitTextToSize(studentNameStr, gridW / 2 - 3)[0] || studentNameStr, col1X, rowY);
+  doc.text(doc.splitTextToSize(fatherNameStr, gridW / 2 - 3)[0] || fatherNameStr, col2X, rowY);
+
+  // Row 2: CLASS & SECTION | ROLL NUMBER & ID
+  rowY += 7;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(0, 0, 0);
+  doc.text('CLASS & SECTION', col1X, rowY);
+  doc.text('ROLL NUMBER & ID', col2X, rowY);
+
+  rowY += 4.5;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text(`${slip.student.class} (${slip.student.section || 'A'})`, col1X, rowY);
+  doc.text(`${slip.rollNo}  •  ${slip.student.id}`, col2X, rowY);
+
+  // Student section bottom border line
+  curY = sectionTopY + photoH + 3;
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.25);
+  doc.line(innerX, curY, innerX + innerW, curY);
+
+  // 6-Column Schedule Table (SR | SUBJECT | DATE | TIME | ROOM | MARKS) — header has no fill
+  curY += 3.5;
+  const rowCount = Math.max(1, slip.dateSheet.length);
+  const headerH = 7;
+  const rowH = 6.5;
+  const tableH = headerH + rowCount * rowH;
+
+  const c0W = 10; // SR
+  const c5W = 18; // MARKS
+  const c4W = 22; // ROOM
+  const c3W = 38; // TIME
+  const c2W = 30; // DATE
+  const c1W = innerW - (c0W + c2W + c3W + c4W + c5W); // SUBJECT
+
+  const col0 = innerX;
+  const col1 = col0 + c0W;
+  const col2 = col1 + c1W;
+  const col3 = col2 + c2W;
+  const col4 = col3 + c3W;
+  const col5 = col4 + c4W;
+
+  // Table outer border + header bottom line + column vertical lines (all black, stroke only)
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.25);
+  doc.rect(innerX, curY, innerW, tableH);
+  doc.line(innerX, curY + headerH, innerX + innerW, curY + headerH);
+
+  doc.line(col1, curY, col1, curY + tableH);
+  doc.line(col2, curY, col2, curY + tableH);
+  doc.line(col3, curY, col3, curY + tableH);
+  doc.line(col4, curY, col4, curY + tableH);
+  doc.line(col5, curY, col5, curY + tableH);
+
+  // Header text
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(0, 0, 0);
+  const hTextY = curY + 4.7;
+  doc.text('SR', col0 + c0W / 2, hTextY, { align: 'center' });
+  doc.text('SUBJECT', col1 + 3, hTextY);
+  doc.text('DATE', col2 + c2W / 2, hTextY, { align: 'center' });
+  doc.text('TIME', col3 + c3W / 2, hTextY, { align: 'center' });
+  doc.text('ROOM', col4 + c4W / 2, hTextY, { align: 'center' });
+  doc.text('MARKS', col5 + c5W / 2, hTextY, { align: 'center' });
+
+  // Table rows
+  slip.dateSheet.forEach((item, idx) => {
+    const rTop = curY + headerH + idx * rowH;
+    const rTextY = rTop + 4.4;
+
+    if (idx > 0) {
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.15);
+      doc.line(innerX, rTop, innerX + innerW, rTop);
+    }
+
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(0, 0, 0);
+    doc.text(String(idx + 1), col0 + c0W / 2, rTextY, { align: 'center' });
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.2);
+    const subj = (item.subjectName || '').toUpperCase();
+    doc.text(doc.splitTextToSize(subj, c1W - 5)[0] || subj, col1 + 3, rTextY);
+
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(7.8);
+    doc.setTextColor(0, 0, 0);
+    doc.text(item.date || '-', col2 + c2W / 2, rTextY, { align: 'center' });
+    doc.text(item.time || '-', col3 + c3W / 2, rTextY, { align: 'center' });
+    doc.text(item.room || 'Hall A', col4 + c4W / 2, rTextY, { align: 'center' });
+    doc.text(String(item.totalMarks ?? 100), col5 + c5W / 2, rTextY, { align: 'center' });
+  });
+
+  // Candidate Instructions Strip: outlined box only — black border, black text, no fill
+  const instY = curY + tableH + 3;
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.2);
+  doc.rect(innerX, instY, innerW, 10);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text('INSTRUCTIONS: 1. Arrive 20 minutes before exam time.  2. Keep this admit card on your desk during all papers.', innerX + 3, instY + 4.2);
+  doc.setFont('helvetica', 'normal');
+  doc.text('3. Mobile phones, smartwatches, and unauthorized study material are strictly prohibited in the examination hall.', innerX + 3, instY + 8);
+
+  // Footer Signatures + centred student ID
+  const footerLineY = instY + 19;
+  const signLineW = 42;
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.25);
+  doc.line(innerX, footerLineY, innerX + signLineW, footerLineY);
+  doc.line(innerX + innerW - signLineW, footerLineY, innerX + innerW, footerLineY);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text('CANDIDATE SIGNATURE', innerX + signLineW / 2, footerLineY + 4, { align: 'center' });
+  doc.text('CONTROLLER OF EXAMINATIONS', innerX + innerW - signLineW / 2, footerLineY + 4, { align: 'center' });
+
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text(`ID: ${slip.student.id}`, x + w / 2, footerLineY + 3.5, { align: 'center' });
 }
 

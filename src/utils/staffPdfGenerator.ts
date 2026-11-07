@@ -1,8 +1,8 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { StaffMember, CardTemplateType, SalaryBreakdown } from '../types';
-import { SchoolInfo, DEFAULT_SCHOOL } from './pdfGenerator';
-import { getSchoolSettings } from './settingsHelper';
+import { StaffMember, CardTemplateType } from '../types';
+import { SchoolInfo, DEFAULT_SCHOOL, joinInfoParts } from './pdfGenerator';
+import { getSchoolSettings, StaffSalarySlipTemplateType } from './settingsHelper';
 import { getInitials } from '../data/initialStudents';
 
 // Generates a single vertical Staff ID Card PDF (54mm x 86mm standard ID card CR80 size)
@@ -289,403 +289,183 @@ function renderStaffCardOnPage(doc: jsPDF, staff: StaffMember, template: CardTem
   }
 }
 
-// Generates an Official Printable / Downloadable Salary Pay Slip PDF
-export function generateSalarySlipPdf(
-  staff: StaffMember,
-  breakdown: SalaryBreakdown,
-  school: SchoolInfo = DEFAULT_SCHOOL
-) {
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a5' // A5 is standard professional payslip size (148mm x 210mm)
-  });
+/* ============================================================================
+ * Salary-slip template theme — the SINGLE source of truth for how each
+ * `staffSalarySlipTemplate` value looks (Fix P1-2).
+ *
+ * The values below are taken verbatim from the interpretations that already
+ * existed in the bulk payslip renderer (`renderSinglePayslipSheet`) and the
+ * on-screen previews, per template:
+ *   - 'executive-emerald': slate-900 banner + emerald accent stripe, emerald
+ *     table header slate-800, emerald net-pay band, "STAFF SALARY PAYSLIP".
+ *   - 'minimal-classic': black-bordered header box, all-black text/table
+ *     header, light-grey net-pay box with black border, "MONTHLY SALARY
+ *     PAYSLIP".
+ *   - 'minimal-professional': same black-bordered header box and all-black
+ *     text/table header as minimal-classic, but strictly black & white —
+ *     every token is black, white or an equal-channel grey, the net-pay box
+ *     has NO fill (white, so nothing shows on paper) with a black border,
+ *     and the title is "SALARY SLIP". Its `isMinimalClassic` flag is true
+ *     because that legacy flag is what routes a theme through the bordered /
+ *     monochrome branches in the renderers below and the on-screen previews;
+ *     `template` still distinguishes it from 'minimal-classic'.
+ * Every salary-slip surface — the single-slip PDF, the bulk/combined PDF and
+ * both on-screen previews — must resolve its design through
+ * `getSalarySlipTheme` so the chosen template can never be honored in one
+ * place and ignored in another again.
+ * ========================================================================== */
 
-  const pageWidth = 148;
-  const margin = 12;
+export type RgbColor = [number, number, number];
 
-  // Header Banner
-  doc.setFillColor(15, 23, 42); // slate-900
-  doc.rect(0, 0, pageWidth, 28, 'F');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.setTextColor(255, 255, 255);
-  doc.text(school.name.toUpperCase(), pageWidth / 2, 10, { align: 'center' });
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(148, 163, 184);
-  doc.text(`${school.campus} • ${school.address} • Ph: ${school.phone}`, pageWidth / 2, 15, { align: 'center' });
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(16, 185, 129); // emerald-400
-  doc.text(`STAFF SALARY PAYSLIP - ${breakdown.month.toUpperCase()}`, pageWidth / 2, 22, { align: 'center' });
-
-  // Employee Information Box
-  doc.setFillColor(248, 250, 252);
-  doc.roundedRect(margin, 33, pageWidth - margin * 2, 28, 2, 2, 'F');
-  doc.setDrawColor(226, 232, 240);
-  doc.roundedRect(margin, 33, pageWidth - margin * 2, 28, 2, 2, 'S');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(71, 85, 105);
-  
-  // Column 1
-  doc.text('Employee ID:', margin + 4, 39);
-  doc.text('Employee Name:', margin + 4, 45);
-  doc.text('Designation / Role:', margin + 4, 51);
-  doc.text('Department:', margin + 4, 57);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(15, 23, 42);
-  doc.text(staff.id, margin + 35, 39);
-  doc.text(staff.name, margin + 35, 45);
-  doc.text(staff.role, margin + 35, 51);
-  doc.text(staff.department, margin + 35, 57);
-
-  // Column 2
-  const col2X = margin + 74;
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(71, 85, 105);
-  doc.text('Slip Ref No:', col2X, 39);
-  doc.text('Payment Date:', col2X, 45);
-  doc.text('Payment Mode:', col2X, 51);
-  doc.text('Status:', col2X, 57);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(15, 23, 42);
-  doc.text(breakdown.referenceNo, col2X + 26, 39);
-  doc.text(breakdown.paidDate, col2X + 26, 45);
-  doc.text(breakdown.paymentMethod, col2X + 26, 51);
-  
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(5, 150, 105); // emerald-600
-  doc.text('PAID', col2X + 26, 57);
-
-  // AutoTable for Earnings & Deductions
-  const tableData = [
-    ['Basic Monthly Salary', `Rs. ${breakdown.baseSalary.toLocaleString()}`, 'Income Tax / Deductions', `Rs. ${breakdown.deductions.toLocaleString()}`],
-    ['Allowances (Medical & Transport)', `Rs. ${breakdown.allowances.toLocaleString()}`, 'Absence / Leave Deductions', 'Rs. 0'],
-    ['Special Academic Bonus', `Rs. ${(breakdown.bonus || 0).toLocaleString()}`, 'Provident Fund (PF)', 'Rs. 0'],
-    [
-      { content: 'Gross Earnings', styles: { fontStyle: 'bold' } },
-      { content: `Rs. ${(breakdown.baseSalary + breakdown.allowances + (breakdown.bonus || 0)).toLocaleString()}`, styles: { fontStyle: 'bold' } },
-      { content: 'Total Deductions', styles: { fontStyle: 'bold' } },
-      { content: `Rs. ${breakdown.deductions.toLocaleString()}`, styles: { fontStyle: 'bold' } }
-    ]
-  ];
-
-  autoTable(doc, {
-    startY: 66,
-    margin: { left: margin, right: margin },
-    theme: 'grid',
-    head: [['Earnings & Allowances', 'Amount', 'Deductions', 'Amount']],
-    headStyles: {
-      fillColor: [30, 41, 59],
-      textColor: [255, 255, 255],
-      fontStyle: 'bold',
-      fontSize: 8.5
-    },
-    body: tableData as any,
-    styles: {
-      fontSize: 8,
-      cellPadding: 2.5
-    }
-  });
-
-  // Net Payable Highlight Box
-  const finalY = (doc as any).lastAutoTable?.finalY || 105;
-  
-  doc.setFillColor(16, 185, 129); // emerald-500
-  doc.roundedRect(margin, finalY + 4, pageWidth - margin * 2, 14, 2, 2, 'F');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(255, 255, 255);
-  doc.text('NET SALARY PAYABLE:', margin + 6, finalY + 12.5);
-
-  doc.setFontSize(13);
-  doc.text(`Rs. ${breakdown.netSalary.toLocaleString()}`, pageWidth - margin - 6, finalY + 13, { align: 'right' });
-
-  // Bank Account & Notes
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(100, 116, 139);
-  doc.text(`Disbursed to Employee Bank/Payment Account via ${breakdown.paymentMethod}.`, margin, finalY + 24);
-  if (breakdown.notes) {
-    doc.text(`Remarks: ${breakdown.notes}`, margin, finalY + 29);
-  }
-
-  // Signatures
-  const signY = finalY + 46;
-  doc.setDrawColor(148, 163, 184);
-  doc.setLineWidth(0.4);
-  doc.line(margin + 5, signY, margin + 45, signY);
-  doc.line(pageWidth - margin - 45, signY, pageWidth - margin - 5, signY);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(71, 85, 105);
-  doc.text('Accounts Incharge / Bursar', margin + 25, signY + 5, { align: 'center' });
-  doc.text('Employee Signature', pageWidth - margin - 25, signY + 5, { align: 'center' });
-
-  // Footer Note
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(7);
-  doc.setTextColor(148, 163, 184);
-  doc.text('This is a computer-generated salary slip verified by Schoollee Academic Management System.', pageWidth / 2, signY + 14, { align: 'center' });
-
-  doc.save(`${staff.id}_${staff.name.replace(/\s+/g, '_')}_Payslip_${breakdown.month.replace(/\s+/g, '_')}.pdf`);
+export interface SalarySlipTheme {
+  template: StaffSalarySlipTemplateType;
+  isMinimalClassic: boolean;
+  /** 'banner' = filled dark header band; 'bordered' = black-outlined header box */
+  headerStyle: 'banner' | 'bordered';
+  /** Banner fill (banner style only; null for the bordered header) */
+  headerBannerFill: RgbColor | null;
+  /** Accent stripe along the banner's bottom edge (banner style only) */
+  headerAccentStripe: RgbColor | null;
+  headerSchoolColor: RgbColor;
+  headerSubColor: RgbColor;
+  headerTitleColor: RgbColor;
+  /** Document title printed in the header, before the month */
+  headerTitle: string;
+  infoBoxBorder: RgbColor;
+  statusPaidColor: RgbColor;
+  tableHeadFill: RgbColor;
+  netBoxFill: RgbColor;
+  /** Net-pay box outline (bordered variant only; null = solid band) */
+  netBoxBorder: RgbColor | null;
+  netTextColor: RgbColor;
 }
 
-// Generates an Executive Overall Staff Payroll Report PDF (A4 Landscape)
-export function generateOverallStaffPayrollReportPdf(
-  staffList: StaffMember[],
-  month: string,
-  school: SchoolInfo = DEFAULT_SCHOOL
-) {
-  const doc = new jsPDF({
-    orientation: 'landscape',
-    unit: 'mm',
-    format: 'a4'
-  });
+const SALARY_SLIP_THEMES: Record<StaffSalarySlipTemplateType, SalarySlipTheme> = {
+  'executive-emerald': {
+    template: 'executive-emerald',
+    isMinimalClassic: false,
+    headerStyle: 'banner',
+    headerBannerFill: [15, 23, 42], // slate-900
+    headerAccentStripe: [16, 185, 129], // emerald-500
+    headerSchoolColor: [255, 255, 255],
+    headerSubColor: [148, 163, 184], // slate-400
+    headerTitleColor: [52, 211, 153], // emerald-400
+    headerTitle: 'STAFF SALARY PAYSLIP',
+    infoBoxBorder: [226, 232, 240], // slate-200
+    statusPaidColor: [5, 150, 105], // emerald-600
+    tableHeadFill: [30, 41, 59], // slate-800
+    netBoxFill: [16, 185, 129], // emerald-500
+    netBoxBorder: null,
+    netTextColor: [255, 255, 255]
+  },
+  'minimal-classic': {
+    template: 'minimal-classic',
+    isMinimalClassic: true,
+    headerStyle: 'bordered',
+    headerBannerFill: null,
+    headerAccentStripe: null,
+    headerSchoolColor: [0, 0, 0],
+    headerSubColor: [0, 0, 0],
+    headerTitleColor: [0, 0, 0],
+    headerTitle: 'MONTHLY SALARY PAYSLIP',
+    infoBoxBorder: [0, 0, 0],
+    statusPaidColor: [0, 0, 0],
+    tableHeadFill: [0, 0, 0],
+    netBoxFill: [241, 245, 249], // slate-100
+    netBoxBorder: [0, 0, 0],
+    netTextColor: [0, 0, 0]
+  },
+  'minimal-professional': {
+    template: 'minimal-professional',
+    // True so every existing `isMinimalClassic` / bordered branch in the
+    // renderers and previews routes this theme through the monochrome path.
+    isMinimalClassic: true,
+    headerStyle: 'bordered',
+    // Bordered header: the banner fill is never consumed on that path (the
+    // banner branch is the `else`), exactly as for minimal-classic.
+    headerBannerFill: null,
+    // Consumers guard the stripe with `if (theme.headerAccentStripe)`.
+    headerAccentStripe: null,
+    headerSchoolColor: [0, 0, 0],
+    headerSubColor: [0, 0, 0],
+    headerTitleColor: [0, 0, 0],
+    headerTitle: 'SALARY SLIP',
+    infoBoxBorder: [0, 0, 0],
+    statusPaidColor: [0, 0, 0],
+    tableHeadFill: [0, 0, 0],
+    // Strictly no fill for the net-pay box. Null is NOT usable here: every
+    // consumer calls `setFillColor(...theme.netBoxFill)` with no null check
+    // (and the field is typed RgbColor, not RgbColor | null), so white is
+    // used — it renders as no fill on white paper — with the black border
+    // below carrying the box outline.
+    netBoxFill: [255, 255, 255],
+    netBoxBorder: [0, 0, 0],
+    netTextColor: [0, 0, 0]
+  }
+};
 
-  const pageWidth = 297;
-  const pageHeight = 210;
-  const margin = 14;
+/**
+ * Resolves the salary-slip theme for a template value. When no template is
+ * passed, the currently saved setting is read — the same pattern the ID-card
+ * generators use (`getSchoolSettings().staffIdCardTemplate` above). Unknown
+ * or missing values fall back to the default 'executive-emerald' theme, which
+ * is also what `getSchoolSettings()` defaults the setting itself to.
+ */
+export function getSalarySlipTheme(
+  template?: StaffSalarySlipTemplateType | string | null
+): SalarySlipTheme {
+  const active = template ?? getSchoolSettings().staffSalarySlipTemplate;
+  if (active === 'minimal-professional') {
+    return SALARY_SLIP_THEMES['minimal-professional'];
+  }
+  return active === 'minimal-classic'
+    ? SALARY_SLIP_THEMES['minimal-classic']
+    : SALARY_SLIP_THEMES['executive-emerald'];
+}
 
-  // Header Banner
-  doc.setFillColor(15, 23, 42); // slate-900
-  doc.rect(0, 0, pageWidth, 28, 'F');
+/**
+ * Real salary-slip figures for one employee + month, built from the actual
+ * payroll record and its payments (see payrollApi.buildSlipBreakdown).
+ * When a month has no payroll record (pre-payroll legacy months), slips
+ * fall back to base salary with ZERO adjustments — honest figures instead
+ * of the previously invented 10% allowances / 5% deductions.
+ */
+export interface SalarySlipBreakdown {
+  staffId: string;
+  monthLabel: string;
+  baseSalary: number;
+  allowances: number;
+  bonus: number;
+  deductions: number;
+  gross: number;
+  netPayable: number;
+  totalPaid: number;
+  outstanding: number;
+  isPaid: boolean;
+  lastPaidDate?: string;
+  paymentMethod?: string;
+  referenceNo?: string;
+}
 
-  // Emerald accent stripe
-  doc.setFillColor(16, 185, 129); // emerald-500
-  doc.rect(0, 27, pageWidth, 1.5, 'F');
-
-  // School Title
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.setTextColor(255, 255, 255);
-  doc.text(school.name.toUpperCase(), pageWidth / 2, 9, { align: 'center' });
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(148, 163, 184);
-  doc.text(`${school.campus} • ${school.address} • Phone: ${school.phone} • Session: ${school.session}`, pageWidth / 2, 14.5, { align: 'center' });
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10.5);
-  doc.setTextColor(52, 211, 153); // emerald-400
-  doc.text(`ENTIRE STAFF OVERALL PAYROLL & DISBURSEMENT DATA — ${month.toUpperCase()}`, pageWidth / 2, 22, { align: 'center' });
-
-  // Compute Grand Totals
-  let sumBase = 0;
-  let sumAllowances = 0;
-  let sumDeductions = 0;
-  let sumNet = 0;
-  let sumPaid = 0;
-  let sumDue = 0;
-
-  const tableRows = staffList.map((staff, index) => {
-    const base = staff.salary || 0;
-    const allowances = Math.round(base * 0.10); // standard 10%
-    const deductions = Math.round(base * 0.05); // standard 5% tax/deductions
-    const net = base + allowances - deductions;
-
-    let paid = 0;
-    let due = net;
-    const status = staff.payStatus || 'Paid';
-
-    if (status === 'Paid') {
-      paid = net;
-      due = 0;
-    } else if (status === 'Pending') {
-      paid = 0;
-      due = net;
-    } else {
-      // Overdue or partial
-      paid = 0;
-      due = net;
-    }
-
-    sumBase += base;
-    sumAllowances += allowances;
-    sumDeductions += deductions;
-    sumNet += net;
-    sumPaid += paid;
-    sumDue += due;
-
-    return [
-      (index + 1).toString(),
-      staff.id,
-      staff.name,
-      staff.role,
-      staff.department,
-      `Rs. ${base.toLocaleString()}`,
-      `Rs. ${allowances.toLocaleString()}`,
-      `Rs. ${deductions.toLocaleString()}`,
-      `Rs. ${net.toLocaleString()}`,
-      status.toUpperCase(),
-      `Rs. ${paid.toLocaleString()}`,
-      `Rs. ${due.toLocaleString()}`,
-      staff.paymentMethod || 'Bank Transfer'
-    ];
-  });
-
-  // KPI Summary Strip on PDF
-  const kpiY = 32;
-  const kpiWidth = (pageWidth - margin * 2 - 12) / 4;
-  const kpiHeight = 13;
-
-  // Box 1: Total Staff
-  doc.setFillColor(241, 245, 249);
-  doc.roundedRect(margin, kpiY, kpiWidth, kpiHeight, 1.5, 1.5, 'F');
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(100, 116, 139);
-  doc.text('TOTAL EMPLOYEES', margin + 4, kpiY + 4.5);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(15, 23, 42);
-  doc.text(`${staffList.length} Staff Members`, margin + 4, kpiY + 10);
-
-  // Box 2: Total Net Payroll
-  doc.setFillColor(238, 242, 255);
-  doc.roundedRect(margin + kpiWidth + 4, kpiY, kpiWidth, kpiHeight, 1.5, 1.5, 'F');
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(99, 102, 241);
-  doc.text('TOTAL MONTHLY PAYROLL (SUM)', margin + kpiWidth + 8, kpiY + 4.5);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(30, 27, 75);
-  doc.text(`Rs. ${sumNet.toLocaleString()}`, margin + kpiWidth + 8, kpiY + 10);
-
-  // Box 3: Total Paid
-  doc.setFillColor(236, 253, 245);
-  doc.roundedRect(margin + (kpiWidth + 4) * 2, kpiY, kpiWidth, kpiHeight, 1.5, 1.5, 'F');
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(5, 150, 105);
-  doc.text('WHOLE STAFF SUM PAID', margin + (kpiWidth + 4) * 2 + 4, kpiY + 4.5);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(6, 78, 59);
-  doc.text(`Rs. ${sumPaid.toLocaleString()}`, margin + (kpiWidth + 4) * 2 + 4, kpiY + 10);
-
-  // Box 4: Total Due / Pending
-  doc.setFillColor(254, 242, 242);
-  doc.roundedRect(margin + (kpiWidth + 4) * 3, kpiY, kpiWidth, kpiHeight, 1.5, 1.5, 'F');
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(220, 38, 38);
-  doc.text('WHOLE STAFF SUM DUE / PENDING', margin + (kpiWidth + 4) * 3 + 4, kpiY + 4.5);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(153, 27, 27);
-  doc.text(`Rs. ${sumDue.toLocaleString()}`, margin + (kpiWidth + 4) * 3 + 4, kpiY + 10);
-
-  // AutoTable
-  autoTable(doc, {
-    startY: 48,
-    margin: { left: margin, right: margin, bottom: 25 },
-    theme: 'grid',
-    head: [[
-      '#',
-      'ID',
-      'Employee Name',
-      'Role',
-      'Department',
-      'Base Salary',
-      'Allowances',
-      'Deductions',
-      'Net Pay',
-      'Status',
-      'Paid',
-      'Due',
-      'Payment Mode'
-    ]],
-    body: tableRows,
-    foot: [[
-      '',
-      '',
-      'WHOLE STAFF SUM TOTAL',
-      '',
-      `${staffList.length} Staff`,
-      `Rs. ${sumBase.toLocaleString()}`,
-      `Rs. ${sumAllowances.toLocaleString()}`,
-      `Rs. ${sumDeductions.toLocaleString()}`,
-      `Rs. ${sumNet.toLocaleString()}`,
-      '',
-      `Rs. ${sumPaid.toLocaleString()}`,
-      `Rs. ${sumDue.toLocaleString()}`,
-      ''
-    ]],
-    headStyles: {
-      fillColor: [15, 23, 42],
-      textColor: [255, 255, 255],
-      fontStyle: 'bold',
-      fontSize: 7.5,
-      halign: 'left'
-    },
-    footStyles: {
-      fillColor: [30, 41, 59],
-      textColor: [255, 255, 255],
-      fontStyle: 'bold',
-      fontSize: 8,
-      halign: 'left'
-    },
-    styles: {
-      fontSize: 7,
-      cellPadding: 2,
-      textColor: [30, 41, 59],
-      lineColor: [226, 232, 240],
-      lineWidth: 0.2
-    },
-    columnStyles: {
-      0: { cellWidth: 8, halign: 'center' },
-      1: { cellWidth: 16, fontStyle: 'bold' },
-      2: { cellWidth: 38 },
-      3: { cellWidth: 26 },
-      4: { cellWidth: 26 },
-      5: { cellWidth: 22, halign: 'right' },
-      6: { cellWidth: 20, halign: 'right' },
-      7: { cellWidth: 20, halign: 'right' },
-      8: { cellWidth: 23, halign: 'right', fontStyle: 'bold' },
-      9: { cellWidth: 18, halign: 'center' },
-      10: { cellWidth: 22, halign: 'right' },
-      11: { cellWidth: 22, halign: 'right' },
-      12: { cellWidth: 24 }
-    }
-  });
-
-  // Signatures on last page
-  const finalY = (doc as any).lastAutoTable?.finalY || 160;
-  const signY = Math.min(finalY + 12, pageHeight - 18);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(100, 116, 139);
-  doc.text(`Generated on ${new Date().toLocaleDateString()} — Verified and reconciled against official institutional payroll accounts.`, margin, signY);
-
-  doc.setDrawColor(148, 163, 184);
-  doc.setLineWidth(0.3);
-
-  doc.line(pageWidth - margin - 110, signY + 8, pageWidth - margin - 65, signY + 8);
-  doc.line(pageWidth - margin - 50, signY + 8, pageWidth - margin, signY + 8);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
-  doc.setTextColor(71, 85, 105);
-  doc.text('Accounts Incharge', pageWidth - margin - 87, signY + 12, { align: 'center' });
-  doc.text('Principal / Admin', pageWidth - margin - 25, signY + 12, { align: 'center' });
-
-  const fileName = `Entire_Staff_Overall_Payment_${month.replace(/\s+/g, '_')}.pdf`;
-  doc.save(fileName);
-  return doc;
+/** Honest legacy fallback: the staff member's own base salary, no invented adjustments. */
+export function legacySlipBreakdown(staff: StaffMember, monthLabel: string): SalarySlipBreakdown {
+  const base = staff.salary || 0;
+  const isPaid = staff.payStatus === 'Paid';
+  return {
+    staffId: staff.id,
+    monthLabel,
+    baseSalary: base,
+    allowances: 0,
+    bonus: 0,
+    deductions: 0,
+    gross: base,
+    netPayable: base,
+    totalPaid: isPaid ? base : 0,
+    outstanding: isPaid ? 0 : base,
+    isPaid,
+    lastPaidDate: staff.lastPaidDate,
+    paymentMethod: staff.paymentMethod,
+  };
 }
 
 // Generates Individual Overall Monthly Payment Payslips PDF (Single staff or Combined with Monthly Summary)
@@ -693,7 +473,8 @@ export function generateMonthlyIndividualSlipsCombinedPdf(
   staffList: StaffMember[],
   month: string,
   selectedStaffId?: string,
-  school: SchoolInfo = DEFAULT_SCHOOL
+  school: SchoolInfo = DEFAULT_SCHOOL,
+  breakdowns?: Map<string, SalarySlipBreakdown>
 ) {
   const targetList = selectedStaffId 
     ? staffList.filter(s => s.id === selectedStaffId)
@@ -711,27 +492,51 @@ export function generateMonthlyIndividualSlipsCombinedPdf(
   const pageHeight = 297;
   const margin = 14;
 
+  // The summary page below is shared by all templates and is hardcoded in
+  // the emerald/slate palette. Minimal Professional: strict-grayscale
+  // stand-ins so the whole combined PDF stays black & white. For the other
+  // templates these constants hold the exact original values — unchanged.
+  const isMP = getSalarySlipTheme().template === 'minimal-professional';
+  const sumSchoolColor: RgbColor = isMP ? [0, 0, 0] : [255, 255, 255];
+  const sumSubColor: RgbColor = isMP ? [110, 110, 110] : [148, 163, 184];
+  const sumTitleColor: RgbColor = isMP ? [0, 0, 0] : [52, 211, 153];
+  const kpiLabel1: RgbColor = isMP ? [110, 110, 110] : [100, 116, 139];
+  const kpiValue1: RgbColor = isMP ? [0, 0, 0] : [15, 23, 42];
+  const kpiLabel2: RgbColor = isMP ? [110, 110, 110] : [5, 150, 105];
+  const kpiValue2: RgbColor = isMP ? [0, 0, 0] : [6, 78, 59];
+  const kpiLabel3: RgbColor = isMP ? [110, 110, 110] : [220, 38, 38];
+  const kpiValue3: RgbColor = isMP ? [0, 0, 0] : [153, 27, 27];
+  const sumHeadFill: RgbColor = isMP ? [0, 0, 0] : [15, 23, 42];
+  const sumFootFill: RgbColor = isMP ? [0, 0, 0] : [30, 41, 59];
+
   // If multiple staff selected, first page is the Monthly Summary & Ledger
   if (!selectedStaffId && staffList.length > 1) {
-    // Header Banner
-    doc.setFillColor(15, 23, 42); // slate-900
-    doc.rect(0, 0, pageWidth, 26, 'F');
-    doc.setFillColor(16, 185, 129); // emerald-500
-    doc.rect(0, 25, pageWidth, 1.2, 'F');
+    // Header Banner (Minimal Professional: bordered black & white header,
+    // no filled banner or accent stripe)
+    if (isMP) {
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.5);
+      doc.rect(margin, 4, pageWidth - margin * 2, 20);
+    } else {
+      doc.setFillColor(15, 23, 42); // slate-900
+      doc.rect(0, 0, pageWidth, 26, 'F');
+      doc.setFillColor(16, 185, 129); // emerald-500
+      doc.rect(0, 25, pageWidth, 1.2, 'F');
+    }
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(13);
-    doc.setTextColor(255, 255, 255);
+    doc.setTextColor(...sumSchoolColor);
     doc.text(school.name.toUpperCase(), pageWidth / 2, 9, { align: 'center' });
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
-    doc.setTextColor(148, 163, 184);
-    doc.text(`${school.campus} • ${school.address} • Session: ${school.session}`, pageWidth / 2, 14.5, { align: 'center' });
+    doc.setTextColor(...sumSubColor);
+    doc.text(joinInfoParts([school.campus, school.address, school.session ? `Session: ${school.session}` : '']), pageWidth / 2, 14.5, { align: 'center' });
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
-    doc.setTextColor(52, 211, 153);
+    doc.setTextColor(...sumTitleColor);
     doc.text(`MONTHLY INDIVIDUAL PAYROLL LEDGER & SUM OF TOTALS — ${month.toUpperCase()}`, pageWidth / 2, 21.5, { align: 'center' });
 
     // Summary calculation
@@ -742,13 +547,16 @@ export function generateMonthlyIndividualSlipsCombinedPdf(
     let totalDue = 0;
 
     const rows = staffList.map((s, idx) => {
-      const base = s.salary || 0;
-      const allow = Math.round(base * 0.1);
-      const ded = Math.round(base * 0.05);
-      const net = base + allow - ded;
-      const status = s.payStatus || 'Paid';
-      const paid = status === 'Paid' ? net : (status === 'Pending' ? 0 : Math.round(net * 0.5));
-      const due = Math.max(0, net - paid);
+      // Real payroll figures when supplied; honest legacy fallback otherwise
+      // (base salary, zero adjustments — no invented 10% / 5% / half-paid).
+      const b = breakdowns?.get(s.id) || legacySlipBreakdown(s, month);
+      const base = b.baseSalary;
+      const allow = b.allowances + b.bonus;
+      const ded = b.deductions;
+      const net = b.netPayable;
+      const paid = b.totalPaid;
+      const due = b.outstanding;
+      const status = b.isPaid ? 'Paid' : paid > 0 ? 'Partial' : 'Pending';
 
       totalGross += (base + allow);
       totalDeductions += ded;
@@ -772,37 +580,55 @@ export function generateMonthlyIndividualSlipsCombinedPdf(
 
     // KPI Summary Cards
     const kWidth = (pageWidth - margin * 2 - 8) / 3;
-    doc.setFillColor(241, 245, 249);
-    doc.roundedRect(margin, 30, kWidth, 14, 1.5, 1.5, 'F');
+    if (isMP) {
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.4);
+      doc.roundedRect(margin, 30, kWidth, 14, 1.5, 1.5, 'S');
+    } else {
+      doc.setFillColor(241, 245, 249);
+      doc.roundedRect(margin, 30, kWidth, 14, 1.5, 1.5, 'F');
+    }
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
-    doc.setTextColor(100, 116, 139);
+    doc.setTextColor(...kpiLabel1);
     doc.text('TOTAL NET SALARY (SUM)', margin + 4, 34.5);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10.5);
-    doc.setTextColor(15, 23, 42);
+    doc.setTextColor(...kpiValue1);
     doc.text(`Rs. ${totalNet.toLocaleString()}`, margin + 4, 40.5);
 
-    doc.setFillColor(236, 253, 245);
-    doc.roundedRect(margin + kWidth + 4, 30, kWidth, 14, 1.5, 1.5, 'F');
+    if (isMP) {
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.4);
+      doc.roundedRect(margin + kWidth + 4, 30, kWidth, 14, 1.5, 1.5, 'S');
+    } else {
+      doc.setFillColor(236, 253, 245);
+      doc.roundedRect(margin + kWidth + 4, 30, kWidth, 14, 1.5, 1.5, 'F');
+    }
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
-    doc.setTextColor(5, 150, 105);
+    doc.setTextColor(...kpiLabel2);
     doc.text('TOTAL PAID (SUM)', margin + kWidth + 8, 34.5);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10.5);
-    doc.setTextColor(6, 78, 59);
+    doc.setTextColor(...kpiValue2);
     doc.text(`Rs. ${totalPaid.toLocaleString()}`, margin + kWidth + 8, 40.5);
 
-    doc.setFillColor(254, 242, 242);
-    doc.roundedRect(margin + (kWidth + 4) * 2, 30, kWidth, 14, 1.5, 1.5, 'F');
+    if (isMP) {
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.4);
+      doc.roundedRect(margin + (kWidth + 4) * 2, 30, kWidth, 14, 1.5, 1.5, 'S');
+    } else {
+      doc.setFillColor(254, 242, 242);
+      doc.roundedRect(margin + (kWidth + 4) * 2, 30, kWidth, 14, 1.5, 1.5, 'F');
+    }
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
-    doc.setTextColor(220, 38, 38);
+    doc.setTextColor(...kpiLabel3);
     doc.text('TOTAL BALANCE DUE (SUM)', margin + (kWidth + 4) * 2 + 4, 34.5);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10.5);
-    doc.setTextColor(153, 27, 27);
+    doc.setTextColor(...kpiValue3);
     doc.text(`Rs. ${totalDue.toLocaleString()}`, margin + (kWidth + 4) * 2 + 4, 40.5);
 
     autoTable(doc, {
@@ -824,13 +650,13 @@ export function generateMonthlyIndividualSlipsCombinedPdf(
         `Rs. ${totalDue.toLocaleString()}`
       ]],
       headStyles: {
-        fillColor: [15, 23, 42],
+        fillColor: sumHeadFill,
         textColor: [255, 255, 255],
         fontStyle: 'bold',
         fontSize: 7.5
       },
       footStyles: {
-        fillColor: [30, 41, 59],
+        fillColor: sumFootFill,
         textColor: [255, 255, 255],
         fontStyle: 'bold',
         fontSize: 7.5
@@ -844,7 +670,7 @@ export function generateMonthlyIndividualSlipsCombinedPdf(
     // Add subsequent pages for individual slips
     targetList.forEach((staff) => {
       doc.addPage('a4', 'portrait');
-      renderSinglePayslipSheet(doc, staff, month, school, pageWidth, margin);
+      renderSinglePayslipSheet(doc, staff, month, school, pageWidth, margin, breakdowns?.get(staff.id));
     });
   } else {
     // Single or individual selected
@@ -852,7 +678,7 @@ export function generateMonthlyIndividualSlipsCombinedPdf(
       if (index > 0) {
         doc.addPage('a4', 'portrait');
       }
-      renderSinglePayslipSheet(doc, staff, month, school, pageWidth, margin);
+      renderSinglePayslipSheet(doc, staff, month, school, pageWidth, margin, breakdowns?.get(staff.id));
     });
   }
 
@@ -864,73 +690,100 @@ export function generateMonthlyIndividualSlipsCombinedPdf(
   return doc;
 }
 
-// Helper to render an individual payslip on the current page of doc
+// Helper to render an individual payslip on the current page of doc.
+// `breakdown` carries the REAL figures from the payroll record + payments
+// for payroll-covered months; without it the honest legacy fallback applies
+// (base salary, zero adjustments).
 function renderSinglePayslipSheet(
   doc: jsPDF,
   staff: StaffMember,
   month: string,
   school: SchoolInfo,
   pageWidth: number,
-  margin: number
+  margin: number,
+  breakdown?: SalarySlipBreakdown
 ) {
   const settings = getSchoolSettings();
-  const isMinimalClassic = settings.staffSalarySlipTemplate === 'minimal-classic';
-  const base = staff.salary || 0;
-  const allowances = Math.round(base * 0.1);
-  const deductions = Math.round(base * 0.05);
-  const net = base + allowances - deductions;
-  const isPaid = staff.payStatus === 'Paid';
-  const refNo = `SLP-${staff.id}-${month.substring(0, 3).toUpperCase()}-2026`;
+  // Shared salary-slip theme (Fix P1-2) — this renderer is where the
+  // per-template values originally came from; it now reads them from the
+  // same theme object the single-slip generator and previews consume.
+  const theme = getSalarySlipTheme(settings.staffSalarySlipTemplate);
+  const isMinimalClassic = theme.isMinimalClassic;
+
+  // Minimal Professional: strict-grayscale stand-ins for the hardcoded slate
+  // palette used in the body below. For the other two templates these
+  // constants hold the exact original values — their output is unchanged.
+  const isMP = theme.template === 'minimal-professional';
+  const labelColor: RgbColor = isMP ? [85, 85, 85] : [71, 85, 105];
+  const valueColor: RgbColor = isMP ? [0, 0, 0] : [15, 23, 42];
+  const mutedColor: RgbColor = isMP ? [110, 110, 110] : [100, 116, 139];
+  const faintColor: RgbColor = isMP ? [160, 160, 160] : [148, 163, 184];
+  const b = breakdown || legacySlipBreakdown(staff, month);
+  const base = b.baseSalary;
+  const allowances = b.allowances;
+  const bonus = b.bonus;
+  const deductions = b.deductions;
+  const net = b.netPayable;
+  const isPaid = b.isPaid;
+  const monthYear = (month.split(' ')[1] || String(new Date().getFullYear()));
+  const refNo = b.referenceNo || `SLP-${staff.id}-${month.substring(0, 3).toUpperCase()}-${monthYear}`;
 
   if (isMinimalClassic) {
-    doc.setDrawColor(0, 0, 0);
+    doc.setDrawColor(...theme.headerTitleColor);
     doc.setLineWidth(0.5);
     doc.rect(margin, 10, pageWidth - margin * 2, 22);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(14);
-    doc.setTextColor(0, 0, 0);
+    doc.setTextColor(...theme.headerSchoolColor);
     doc.text(school.name.toUpperCase(), pageWidth / 2, 18, { align: 'center' });
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8.5);
-    doc.text(`${school.campus} • ${school.address} • Ph: ${school.phone}`, pageWidth / 2, 23, { align: 'center' });
+    doc.setTextColor(...theme.headerSubColor);
+    doc.text(joinInfoParts([school.campus, school.address, school.phone ? `Ph: ${school.phone}` : '']), pageWidth / 2, 23, { align: 'center' });
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
-    doc.text(`MONTHLY SALARY PAYSLIP — ${month.toUpperCase()}`, pageWidth / 2, 29, { align: 'center' });
+    doc.setTextColor(...theme.headerTitleColor);
+    doc.text(`${theme.headerTitle} — ${month.toUpperCase()}`, pageWidth / 2, 29, { align: 'center' });
   } else {
     // Header Banner
-    doc.setFillColor(15, 23, 42); // slate-900
+    doc.setFillColor(...(theme.headerBannerFill as RgbColor));
     doc.rect(0, 0, pageWidth, 30, 'F');
 
     // Emerald accent stripe
-    doc.setFillColor(16, 185, 129); // emerald-500
-    doc.rect(0, 29, pageWidth, 1.5, 'F');
+    if (theme.headerAccentStripe) {
+      doc.setFillColor(...theme.headerAccentStripe);
+      doc.rect(0, 29, pageWidth, 1.5, 'F');
+    }
 
     // School Header
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(14);
-    doc.setTextColor(255, 255, 255);
+    doc.setTextColor(...theme.headerSchoolColor);
     doc.text(school.name.toUpperCase(), pageWidth / 2, 10, { align: 'center' });
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8.5);
-    doc.setTextColor(148, 163, 184);
-    doc.text(`${school.campus} • ${school.address} • Ph: ${school.phone}`, pageWidth / 2, 16, { align: 'center' });
+    doc.setTextColor(...theme.headerSubColor);
+    doc.text(joinInfoParts([school.campus, school.address, school.phone ? `Ph: ${school.phone}` : '']), pageWidth / 2, 16, { align: 'center' });
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10.5);
-    doc.setTextColor(52, 211, 153);
-    doc.text(`STAFF SALARY PAYSLIP — ${month.toUpperCase()}`, pageWidth / 2, 23.5, { align: 'center' });
+    doc.setTextColor(...theme.headerTitleColor);
+    doc.text(`${theme.headerTitle} — ${month.toUpperCase()}`, pageWidth / 2, 23.5, { align: 'center' });
   }
 
-  // Employee Information Box
-  doc.setFillColor(248, 250, 252);
-  doc.roundedRect(margin, 36, pageWidth - margin * 2, 32, 2, 2, 'F');
-  doc.setDrawColor(isMinimalClassic ? 0 : 226, isMinimalClassic ? 0 : 232, isMinimalClassic ? 0 : 240);
+  // Employee Information Box (Minimal Professional: no fill at all — the
+  // stroked outline drawn right after carries the box)
+  if (!isMP) {
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(margin, 36, pageWidth - margin * 2, 32, 2, 2, 'F');
+  }
+  doc.setDrawColor(...theme.infoBoxBorder);
   doc.roundedRect(margin, 36, pageWidth - margin * 2, 32, 2, 2, 'S');
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
-  doc.setTextColor(71, 85, 105);
+  doc.setTextColor(...labelColor);
 
   // Column 1
   doc.text('Employee ID:', margin + 5, 43);
@@ -939,7 +792,7 @@ function renderSinglePayslipSheet(
   doc.text('Designation / Role:', margin + 5, 61);
 
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(15, 23, 42);
+  doc.setTextColor(...valueColor);
   doc.text(staff.id, margin + 42, 43);
   doc.text(staff.name, margin + 42, 49);
   doc.text(staff.fatherName || '-', margin + 42, 55);
@@ -948,35 +801,41 @@ function renderSinglePayslipSheet(
   // Column 2
   const col2X = margin + 95;
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(71, 85, 105);
+  doc.setTextColor(...labelColor);
   doc.text('Department:', col2X, 43);
   doc.text('Slip Reference No:', col2X, 49);
   doc.text('Disbursement Date:', col2X, 55);
   doc.text('Payment Status:', col2X, 61);
 
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(15, 23, 42);
+  doc.setTextColor(...valueColor);
   doc.text(staff.department, col2X + 36, 43);
   doc.text(refNo, col2X + 36, 49);
-  doc.text(staff.lastPaidDate || '2026-09-01', col2X + 36, 55);
+  doc.text(b.lastPaidDate || '—', col2X + 36, 55);
 
+  const statusText = isPaid ? 'PAID (CONFIRMED)' : b.totalPaid > 0 ? 'PARTIALLY PAID' : 'PENDING / DUE';
   doc.setFont('helvetica', 'bold');
   if (isPaid) {
-    doc.setTextColor(isMinimalClassic ? 0 : 5, isMinimalClassic ? 0 : 150, isMinimalClassic ? 0 : 105);
-    doc.text('PAID (CONFIRMED)', col2X + 36, 61);
+    doc.setTextColor(...theme.statusPaidColor);
+    doc.text(statusText, col2X + 36, 61);
+  } else if (theme.template === 'minimal-professional') {
+    // Strict black & white: no red pending status for this template. The
+    // other two templates keep the red below, unchanged.
+    doc.setTextColor(0, 0, 0);
+    doc.text(statusText, col2X + 36, 61);
   } else {
     doc.setTextColor(220, 38, 38);
-    doc.text('PENDING / DUE', col2X + 36, 61);
+    doc.text(statusText, col2X + 36, 61);
   }
 
   // Earnings & Deductions Table
   const tableData = [
-    ['Basic Monthly Salary', `Rs. ${base.toLocaleString()}`, 'Income Tax / Withholding', `Rs. ${deductions.toLocaleString()}`],
-    ['Allowances (Medical & Transport)', `Rs. ${allowances.toLocaleString()}`, 'Absence / Leave Deductions', 'Rs. 0'],
-    ['Special Performance Bonus', 'Rs. 0', 'Provident Fund (PF)', 'Rs. 0'],
+    ['Basic Monthly Salary', `Rs. ${base.toLocaleString()}`, 'Deductions', `Rs. ${deductions.toLocaleString()}`],
+    ['Allowances (Medical & Transport)', `Rs. ${allowances.toLocaleString()}`, '', ''],
+    ['Special Performance Bonus', `Rs. ${bonus.toLocaleString()}`, '', ''],
     [
       { content: 'Gross Monthly Earnings', styles: { fontStyle: 'bold' } },
-      { content: `Rs. ${(base + allowances).toLocaleString()}`, styles: { fontStyle: 'bold' } },
+      { content: `Rs. ${(base + allowances + bonus).toLocaleString()}`, styles: { fontStyle: 'bold' } },
       { content: 'Total Deductions', styles: { fontStyle: 'bold' } },
       { content: `Rs. ${deductions.toLocaleString()}`, styles: { fontStyle: 'bold' } }
     ]
@@ -988,7 +847,7 @@ function renderSinglePayslipSheet(
     theme: 'grid',
     head: [['Earnings & Allowances', 'Amount', 'Deductions', 'Amount']],
     headStyles: {
-      fillColor: isMinimalClassic ? [0, 0, 0] : [30, 41, 59],
+      fillColor: theme.tableHeadFill,
       textColor: [255, 255, 255],
       fontStyle: 'bold',
       fontSize: 8.5
@@ -1002,56 +861,58 @@ function renderSinglePayslipSheet(
 
   const finalY = (doc as any).lastAutoTable?.finalY || 120;
 
-  // Net Payable Highlight Box
+  // Amount Paid Highlight Box (net payable / outstanding are context below)
   if (isMinimalClassic) {
-    doc.setFillColor(241, 245, 249);
-    doc.setDrawColor(0, 0, 0);
+    doc.setFillColor(...theme.netBoxFill);
+    doc.setDrawColor(...(theme.netBoxBorder as RgbColor));
     doc.setLineWidth(0.5);
     doc.rect(margin, finalY + 5, pageWidth - margin * 2, 14, 'FD');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10.5);
-    doc.setTextColor(0, 0, 0);
-    doc.text('NET SALARY PAYABLE:', margin + 6, finalY + 14);
+    doc.setTextColor(...theme.netTextColor);
+    doc.text('AMOUNT PAID:', margin + 6, finalY + 14);
     doc.setFontSize(13);
-    doc.text(`Rs. ${net.toLocaleString()}`, pageWidth - margin - 6, finalY + 14, { align: 'right' });
+    doc.text(`Rs. ${b.totalPaid.toLocaleString()}`, pageWidth - margin - 6, finalY + 14, { align: 'right' });
   } else {
-    doc.setFillColor(16, 185, 129); // emerald-500
+    doc.setFillColor(...theme.netBoxFill);
     doc.roundedRect(margin, finalY + 5, pageWidth - margin * 2, 14, 2, 2, 'F');
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10.5);
-    doc.setTextColor(255, 255, 255);
-    doc.text('NET SALARY PAYABLE:', margin + 6, finalY + 14);
+    doc.setTextColor(...theme.netTextColor);
+    doc.text('AMOUNT PAID:', margin + 6, finalY + 14);
 
     doc.setFontSize(13);
-    doc.text(`Rs. ${net.toLocaleString()}`, pageWidth - margin - 6, finalY + 14, { align: 'right' });
+    doc.text(`Rs. ${b.totalPaid.toLocaleString()}`, pageWidth - margin - 6, finalY + 14, { align: 'right' });
   }
 
-  // Bank Account & Notes
+  // Bank Account & Notes — the highlight box above foregrounds the AMOUNT
+  // PAID; net payable and the outstanding balance stay visible here as
+  // clearly labeled context figures.
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
-  doc.setTextColor(100, 116, 139);
-  doc.text(`Disbursed to Employee via ${staff.paymentMethod || 'Bank Transfer'}. Account: ${staff.bankAccount || 'Verified On File'}`, margin, finalY + 27);
-  doc.text(`Remarks: Regular monthly salary disbursement for ${month}.`, margin, finalY + 32);
+  doc.setTextColor(...mutedColor);
+  doc.text(`Net Salary Payable: Rs. ${net.toLocaleString()} · Outstanding Balance: Rs. ${b.outstanding.toLocaleString()} (salary for ${month}).`, margin, finalY + 27);
+  doc.text(`Disbursed to Employee via ${b.paymentMethod || staff.paymentMethod || '—'}. Account: ${staff.bankAccount || 'Verified On File'}`, margin, finalY + 32);
 
   // Signatures
   const signY = finalY + 52;
-  doc.setDrawColor(148, 163, 184);
+  doc.setDrawColor(...faintColor);
   doc.setLineWidth(0.4);
   doc.line(margin + 5, signY, margin + 50, signY);
   doc.line(pageWidth - margin - 50, signY, pageWidth - margin - 5, signY);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
-  doc.setTextColor(71, 85, 105);
+  doc.setTextColor(...labelColor);
   doc.text('Accounts Incharge / Bursar', margin + 27, signY + 5, { align: 'center' });
   doc.text('Employee Signature', pageWidth - margin - 27, signY + 5, { align: 'center' });
 
   // Footer Note
   doc.setFont('helvetica', 'italic');
   doc.setFontSize(7);
-  doc.setTextColor(148, 163, 184);
-  doc.text('This is an official computer-generated salary slip verified by Schoollee Academic Management System.', pageWidth / 2, signY + 14, { align: 'center' });
+  doc.setTextColor(...faintColor);
+  doc.text('This is an official computer-generated salary slip verified by SchoolEx.', pageWidth / 2, signY + 14, { align: 'center' });
 }
 
 // Generates the official Payment Summary Receipt PDF matching the reference design
@@ -1083,13 +944,13 @@ export function generatePaymentSummaryReceiptPdf(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(255, 255, 255);
-  doc.text(school.name || 'Demo School Schooliee Pakistan', margin + 8, margin + 12);
+  doc.text(school.name, margin + 8, margin + 12);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(148, 163, 184);
   doc.text(`Salary Slip — ${monthNumber} ${year}`, margin + 8, margin + 18);
-  doc.text(`${school.campus} • Tel: ${school.phone}`, margin + 8, margin + 24);
+  doc.text(joinInfoParts([school.campus, school.phone ? `Tel: ${school.phone}` : '']), margin + 8, margin + 24);
 
   // Right side badge in header: PAID & Date
   doc.setFillColor(14, 46, 33);
@@ -1209,7 +1070,7 @@ export function generatePaymentSummaryReceiptPdf(
         doc.setFont('helvetica', 'italic');
         doc.setFontSize(7);
         doc.setTextColor(148, 163, 184);
-        doc.text('Official Disbursement Record • Schoollee Academic Management System', pageWidth / 2, currentY + 23, { align: 'center' });
+        doc.text('Official Disbursement Record • SchoolEx', pageWidth / 2, currentY + 23, { align: 'center' });
       }
     }
   });

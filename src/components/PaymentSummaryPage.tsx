@@ -110,7 +110,7 @@ export const PaymentSummaryPage: React.FC<PaymentSummaryPageProps> = ({
           <button
             type="button"
             onClick={onBackToPayStaff}
-            className="px-3 py-2 rounded-lg bg-[#141c2b] hover:bg-[#1c273c] border border-[#233149] text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="px-3 py-2 rounded-lg bg-surface-21 hover:bg-[#1c273c] border border-edge-26 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Back to Pay Staff</span>
@@ -120,7 +120,7 @@ export const PaymentSummaryPage: React.FC<PaymentSummaryPageProps> = ({
           <button
             type="button"
             onClick={handlePrintReceipt}
-            className="p-2 rounded-lg bg-[#141c2b] hover:bg-[#1c273c] border border-[#233149] text-slate-300 hover:text-white transition-colors cursor-pointer"
+            className="p-2 rounded-lg bg-surface-21 hover:bg-[#1c273c] border border-edge-26 text-slate-300 hover:text-white transition-colors cursor-pointer"
             title="Print Receipt"
             id="btn-print-receipt"
           >
@@ -132,7 +132,7 @@ export const PaymentSummaryPage: React.FC<PaymentSummaryPageProps> = ({
             type="button"
             onClick={handleDownloadReceipt}
             disabled={isGeneratingPdf}
-            className="px-4 py-2 rounded-lg bg-[#2563eb] hover:bg-blue-600 active:bg-blue-700 text-white text-xs font-semibold flex items-center gap-2 shadow-lg shadow-blue-900/30 cursor-pointer transition-all disabled:opacity-50"
+            className="px-4 py-2 rounded-lg bg-accent hover:bg-blue-600 active:bg-blue-700 text-white text-xs font-semibold flex items-center gap-2 shadow-lg shadow-blue-900/30 cursor-pointer transition-all disabled:opacity-50"
             id="btn-download-receipt"
           >
             <CloudDownload className="w-4 h-4" />
@@ -144,8 +144,8 @@ export const PaymentSummaryPage: React.FC<PaymentSummaryPageProps> = ({
       {/* ================= 3 TOP METRIC CARDS ================= */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         {/* Card 1: Total Salary Paid */}
-        <div className="bg-[#101726] border border-[#1b2537] rounded-xl p-4 flex items-center gap-4 shadow-sm">
-          <div className="w-12 h-12 rounded-xl bg-[#0e2a1e] border border-[#164e35] flex items-center justify-center text-[#10b981] flex-shrink-0">
+        <div className="bg-surface-13 border border-edge-4 rounded-xl p-4 flex items-center gap-4 shadow-sm">
+          <div className="w-12 h-12 rounded-xl bg-[#0e2a1e] border border-[#164e35] flex items-center justify-center text-success flex-shrink-0">
             <Wallet className="w-5 h-5" />
           </div>
           <div>
@@ -159,7 +159,7 @@ export const PaymentSummaryPage: React.FC<PaymentSummaryPageProps> = ({
         </div>
 
         {/* Card 2: Staff Paid */}
-        <div className="bg-[#101726] border border-[#1b2537] rounded-xl p-4 flex items-center gap-4 shadow-sm">
+        <div className="bg-surface-13 border border-edge-4 rounded-xl p-4 flex items-center gap-4 shadow-sm">
           <div className="w-12 h-12 rounded-xl bg-[#0c2340] border border-[#1a3f6d] flex items-center justify-center text-[#38bdf8] flex-shrink-0">
             <Users className="w-5 h-5" />
           </div>
@@ -174,7 +174,7 @@ export const PaymentSummaryPage: React.FC<PaymentSummaryPageProps> = ({
         </div>
 
         {/* Card 3: Payment Date */}
-        <div className="bg-[#101726] border border-[#1b2537] rounded-xl p-4 flex items-center gap-4 shadow-sm">
+        <div className="bg-surface-13 border border-edge-4 rounded-xl p-4 flex items-center gap-4 shadow-sm">
           <div className="w-12 h-12 rounded-xl bg-[#092b30] border border-[#125059] flex items-center justify-center text-[#06b6d4] flex-shrink-0">
             <Calendar className="w-5 h-5" />
           </div>
@@ -192,7 +192,7 @@ export const PaymentSummaryPage: React.FC<PaymentSummaryPageProps> = ({
       {/* ================= MAIN CONTAINER CARD WITH LOGO, HEADER & TABLE ================= */}
       <div className="bg-[#101622] border border-[#1b2536] rounded-2xl overflow-hidden shadow-xl print:border-none print:shadow-none print:bg-white print:text-black">
         {/* Card Header */}
-        <div className="bg-[#131b28] border-b border-[#1b2638] px-6 py-4 flex items-center justify-between gap-4">
+        <div className="bg-surface-18 border-b border-edge-6 px-6 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
             {/* Circular leaf/V logo */}
             <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center shadow-md flex-shrink-0 p-1">
@@ -211,7 +211,7 @@ export const PaymentSummaryPage: React.FC<PaymentSummaryPageProps> = ({
 
             <div>
               <h2 className="text-base sm:text-lg font-bold text-white tracking-tight leading-tight">
-                Demo School Schooliee Pakistan
+                {DEFAULT_SCHOOL.name}
               </h2>
               <div className="text-xs text-slate-400 mt-0.5 font-medium">
                 {salarySlipSubtitle}
@@ -257,7 +257,7 @@ export const PaymentSummaryPage: React.FC<PaymentSummaryPageProps> = ({
                 return (
                   <tr 
                     key={staff.id}
-                    className="hover:bg-[#141d2d] transition-colors group"
+                    className="hover:bg-surface-26 transition-colors group"
                   >
                     {/* ID */}
                     <td className="py-3.5 px-5 text-slate-400 font-mono">
@@ -290,7 +290,7 @@ export const PaymentSummaryPage: React.FC<PaymentSummaryPageProps> = ({
 
                     {/* Payment (Amber badge for Cash/Bank) */}
                     <td className="py-3.5 px-5">
-                      <span className="inline-block px-2.5 py-0.5 rounded-md bg-[#332200] text-[#f59e0b] border border-[#593e0b] font-semibold text-xs">
+                      <span className="inline-block px-2.5 py-0.5 rounded-md bg-[#332200] text-warning border border-[#593e0b] font-semibold text-xs">
                         {paymentType}
                       </span>
                     </td>
@@ -323,7 +323,7 @@ export const PaymentSummaryPage: React.FC<PaymentSummaryPageProps> = ({
         </div>
 
         {/* Footer info bar */}
-        <div className="bg-[#111724] border-t border-[#1b2638] px-6 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
+        <div className="bg-surface-12 border-t border-edge-6 px-6 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
           <div>
             Showing <strong className="text-white">{summaryData.paidStaff.length}</strong> paid staff records for {summaryData.month} {summaryData.year}
           </div>

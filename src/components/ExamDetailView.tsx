@@ -29,7 +29,9 @@ import {
 import { Exam, ExamSubject, ExamGradingTier, StudentMarkEntry, calculateGrade, saveStoredExams, getStoredExams } from '../utils/examStore';
 import { Student, ClassInfo } from '../types';
 import { SchoolSettings } from '../utils/settingsHelper';
+import { findClassByName, studentsInClassSection } from '../utils/classExportHelper';
 import { ExamDetailExportModal, ExamExportType } from './ExamDetailExportModal';
+import { localISODate, parseSubjectStartDate } from '../utils/dates';
 import { RollNumberSlipsModal } from './RollNumberSlipsModal';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
 
@@ -100,13 +102,17 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
     exam.subjects.reduce((acc, sub) => ({ ...acc, [sub.id]: sub.totalMarks || 100 }), {})
   );
 
+  // Enrolled students for this exam — the shared class+section rule
+  // (Fix P1-4): classId-first class matching (trimmed name fallback) and
+  // EXACT section matching. The old inline predicate treated a recorded
+  // section 'A' as a wildcard matching every section of the class.
+  const examClassInfo = findClassByName(classes, exam.class);
+  const enrolledStudents = studentsInClassSection(students || [], examClassInfo ?? exam.class, exam.section);
+
   // Student marks input state for Student Marks tab
   const [editableMarks, setEditableMarks] = useState<Record<string, Record<string, number | string>>>(() => {
     const initial: Record<string, Record<string, number | string>> = {};
-    const relevantStudents = (students || []).filter(
-      s => s.class && s.class.toLowerCase() === exam.class.toLowerCase() &&
-           (!exam.section || s.section === exam.section || exam.section === 'A')
-    );
+    const relevantStudents = enrolledStudents;
     const list = relevantStudents.length > 0 
       ? relevantStudents 
       : (Object.values(exam.studentMarks) as any[]).map(sm => ({
@@ -129,11 +135,6 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
     return initial;
   });
 
-  // Filter students for this class & section
-  const enrolledStudents = (students || []).filter(
-    s => s.class && s.class.toLowerCase() === exam.class.toLowerCase() &&
-         (!exam.section || s.section === exam.section || exam.section === 'A')
-  );
   const activeStudentList = enrolledStudents.length > 0 
     ? enrolledStudents 
     : Object.keys(exam.studentMarks).length > 0
@@ -524,7 +525,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
       />
 
       {/* Top Banner matching reference image */}
-      <div className="p-5 sm:p-6 bg-[#0e1626] border border-[#1e2d45] rounded-2xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="p-5 sm:p-6 bg-surface-8 border border-edge-21 rounded-2xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-inner">
             <FileText className="w-6 h-6" />
@@ -546,7 +547,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
           <button
             type="button"
             onClick={() => onShowToast?.(`Exam details notification sent to ${exam.class} - ${exam.section}!`, 'info')}
-            className="px-3.5 py-2 bg-[#142033] hover:bg-[#1a2a44] border border-[#233550] text-slate-300 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+            className="px-3.5 py-2 bg-surface-33 hover:bg-[#1a2a44] border border-edge-36 text-slate-300 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm"
           >
             <Send className="w-3.5 h-3.5 text-blue-400" />
             <span>Send Exam Details</span>
@@ -557,7 +558,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
             <button
               type="button"
               onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
-              className="px-3.5 py-2 bg-[#142033] hover:bg-[#1a2a44] border border-[#233550] text-slate-300 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+              className="px-3.5 py-2 bg-surface-33 hover:bg-[#1a2a44] border border-edge-36 text-slate-300 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
             >
               <Download className="w-3.5 h-3.5 text-blue-400" />
               <span>Export</span>
@@ -624,8 +625,8 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
             title={hasSubmittedMarks ? 'Cannot edit exam: student marks have already been submitted' : 'Edit exam details and subjects'}
             className={`px-3.5 py-2 border rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm ${
               hasSubmittedMarks
-                ? 'bg-[#101928]/60 border-[#1a2840] text-slate-500 cursor-not-allowed opacity-60'
-                : 'bg-[#142033] hover:bg-[#1a2a44] border-[#233550] text-slate-300 hover:text-white cursor-pointer'
+                ? 'bg-[#101928]/60 border-edge-12 text-slate-500 cursor-not-allowed opacity-60'
+                : 'bg-surface-33 hover:bg-[#1a2a44] border-edge-36 text-slate-300 hover:text-white cursor-pointer'
             }`}
           >
             <Edit3 className="w-3.5 h-3.5" />
@@ -642,7 +643,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
           className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all border-b-2 cursor-pointer ${
             activeTab === 'details'
               ? 'text-blue-400 border-blue-500 bg-blue-500/10'
-              : 'text-slate-400 hover:text-slate-200 border-transparent hover:bg-[#142033]'
+              : 'text-slate-400 hover:text-slate-200 border-transparent hover:bg-surface-33'
           }`}
         >
           <FileText className="w-4 h-4" />
@@ -655,7 +656,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
           className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all border-b-2 cursor-pointer ${
             activeTab === 'marks'
               ? 'text-blue-400 border-blue-500 bg-blue-500/10'
-              : 'text-slate-400 hover:text-slate-200 border-transparent hover:bg-[#142033]'
+              : 'text-slate-400 hover:text-slate-200 border-transparent hover:bg-surface-33'
           }`}
         >
           <Edit3 className="w-4 h-4" />
@@ -668,7 +669,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
           className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all border-b-2 cursor-pointer ${
             activeTab === 'summary'
               ? 'text-blue-400 border-blue-500 bg-blue-500/10'
-              : 'text-slate-400 hover:text-slate-200 border-transparent hover:bg-[#142033]'
+              : 'text-slate-400 hover:text-slate-200 border-transparent hover:bg-surface-33'
           }`}
         >
           <BarChart3 className="w-4 h-4" />
@@ -681,7 +682,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
           className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all border-b-2 cursor-pointer ${
             activeTab === 'schedule'
               ? 'text-blue-400 border-blue-500 bg-blue-500/10'
-              : 'text-slate-400 hover:text-slate-200 border-transparent hover:bg-[#142033]'
+              : 'text-slate-400 hover:text-slate-200 border-transparent hover:bg-surface-33'
           }`}
         >
           <Calendar className="w-4 h-4" />
@@ -694,7 +695,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
         <div className="space-y-5">
           
           {/* Card 1: Exam Information */}
-          <div className="p-6 bg-[#0e1626] border border-[#1e2d45] rounded-2xl shadow-lg">
+          <div className="p-6 bg-surface-8 border border-edge-21 rounded-2xl shadow-lg">
             <h2 className="text-base font-bold text-white mb-4">Exam Information</h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -767,7 +768,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
           </div>
 
           {/* Card 2: Subject Total Marks (Image 1) */}
-          <div className="p-6 bg-[#0e1626] border border-[#1e2d45] rounded-2xl shadow-lg">
+          <div className="p-6 bg-surface-8 border border-edge-21 rounded-2xl shadow-lg">
             <div className="flex items-start justify-between mb-4">
               <div>
                 <h2 className="text-base font-bold text-white">Subject Total Marks</h2>
@@ -778,7 +779,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsEditingMarksModalOpen(true)}
-                className="px-4 py-2 bg-[#142033] hover:bg-[#1c2d48] border border-[#253956] text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="px-4 py-2 bg-surface-33 hover:bg-[#1c2d48] border border-[#253956] text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <Edit3 className="w-3.5 h-3.5 text-blue-400" />
                 Edit Marks
@@ -790,7 +791,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
               {exam.subjects.map(s => (
                 <div
                   key={s.id}
-                  className="p-3.5 bg-[#121c2e] border border-[#20304a] rounded-xl text-center flex flex-col items-center justify-center gap-1"
+                  className="p-3.5 bg-surface-22 border border-edge-25 rounded-xl text-center flex flex-col items-center justify-center gap-1"
                 >
                   <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">{s.name}</span>
                   <span className="text-base font-extrabold text-white">
@@ -811,7 +812,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
           </div>
 
           {/* Card 3: Grading Schema (Image 1) */}
-          <div className="p-6 bg-[#0e1626] border border-[#1e2d45] rounded-2xl shadow-lg">
+          <div className="p-6 bg-surface-8 border border-edge-21 rounded-2xl shadow-lg">
             <div className="flex items-start justify-between mb-4">
               <div>
                 <h2 className="text-base font-bold text-white">Grading Schema</h2>
@@ -822,7 +823,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsEditingGradingModalOpen(true)}
-                className="px-4 py-2 bg-[#142033] hover:bg-[#1c2d48] border border-[#253956] text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="px-4 py-2 bg-surface-33 hover:bg-[#1c2d48] border border-[#253956] text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <Edit3 className="w-3.5 h-3.5 text-blue-400" />
                 Edit Grading
@@ -848,11 +849,11 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
 
       {/* TAB 2: STUDENT MARKS ENTRY */}
       {activeTab === 'marks' && (
-        <div className="p-4 sm:p-5 bg-[#0e1626] border border-[#1e2d45] rounded-2xl shadow-sm space-y-4">
+        <div className="p-4 sm:p-5 bg-surface-8 border border-edge-21 rounded-2xl shadow-sm space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-2.5">
               <h2 className="text-sm sm:text-base font-bold text-white">Student Marks</h2>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#142033] text-slate-400 border border-[#22334e]">
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-surface-33 text-slate-400 border border-edge-32">
                 {displayStudentList.length} Students
               </span>
             </div>
@@ -870,21 +871,21 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
             )}
           </div>
 
-          <div className="overflow-x-auto border border-[#20304a] rounded-xl">
+          <div className="overflow-x-auto border border-edge-25 rounded-xl">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-[#121c2e] text-slate-300 font-semibold border-b border-[#20304a]">
-                  <th className="p-3 border-r border-[#20304a] w-12 text-center">#</th>
-                  <th className="p-3 border-r border-[#20304a] min-w-[150px]">Student Name</th>
+                <tr className="bg-surface-22 text-slate-300 font-semibold border-b border-edge-25">
+                  <th className="p-3 border-r border-edge-25 w-12 text-center">#</th>
+                  <th className="p-3 border-r border-edge-25 min-w-[150px]">Student Name</th>
                   {exam.subjects.map(s => (
-                    <th key={s.id} className="p-3 border-r border-[#20304a] text-center min-w-[85px]">
+                    <th key={s.id} className="p-3 border-r border-edge-25 text-center min-w-[85px]">
                       <span className="block font-bold text-white">{s.name}</span>
                       <span className="text-[10px] text-slate-400 font-normal">/ 100</span>
                     </th>
                   ))}
-                  <th className="p-3 border-r border-[#20304a] text-center min-w-[75px]">Total</th>
-                  <th className="p-3 border-r border-[#20304a] text-center min-w-[80px]">%</th>
-                  <th className="p-3 border-r border-[#20304a] text-center min-w-[65px]">Grade</th>
+                  <th className="p-3 border-r border-edge-25 text-center min-w-[75px]">Total</th>
+                  <th className="p-3 border-r border-edge-25 text-center min-w-[80px]">%</th>
+                  <th className="p-3 border-r border-edge-25 text-center min-w-[65px]">Grade</th>
                   <th className="p-3 text-center min-w-[80px]">Status</th>
                 </tr>
               </thead>
@@ -898,7 +899,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
 
                   return (
                     <tr key={st.id} className="hover:bg-[#142136] transition-colors">
-                      <td className="p-3 text-center border-r border-[#1e2d45]">
+                      <td className="p-3 text-center border-r border-edge-21">
                         {hasInput ? (
                           idx === 0 ? (
                             <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40 text-[11px]">
@@ -919,14 +920,14 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
                           <span className="text-slate-500 font-mono text-xs">{idx + 1}</span>
                         )}
                       </td>
-                      <td className="p-3 font-semibold text-white border-r border-[#1e2d45]">
+                      <td className="p-3 font-semibold text-white border-r border-edge-21">
                         {st.name}
                       </td>
                       {exam.subjects.map(sub => {
                         const rawVal = editableMarks[st.id]?.[sub.id];
                         const val = (rawVal === undefined || rawVal === null || rawVal === '') ? '' : rawVal;
                         return (
-                          <td key={sub.id} className="p-2 border-r border-[#1e2d45] text-center">
+                          <td key={sub.id} className="p-2 border-r border-edge-21 text-center">
                             <input
                               id={`mark-input-${idx}-${sub.id}`}
                               type="number"
@@ -953,18 +954,18 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
                               }}
                               onBlur={() => sortStudentsByDescendingPercentage(editableMarks)}
                               placeholder=""
-                              className="w-16 px-2 py-1.5 bg-[#0a111c] border border-[#233550] rounded-lg text-white font-bold text-center focus:outline-none focus:border-blue-500 text-xs transition-colors"
+                              className="w-16 px-2 py-1.5 bg-[#0a111c] border border-edge-36 rounded-lg text-white font-bold text-center focus:outline-none focus:border-blue-500 text-xs transition-colors"
                             />
                           </td>
                         );
                       })}
-                      <td className="p-3 text-center font-bold text-blue-400 border-r border-[#1e2d45]">
+                      <td className="p-3 text-center font-bold text-blue-400 border-r border-edge-21">
                         {hasInput ? totalObt : '-'}
                       </td>
-                      <td className="p-3 text-center font-bold text-slate-200 border-r border-[#1e2d45]">
+                      <td className="p-3 text-center font-bold text-slate-200 border-r border-edge-21">
                         {hasInput ? `${pct.toFixed(1)}%` : '-'}
                       </td>
-                      <td className="p-3 text-center border-r border-[#1e2d45]">
+                      <td className="p-3 text-center border-r border-edge-21">
                         {hasInput ? (
                           <span className={`px-2 py-0.5 rounded text-xs font-bold ${gradeObj.bgColor} ${gradeObj.textColor}`}>
                             {gradeObj.grade}
@@ -999,7 +1000,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
           {/* Top 6 KPI Metric Cards in a single row/grid */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
             {/* 1. Students Appeared */}
-            <div className="p-4 bg-[#0e1626] border border-[#1e2d45] rounded-2xl flex items-center gap-3.5 shadow-sm">
+            <div className="p-4 bg-surface-8 border border-edge-21 rounded-2xl flex items-center gap-3.5 shadow-sm">
               <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-sm">
                 <Users className="w-5 h-5" />
               </div>
@@ -1014,8 +1015,8 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
             </div>
 
             {/* 2. Class Average */}
-            <div className="p-4 bg-[#0e1626] border border-[#1e2d45] rounded-2xl flex items-center gap-3.5 shadow-sm">
-              <div className="w-10 h-10 rounded-full bg-[#10b981] flex items-center justify-center text-white shrink-0 shadow-sm">
+            <div className="p-4 bg-surface-8 border border-edge-21 rounded-2xl flex items-center gap-3.5 shadow-sm">
+              <div className="w-10 h-10 rounded-full bg-success flex items-center justify-center text-white shrink-0 shadow-sm">
                 <BarChart3 className="w-5 h-5" />
               </div>
               <div>
@@ -1029,7 +1030,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
             </div>
 
             {/* 3. Highest Score */}
-            <div className="p-4 bg-[#0e1626] border border-[#1e2d45] rounded-2xl flex items-center gap-3.5 shadow-sm">
+            <div className="p-4 bg-surface-8 border border-edge-21 rounded-2xl flex items-center gap-3.5 shadow-sm">
               <div className="w-10 h-10 rounded-full bg-amber-500 flex items-center justify-center text-white shrink-0 shadow-sm">
                 <Award className="w-5 h-5" />
               </div>
@@ -1044,7 +1045,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
             </div>
 
             {/* 4. Lowest Score */}
-            <div className="p-4 bg-[#0e1626] border border-[#1e2d45] rounded-2xl flex items-center gap-3.5 shadow-sm">
+            <div className="p-4 bg-surface-8 border border-edge-21 rounded-2xl flex items-center gap-3.5 shadow-sm">
               <div className="w-10 h-10 rounded-full bg-rose-500 flex items-center justify-center text-white shrink-0 shadow-sm">
                 <ArrowDown className="w-5 h-5" />
               </div>
@@ -1059,8 +1060,8 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
             </div>
 
             {/* 5. Passed */}
-            <div className="p-4 bg-[#0e1626] border border-[#1e2d45] rounded-2xl flex items-center gap-3.5 shadow-sm">
-              <div className="w-10 h-10 rounded-full bg-[#10b981] flex items-center justify-center text-white shrink-0 shadow-sm">
+            <div className="p-4 bg-surface-8 border border-edge-21 rounded-2xl flex items-center gap-3.5 shadow-sm">
+              <div className="w-10 h-10 rounded-full bg-success flex items-center justify-center text-white shrink-0 shadow-sm">
                 <Check className="w-5 h-5" />
               </div>
               <div>
@@ -1074,7 +1075,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
             </div>
 
             {/* 6. Failed */}
-            <div className="p-4 bg-[#0e1626] border border-[#1e2d45] rounded-2xl flex items-center gap-3.5 shadow-sm">
+            <div className="p-4 bg-surface-8 border border-edge-21 rounded-2xl flex items-center gap-3.5 shadow-sm">
               <div className="w-10 h-10 rounded-full bg-rose-600 flex items-center justify-center text-white shrink-0 shadow-sm">
                 <X className="w-5 h-5" />
               </div>
@@ -1090,7 +1091,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
           </div>
 
           {/* Grade Distribution */}
-          <div className="p-6 bg-[#0e1626] border border-[#1e2d45] rounded-2xl shadow-sm space-y-6">
+          <div className="p-6 bg-surface-8 border border-edge-21 rounded-2xl shadow-sm space-y-6">
             <h2 className="text-base font-bold text-white tracking-tight">Grade Distribution</h2>
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-y-7 gap-x-4">
               {resultsSummaryData.gradeTiers.map(tier => {
@@ -1106,12 +1107,12 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
           </div>
 
           {/* Subject-wise Performance */}
-          <div className="p-6 bg-[#0e1626] border border-[#1e2d45] rounded-2xl shadow-sm space-y-4">
+          <div className="p-6 bg-surface-8 border border-edge-21 rounded-2xl shadow-sm space-y-4">
             <h2 className="text-base font-bold text-white tracking-tight">Subject-wise Performance</h2>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-[#1c2a40] text-slate-400 font-semibold bg-[#121c2e]/60">
+                  <tr className="border-b border-[#1c2a40] text-slate-400 font-semibold bg-surface-22/60">
                     <th className="py-3 px-4">Subject</th>
                     <th className="py-3 px-4 text-center">Appeared</th>
                     <th className="py-3 px-4 text-center">Highest</th>
@@ -1122,7 +1123,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
                 </thead>
                 <tbody className="divide-y divide-[#18263c]">
                   {resultsSummaryData.subjectPerformance.map(sub => (
-                    <tr key={sub.id} className="hover:bg-[#121c2e]/40 transition-colors">
+                    <tr key={sub.id} className="hover:bg-surface-22/40 transition-colors">
                       <td className="py-3.5 px-4">
                         <span className="font-bold text-white uppercase block text-xs tracking-wide">{sub.name}</span>
                         <span className="text-[11px] text-slate-500 font-normal">Total {sub.totalMarks} marks</span>
@@ -1160,7 +1161,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
           </div>
 
           {/* Top Performers */}
-          <div className="p-6 bg-[#0e1626] border border-[#1e2d45] rounded-2xl shadow-sm space-y-4">
+          <div className="p-6 bg-surface-8 border border-edge-21 rounded-2xl shadow-sm space-y-4">
             <h2 className="text-base font-bold text-white tracking-tight">Top Performers</h2>
             {resultsSummaryData.topPerformers.length === 0 ? (
               <div className="p-6 text-center text-slate-500 text-xs bg-[#10192a] border border-[#1c2a40] rounded-xl">
@@ -1204,7 +1205,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
                     return (
                       <div 
                         key={perf.student.id} 
-                        className="p-3.5 sm:p-4 rounded-xl bg-[#121c2e] border border-[#1e2d45] text-white flex items-center justify-between shadow-sm hover:border-[#283e60] transition-all"
+                        className="p-3.5 sm:p-4 rounded-xl bg-surface-22 border border-edge-21 text-white flex items-center justify-between shadow-sm hover:border-[#283e60] transition-all"
                       >
                         <div className="flex items-center gap-3">
                           <div className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm">
@@ -1234,7 +1235,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
                   return (
                     <div 
                       key={perf.student.id} 
-                      className="p-3.5 sm:p-4 rounded-xl bg-[#121c2e] border border-[#1e2d45] text-white flex items-center justify-between shadow-sm hover:border-[#283e60] transition-all"
+                      className="p-3.5 sm:p-4 rounded-xl bg-surface-22 border border-edge-21 text-white flex items-center justify-between shadow-sm hover:border-[#283e60] transition-all"
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-7 h-7 rounded-full bg-[#1c2c46] text-slate-300 border border-[#2b4164] flex items-center justify-center font-bold text-xs shrink-0">
@@ -1268,7 +1269,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
 
       {/* TAB 4: SCHEDULE */}
       {activeTab === 'schedule' && (
-        <div className="p-6 bg-[#0e1626] border border-[#1e2d45] rounded-2xl shadow-lg space-y-4">
+        <div className="p-6 bg-surface-8 border border-edge-21 rounded-2xl shadow-lg space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-base font-bold text-white">Examination Timetable &amp; Schedule</h2>
@@ -1288,7 +1289,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
             {exam.subjects.map((sub, idx) => (
               <div
                 key={sub.id}
-                className="p-4 bg-[#121c2e] border border-[#20304a] rounded-xl flex items-start gap-4 hover:border-blue-500/30 transition-all"
+                className="p-4 bg-surface-22 border border-edge-25 rounded-xl flex items-start gap-4 hover:border-blue-500/30 transition-all"
               >
                 <div className="w-10 h-10 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-bold text-sm shrink-0">
                   {idx + 1}
@@ -1316,7 +1317,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
       {/* Modal: Edit Marks */}
       {isEditingMarksModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-[#0e1626] border border-[#223350] rounded-2xl p-6 shadow-2xl space-y-5">
+          <div className="w-full max-w-md bg-surface-8 border border-[#223350] rounded-2xl p-6 shadow-2xl space-y-5">
             <h3 className="text-base font-bold text-white">Edit Subject Total Marks</h3>
             <div className="space-y-3">
               {exam.subjects.map(s => (
@@ -1329,14 +1330,14 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
                       max="500"
                       value={tempSubjectMarks[s.id] || 100}
                       onChange={e => setTempSubjectMarks({ ...tempSubjectMarks, [s.id]: parseInt(e.target.value) || 100 })}
-                      className="w-24 px-3 py-1.5 bg-[#142033] border border-[#233550] rounded-xl text-white text-xs font-bold text-center"
+                      className="w-24 px-3 py-1.5 bg-surface-33 border border-edge-36 rounded-xl text-white text-xs font-bold text-center"
                     />
                     <span className="text-xs text-slate-400">Marks</span>
                   </div>
                 </div>
               ))}
             </div>
-            <div className="flex justify-end gap-2 pt-3 border-t border-[#1a2840]">
+            <div className="flex justify-end gap-2 pt-3 border-t border-edge-12">
               <button
                 type="button"
                 onClick={() => setIsEditingMarksModalOpen(false)}
@@ -1359,12 +1360,12 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
       {/* Modal: Edit Grading */}
       {isEditingGradingModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-[#0e1626] border border-[#223350] rounded-2xl p-6 shadow-2xl space-y-4">
+          <div className="w-full max-w-md bg-surface-8 border border-[#223350] rounded-2xl p-6 shadow-2xl space-y-4">
             <h3 className="text-base font-bold text-white">Edit Grading Schema</h3>
             <p className="text-xs text-slate-400">Modify threshold minimum percentages for each letter grade</p>
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
               {exam.gradingSchema.map((g, idx) => (
-                <div key={g.grade} className="flex items-center justify-between p-2 bg-[#121c2e] rounded-xl border border-[#20304a]">
+                <div key={g.grade} className="flex items-center justify-between p-2 bg-surface-22 rounded-xl border border-edge-25">
                   <span className="text-xs font-bold text-white">{g.grade}</span>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-slate-400">&gt;=</span>
@@ -1379,14 +1380,14 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
                         newSchema[idx] = { ...g, minPercentage: val };
                         onUpdateExam({ ...exam, gradingSchema: newSchema });
                       }}
-                      className="w-16 px-2 py-1 bg-[#0c1422] border border-[#233550] rounded-lg text-white text-xs font-bold text-center"
+                      className="w-16 px-2 py-1 bg-[#0c1422] border border-edge-36 rounded-lg text-white text-xs font-bold text-center"
                     />
                     <span className="text-xs text-slate-400">%</span>
                   </div>
                 </div>
               ))}
             </div>
-            <div className="flex justify-end pt-3 border-t border-[#1a2840]">
+            <div className="flex justify-end pt-3 border-t border-edge-12">
               <button
                 type="button"
                 onClick={() => setIsEditingGradingModalOpen(false)}
@@ -1402,8 +1403,8 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
       {/* Modal: Edit Exam Details */}
       {isEditExamModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-lg bg-[#0e1626] border border-[#223350] rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
-            <div className="flex items-center justify-between pb-3 border-b border-[#1a2840]">
+          <div className="w-full max-w-lg bg-surface-8 border border-[#223350] rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div className="flex items-center justify-between pb-3 border-b border-edge-12">
               <h3 className="text-base font-bold text-white">Edit Examination</h3>
               <button
                 type="button"
@@ -1420,7 +1421,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
                 type="text"
                 value={editExamName}
                 onChange={e => setEditExamName(e.target.value)}
-                className="w-full px-3.5 py-2 bg-[#142033] border border-[#233550] rounded-xl text-white text-xs font-semibold focus:outline-none focus:border-blue-500"
+                className="w-full px-3.5 py-2 bg-surface-33 border border-edge-36 rounded-xl text-white text-xs font-semibold focus:outline-none focus:border-blue-500"
               />
             </div>
 
@@ -1430,7 +1431,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
                 <select
                   value={editExamClass}
                   onChange={e => setEditExamClass(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#142033] border border-[#233550] rounded-xl text-white text-xs"
+                  className="w-full px-3 py-2 bg-surface-33 border border-edge-36 rounded-xl text-white text-xs"
                 >
                   {classes.map(c => (
                     <option key={c.id || c.name} value={c.name}>{c.name}</option>
@@ -1443,7 +1444,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
                 <select
                   value={editExamSection}
                   onChange={e => setEditExamSection(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#142033] border border-[#233550] rounded-xl text-white text-xs"
+                  className="w-full px-3 py-2 bg-surface-33 border border-edge-36 rounded-xl text-white text-xs"
                 >
                   <option value="A">Section A</option>
                   <option value="B">Section B</option>
@@ -1457,7 +1458,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
               <label className="block text-xs font-semibold text-slate-300 uppercase mb-1.5">Subjects &amp; Schedule</label>
               <div className="space-y-2 mb-2 max-h-48 overflow-y-auto pr-1">
                 {editExamSubjects.map(sub => (
-                  <div key={sub.id} className="p-2.5 bg-[#121c2e] border border-[#20304a] rounded-xl flex items-center justify-between gap-2">
+                  <div key={sub.id} className="p-2.5 bg-surface-22 border border-edge-25 rounded-xl flex items-center justify-between gap-2">
                     <span className="font-bold text-xs text-white uppercase">{sub.name}</span>
                     <div className="flex items-center gap-2">
                       <span className="text-[11px] text-slate-400">Max: {sub.totalMarks}</span>
@@ -1480,13 +1481,21 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
                   placeholder="New subject name..."
                   value={newSubName}
                   onChange={e => setNewSubName(e.target.value)}
-                  className="flex-1 px-3 py-1.5 bg-[#142033] border border-[#233550] rounded-xl text-white text-xs placeholder-slate-500"
+                  className="flex-1 px-3 py-1.5 bg-surface-33 border border-edge-36 rounded-xl text-white text-xs placeholder-slate-500"
                 />
                 <button
                   type="button"
                   onClick={() => {
                     const trimmed = newSubName.trim();
                     if (!trimmed) return;
+                    // Same add-time date rule as exam creation, in this
+                    // editor's ISO format: first subject -> tomorrow, each
+                    // next subject -> previous subject's date + 1 day.
+                    const prevSub = editExamSubjects.length > 0
+                      ? parseSubjectStartDate(editExamSubjects[editExamSubjects.length - 1].startDate)
+                      : null;
+                    const baseDate = prevSub ? prevSub.date : new Date();
+                    baseDate.setDate(baseDate.getDate() + 1);
                     setEditExamSubjects([
                       ...editExamSubjects,
                       {
@@ -1494,7 +1503,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
                         name: trimmed.toUpperCase(),
                         totalMarks: 100,
                         passingMarks: 33,
-                        startDate: new Date().toISOString().split('T')[0]
+                        startDate: localISODate(baseDate)
                       }
                     ]);
                     setNewSubName('');
@@ -1506,7 +1515,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-[#1a2840]">
+            <div className="flex justify-end gap-2 pt-3 border-t border-edge-12">
               <button
                 type="button"
                 onClick={() => setIsEditExamModalOpen(false)}
@@ -1534,6 +1543,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
           exportType={activeExportType}
           exam={exam}
           students={students}
+          classes={classes}
           schoolSettings={schoolSettings}
         />
       )}

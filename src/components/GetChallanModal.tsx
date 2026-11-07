@@ -172,7 +172,7 @@ export const GetChallanModal: React.FC<GetChallanModalProps> = ({
         id="modal-get-challan-minimal"
       >
         {/* Header - Strictly minimal */}
-        <div className="px-5 py-3.5 bg-[#121b2b] border-b border-[#1b283d] flex items-center justify-between">
+        <div className="px-5 py-3.5 bg-surface-20 border-b border-edge-11 flex items-center justify-between">
           <div className="flex items-center gap-2 font-bold text-sm text-white">
             <Receipt className="w-4 h-4 text-emerald-400" />
             <span>Get Challan</span>
@@ -180,7 +180,7 @@ export const GetChallanModal: React.FC<GetChallanModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-[#1a2538] transition-colors cursor-pointer"
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-surface-43 transition-colors cursor-pointer"
             id="btn-close-get-challan"
           >
             <X className="w-4 h-4" />
@@ -200,7 +200,7 @@ export const GetChallanModal: React.FC<GetChallanModalProps> = ({
               value={challanInput}
               onChange={(e) => setChallanInput(e.target.value)}
               placeholder="Enter Challan ID(s) separated by space..."
-              className="w-full px-3.5 py-2.5 rounded-xl bg-[#080d16] border border-[#22334b] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-mono transition-all"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-surface-1 border border-edge-29 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-mono transition-all"
               id="input-challan-ids"
             />
             {allChallans.length > 0 && !challanInput && (
@@ -232,7 +232,7 @@ export const GetChallanModal: React.FC<GetChallanModalProps> = ({
             </div>
 
             <div 
-              className="p-3 bg-[#080d16] border border-[#1b283d] rounded-xl min-h-[120px] max-h-[220px] overflow-y-auto divide-y divide-[#152236]"
+              className="p-3 bg-surface-1 border border-edge-11 rounded-xl min-h-[120px] max-h-[220px] overflow-y-auto divide-y divide-[#152236]"
               id="container-challan-members"
             >
               {enteredTokens.length === 0 ? (
@@ -271,7 +271,7 @@ export const GetChallanModal: React.FC<GetChallanModalProps> = ({
                 <select
                   value={method}
                   onChange={(e) => setMethod(e.target.value as PaymentMethod)}
-                  className="w-full px-2.5 py-2 rounded-xl bg-[#080d16] border border-[#22334b] text-xs text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full px-2.5 py-2 rounded-xl bg-surface-1 border border-edge-29 text-xs text-white focus:outline-none focus:border-emerald-500"
                 >
                   <option value="Cash">Cash</option>
                   <option value="Bank Transfer">Bank Transfer</option>
@@ -289,7 +289,7 @@ export const GetChallanModal: React.FC<GetChallanModalProps> = ({
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className="w-full px-2.5 py-2 rounded-xl bg-[#080d16] border border-[#22334b] text-xs text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full px-2.5 py-2 rounded-xl bg-surface-1 border border-edge-29 text-xs text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>
             </div>
@@ -310,7 +310,7 @@ export const GetChallanModal: React.FC<GetChallanModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-[#141d2c] hover:bg-[#1a263a] border border-[#23354e] text-slate-300 hover:text-white text-xs font-semibold cursor-pointer transition-all"
+              className="px-4 py-2 rounded-xl bg-[#141d2c] hover:bg-surface-44 border border-edge-35 text-slate-300 hover:text-white text-xs font-semibold cursor-pointer transition-all"
               id="btn-cancel-get-challan"
             >
               Cancel

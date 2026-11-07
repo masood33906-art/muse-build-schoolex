@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Upload, FileText, Check, Plus, Trash2, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { LedgerTransaction, LedgerDocument } from '../utils/ledgerStore';
+import { localISODate } from '../utils/dates';
 
 interface RecordTransactionModalProps {
   isOpen: boolean;
@@ -58,10 +59,15 @@ export const RecordTransactionModal: React.FC<RecordTransactionModalProps> = ({
   const [amount, setAmount] = useState<string>('');
   const [category, setCategory] = useState<string>('');
   const [description, setDescription] = useState<string>('');
-  const [date, setDate] = useState<string>(() => {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
-  });
+  const [date, setDate] = useState<string>(() => localISODate());
+
+  // Re-anchor the transaction date to today each time the modal opens (the
+  // modal stays mounted, so the mount-time initializer alone would go stale).
+  useEffect(() => {
+    if (isOpen) {
+      setDate(localISODate());
+    }
+  }, [isOpen]);
   const [paymentType, setPaymentType] = useState<LedgerTransaction['paymentType']>('Cash');
   const [note, setNote] = useState<string>('');
   const [uploadedDoc, setUploadedDoc] = useState<LedgerDocument | null>(null);
@@ -149,7 +155,7 @@ export const RecordTransactionModal: React.FC<RecordTransactionModalProps> = ({
         id={`modal-record-${activeType.toLowerCase()}`}
       >
         {/* Header */}
-        <div className="px-5 py-4 bg-[#121b2b] border-b border-[#1b283d] flex items-center justify-between">
+        <div className="px-5 py-4 bg-surface-20 border-b border-edge-11 flex items-center justify-between">
           <div className="flex items-center gap-2 font-bold text-sm text-white">
             <span className={`w-2.5 h-2.5 rounded-full ${isIncome ? 'bg-emerald-400' : 'bg-rose-400'}`} />
             <span>Record {isIncome ? 'Income' : 'Expense'}</span>
@@ -157,7 +163,7 @@ export const RecordTransactionModal: React.FC<RecordTransactionModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-[#1a2538] transition-colors cursor-pointer"
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-surface-43 transition-colors cursor-pointer"
             id="btn-close-record-transaction"
           >
             <X className="w-4 h-4" />
@@ -167,7 +173,7 @@ export const RecordTransactionModal: React.FC<RecordTransactionModalProps> = ({
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {/* Segmented Switcher: Income vs Expense */}
-          <div className="grid grid-cols-2 gap-2 p-1 bg-[#080d16] rounded-xl border border-[#1b2b42]">
+          <div className="grid grid-cols-2 gap-2 p-1 bg-surface-1 rounded-xl border border-edge-15">
             <button
               type="button"
               onClick={() => {
@@ -223,7 +229,7 @@ export const RecordTransactionModal: React.FC<RecordTransactionModalProps> = ({
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="e.g. 50000"
-                className="w-full px-3.5 py-2.5 rounded-xl bg-[#080d16] border border-[#22334b] text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono transition-all"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-surface-1 border border-edge-29 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono transition-all"
                 id="input-record-amount"
               />
               <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-mono">
@@ -243,7 +249,7 @@ export const RecordTransactionModal: React.FC<RecordTransactionModalProps> = ({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder={isIncome ? "e.g. Tuition Fee Collection or Donation" : "e.g. ELECTRICITY BILL, Lab Maintenance"}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-[#080d16] border border-[#22334b] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-surface-1 border border-edge-29 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
               id="input-record-description"
             />
           </div>
@@ -258,7 +264,7 @@ export const RecordTransactionModal: React.FC<RecordTransactionModalProps> = ({
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="flex-1 px-3 py-2 rounded-xl bg-[#080d16] border border-[#22334b] text-xs text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                className="flex-1 px-3 py-2 rounded-xl bg-surface-1 border border-edge-29 text-xs text-white focus:outline-none focus:border-blue-500 cursor-pointer"
                 id="select-record-category"
               >
                 <option value="">None / Custom</option>
@@ -271,7 +277,7 @@ export const RecordTransactionModal: React.FC<RecordTransactionModalProps> = ({
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 placeholder="Or custom category"
-                className="flex-1 px-3 py-2 rounded-xl bg-[#080d16] border border-[#22334b] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                className="flex-1 px-3 py-2 rounded-xl bg-surface-1 border border-edge-29 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                 id="input-record-custom-category"
               />
             </div>
@@ -287,7 +293,7 @@ export const RecordTransactionModal: React.FC<RecordTransactionModalProps> = ({
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-[#080d16] border border-[#22334b] text-xs text-white focus:outline-none focus:border-blue-500"
+                className="w-full px-3 py-2 rounded-xl bg-surface-1 border border-edge-29 text-xs text-white focus:outline-none focus:border-blue-500"
                 id="input-record-date"
               />
             </div>
@@ -298,7 +304,7 @@ export const RecordTransactionModal: React.FC<RecordTransactionModalProps> = ({
               <select
                 value={paymentType}
                 onChange={(e) => setPaymentType(e.target.value as any)}
-                className="w-full px-3 py-2 rounded-xl bg-[#080d16] border border-[#22334b] text-xs text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                className="w-full px-3 py-2 rounded-xl bg-surface-1 border border-edge-29 text-xs text-white focus:outline-none focus:border-blue-500 cursor-pointer"
                 id="select-record-payment-type"
               >
                 <option value="Cash">Cash</option>
@@ -321,7 +327,7 @@ export const RecordTransactionModal: React.FC<RecordTransactionModalProps> = ({
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="Internal note, voucher reference, etc."
-              className="w-full px-3.5 py-2 rounded-xl bg-[#080d16] border border-[#22334b] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+              className="w-full px-3.5 py-2 rounded-xl bg-surface-1 border border-edge-29 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
               id="input-record-note"
             />
           </div>
@@ -334,7 +340,7 @@ export const RecordTransactionModal: React.FC<RecordTransactionModalProps> = ({
             </label>
 
             {uploadedDoc ? (
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#142033] border border-[#233857] text-xs">
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-surface-33 border border-[#233857] text-xs">
                 <div className="flex items-center gap-2 text-white truncate max-w-[280px]">
                   <FileText className="w-4 h-4 text-blue-400 shrink-0" />
                   <span className="truncate">{uploadedDoc.name}</span>
@@ -349,7 +355,7 @@ export const RecordTransactionModal: React.FC<RecordTransactionModalProps> = ({
                 </button>
               </div>
             ) : (
-              <label className="flex flex-col items-center justify-center p-3 border border-dashed border-[#233857] hover:border-blue-500 rounded-xl bg-[#090f1a] cursor-pointer transition-colors group">
+              <label className="flex flex-col items-center justify-center p-3 border border-dashed border-[#233857] hover:border-blue-500 rounded-xl bg-surface-4 cursor-pointer transition-colors group">
                 <Upload className="w-4 h-4 text-slate-400 group-hover:text-blue-400 mb-1 transition-colors" />
                 <span className="text-[11px] text-slate-400 group-hover:text-slate-200">
                   Click to select or drag invoice file (PDF or Image)
@@ -370,7 +376,7 @@ export const RecordTransactionModal: React.FC<RecordTransactionModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-[#141d2c] hover:bg-[#1a263a] border border-[#23354e] text-slate-300 hover:text-white text-xs font-semibold cursor-pointer transition-all"
+              className="px-4 py-2 rounded-xl bg-[#141d2c] hover:bg-surface-44 border border-edge-35 text-slate-300 hover:text-white text-xs font-semibold cursor-pointer transition-all"
               id="btn-cancel-record"
             >
               Cancel

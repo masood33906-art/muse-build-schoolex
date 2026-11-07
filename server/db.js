@@ -33,6 +33,21 @@ export function openDb(dbPath) {
     prepare: (sql) => db.prepare(sql),
     close: () => db.close(),
     checkpoint: () => { try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); } catch {} },
+    // Run fn inside a single SQLite transaction: every write inside fn
+    // commits together or rolls back together. better-sqlite3 has a native
+    // transaction() helper; node:sqlite gets the manual BEGIN/COMMIT form.
+    tx: (fn) => {
+      if (driverName === 'better-sqlite3') return db.transaction(fn)();
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const out = fn();
+        db.exec('COMMIT');
+        return out;
+      } catch (e) {
+        try { db.exec('ROLLBACK'); } catch {}
+        throw e;
+      }
+    },
   };
   wrap.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;');
   migrate(wrap);
@@ -78,6 +93,40 @@ export const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance_records(date)`,
   `CREATE INDEX IF NOT EXISTS idx_payments_student ON payments(student_id)`,
   `CREATE INDEX IF NOT EXISTS idx_marks_exam ON exam_marks(exam_id)`,
+  // Pay Staff rebuild (PAYROLL_PLAN §3.1): real payroll tables. Money is
+  // INTEGER rupees. Derived figures (due/paid/outstanding/status) are
+  // computed from payroll_payments on every read, never stored.
+  `CREATE TABLE IF NOT EXISTS payroll_periods (
+     period_key TEXT PRIMARY KEY,
+     year INTEGER NOT NULL, month INTEGER NOT NULL,
+     label TEXT NOT NULL,
+     created_at TEXT NOT NULL, created_by TEXT,
+     UNIQUE(year, month))`,
+  `CREATE TABLE IF NOT EXISTS payroll_records (
+     id TEXT PRIMARY KEY,
+     period_key TEXT NOT NULL REFERENCES payroll_periods(period_key),
+     staff_id TEXT NOT NULL,
+     staff_name TEXT NOT NULL,
+     base_salary INTEGER NOT NULL,
+     origin TEXT NOT NULL DEFAULT 'generated',
+     created_at TEXT NOT NULL,
+     UNIQUE(period_key, staff_id))`,
+  `CREATE TABLE IF NOT EXISTS payroll_payments (
+     id TEXT PRIMARY KEY,
+     record_id TEXT NOT NULL REFERENCES payroll_records(id),
+     staff_id TEXT NOT NULL, period_key TEXT NOT NULL,
+     amount INTEGER NOT NULL,
+     allowances INTEGER NOT NULL DEFAULT 0,
+     bonus INTEGER NOT NULL DEFAULT 0,
+     deductions INTEGER NOT NULL DEFAULT 0,
+     method TEXT NOT NULL, paid_date TEXT NOT NULL,
+     remarks TEXT, created_by TEXT,
+     ledger_id TEXT,
+     source TEXT NOT NULL DEFAULT 'ui',
+     created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_payroll_payments_record ON payroll_payments(record_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_payroll_payments_staff ON payroll_payments(staff_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_payroll_records_staff ON payroll_records(staff_id)`,
 ];
 
 function migrate(db) {

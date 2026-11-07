@@ -12,7 +12,9 @@ import {
   CheckCircle2,
   Database,
   Download,
-  AlertTriangle
+  AlertTriangle,
+  Sparkles,
+  Wrench
 } from 'lucide-react';
 import { 
   SchoolSettings, 
@@ -24,8 +26,8 @@ import {
   compressImageFileToDataUrl
 } from '../utils/settingsHelper';
 import { getBillingStartMonth, setBillingStartMonth } from '../utils/studentFeeLedgerHelper';
-import { storageUsageBytes } from '../utils/storage';
 import { downloadBackup, restoreBackup } from '../utils/backup';
+import { loadDummyData, resetSystem } from '../utils/systemActions';
 import { Student, ClassInfo, StaffMember, AttendanceRecord } from '../types';
 import { TemplatesSubmodule } from './TemplatesSubmodule';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
@@ -69,21 +71,14 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   });
 
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
-  const [usageBytes, setUsageBytes] = useState<number>(() => storageUsageBytes());
   const [pendingRestoreFile, setPendingRestoreFile] = useState<File | null>(null);
   const [isRestoring, setIsRestoring] = useState<boolean>(false);
+  const [showDummyConfirm, setShowDummyConfirm] = useState<boolean>(false);
+  const [isLoadingDummy, setIsLoadingDummy] = useState<boolean>(false);
+  const [resetStep, setResetStep] = useState<0 | 1 | 2>(0);
+  const [isResetting, setIsResetting] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const restoreInputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    const refreshUsage = () => setUsageBytes(storageUsageBytes());
-    window.addEventListener('storage', refreshUsage);
-    window.addEventListener('backupCompleted', refreshUsage);
-    return () => {
-      window.removeEventListener('storage', refreshUsage);
-      window.removeEventListener('backupCompleted', refreshUsage);
-    };
-  }, [activeSection, settings]);
 
   useEffect(() => {
     if (initialSchoolSettings) {
@@ -175,12 +170,38 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
     onShowToast('Settings reset to defaults', 'info');
   };
 
-  const usedMB = usageBytes / (1024 * 1024);
-  const isHighUsage = usedMB > 3.5;
-  const usagePct = Math.min(100, (usedMB / 5) * 100);
+  const handleLoadDummyData = async () => {
+    setIsLoadingDummy(true);
+    try {
+      const result = await loadDummyData();
+      setShowDummyConfirm(false);
+      onShowToast(
+        `Dummy data loaded: ${result.loaded.students} students, ${result.loaded.staff} staff, ${result.loaded.classes} classes. Reloading…`,
+        'success'
+      );
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (err: any) {
+      setShowDummyConfirm(false);
+      onShowToast(err?.message || 'Could not load dummy data', 'error');
+    } finally {
+      setIsLoadingDummy(false);
+    }
+  };
+
+  const handleResetSystem = async () => {
+    setIsResetting(true);
+    try {
+      await resetSystem();
+      window.location.reload();
+    } catch (err: any) {
+      onShowToast(err?.message || 'System reset failed', 'error');
+      setIsResetting(false);
+      setResetStep(0);
+    }
+  };
 
   const renderDataBackupCard = () => (
-    <div className="p-5 rounded-2xl bg-[#0f1726] border border-[#1e2d45] space-y-4 max-w-5xl">
+    <div className="p-5 rounded-2xl bg-surface-10 border border-edge-21 space-y-4 max-w-5xl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl bg-blue-600/15 border border-blue-500/30 text-blue-400 flex items-center justify-center">
@@ -197,7 +218,6 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             type="button"
             onClick={async () => {
               await downloadBackup();
-              setUsageBytes(storageUsageBytes());
               onShowToast('Full backup downloaded', 'success');
             }}
             className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-2 cursor-pointer transition-all shadow-sm"
@@ -221,7 +241,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
           <button
             type="button"
             onClick={() => restoreInputRef.current?.click()}
-            className="px-4 py-2 rounded-xl bg-[#142033] hover:bg-[#1a2c47] border border-[#233550] text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all"
+            className="px-4 py-2 rounded-xl bg-surface-33 hover:bg-[#1a2c47] border border-edge-36 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all"
             id="btn-settings-restore-backup"
           >
             <Upload className="w-4 h-4 text-amber-400" />
@@ -230,27 +250,10 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
         </div>
       </div>
 
-      {/* Storage Usage Meter */}
-      <div className="pt-2 border-t border-[#1b273b] space-y-1.5">
-        <div className="flex items-center justify-between text-xs">
-          <span className={isHighUsage ? 'text-amber-300 font-semibold flex items-center gap-1.5' : 'text-slate-300 font-medium'}>
-            {isHighUsage && <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />}
-            Storage used: {usedMB.toFixed(2)} MB / ~5 MB
-          </span>
-          <span className="text-[11px] text-slate-400 font-mono">{usagePct.toFixed(0)}%</span>
-        </div>
-        <div className="w-full h-2 rounded-full bg-[#090d16] border border-[#1e2d45] overflow-hidden">
-          <div
-            className={`h-full transition-all ${isHighUsage ? 'bg-amber-400' : 'bg-blue-500'}`}
-            style={{ width: `${Math.max(2, usagePct)}%` }}
-          />
-        </div>
-      </div>
-
       {/* Restore Confirmation Dialog */}
       {pendingRestoreFile && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-xs">
-          <div className="bg-[#121927] border border-[#24344e] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+          <div className="bg-surface-17 border border-[#24344e] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <div className="flex items-center gap-2.5 text-amber-400">
               <AlertTriangle className="w-5 h-5 shrink-0" />
               <h3 className="text-base font-bold text-white">Restore from backup</h3>
@@ -263,7 +266,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                 type="button"
                 disabled={isRestoring}
                 onClick={() => setPendingRestoreFile(null)}
-                className="px-3.5 py-2 rounded-lg bg-[#182234] text-slate-300 text-xs font-semibold hover:bg-[#202d44] cursor-pointer"
+                className="px-3.5 py-2 rounded-lg bg-surface-41 text-slate-300 text-xs font-semibold hover:bg-surface-48 cursor-pointer"
               >
                 Cancel
               </button>
@@ -292,13 +295,183 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
     </div>
   );
 
+  const renderSystemCard = () => (
+    <div className="p-5 rounded-2xl bg-surface-10 border border-edge-21 space-y-4 max-w-5xl">
+      <div className="flex items-center gap-2.5">
+        <div className="w-9 h-9 rounded-xl bg-violet-600/15 border border-violet-500/30 text-violet-400 flex items-center justify-center">
+          <Wrench className="w-5 h-5" />
+        </div>
+        <div>
+          <h2 className="text-sm font-bold text-white uppercase tracking-wider">System</h2>
+          <p className="text-xs text-slate-400">Practice data for training, or a full factory reset of this installation</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* Load Dummy Data */}
+        <div className="p-4 rounded-xl bg-surface-2 border border-edge-21 space-y-2.5">
+          <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
+            <Sparkles className="w-4 h-4 text-violet-400" />
+            Load Dummy Data
+          </h3>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Fill the empty system with the sample school (117 students, 28 staff, 19 classes and related sample data) so you can practise safely. Only works while the system is empty.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowDummyConfirm(true)}
+            className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold flex items-center gap-2 cursor-pointer transition-all shadow-sm"
+            id="btn-settings-load-dummy-data"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>Load dummy data</span>
+          </button>
+        </div>
+
+        {/* Reset System */}
+        <div className="p-4 rounded-xl bg-rose-500/5 border border-rose-500/25 space-y-2.5">
+          <h3 className="text-xs font-bold text-rose-300 flex items-center gap-1.5">
+            <AlertTriangle className="w-4 h-4 text-rose-400" />
+            Reset System
+          </h3>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Permanently delete <span className="text-slate-200 font-semibold">everything</span> — students, staff, classes, fees, ledger, payroll and settings — and return to the empty first-run state.
+          </p>
+          <button
+            type="button"
+            onClick={() => setResetStep(1)}
+            className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-2 cursor-pointer transition-all shadow-sm"
+            id="btn-settings-reset-system"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>Reset system</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Load Dummy Data Confirmation Dialog */}
+      {showDummyConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-surface-17 border border-[#24344e] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-2.5 text-violet-400">
+              <Sparkles className="w-5 h-5 shrink-0" />
+              <h3 className="text-base font-bold text-white">Load dummy data</h3>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              This loads the sample school — <span className="text-white font-semibold">117 students, 28 staff and 19 classes</span>, with related sample fees and records — so you can practise with realistic data.
+            </p>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Dummy data can only be loaded into an <span className="text-white font-semibold">empty system</span>. If this system already holds data, nothing will be loaded and you will be told why.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#1c283d]">
+              <button
+                type="button"
+                disabled={isLoadingDummy}
+                onClick={() => setShowDummyConfirm(false)}
+                className="px-3.5 py-2 rounded-lg bg-surface-41 text-slate-300 text-xs font-semibold hover:bg-surface-48 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isLoadingDummy}
+                onClick={handleLoadDummyData}
+                className="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold cursor-pointer"
+              >
+                {isLoadingDummy ? 'Loading...' : 'Load dummy data'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset System Confirmation — Step 1 */}
+      {resetStep === 1 && (
+        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-surface-17 border border-rose-500/40 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-2.5 text-rose-400">
+              <AlertTriangle className="w-5 h-5 shrink-0" />
+              <h3 className="text-base font-bold text-white">Reset the whole system?</h3>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              This <span className="text-rose-300 font-semibold">permanently deletes all data</span> in this installation: every student, staff member, class, fee record, ledger entry, payroll record and all settings. The app returns to the empty state it had when first installed.
+            </p>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              This cannot be undone. If you might need this data again, download a full backup first.
+            </p>
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#1c283d]">
+              <button
+                type="button"
+                onClick={async () => { await downloadBackup(); onShowToast('Full backup downloaded', 'success'); }}
+                className="px-3.5 py-2 rounded-lg bg-surface-41 text-slate-200 text-xs font-semibold hover:bg-surface-48 flex items-center gap-1.5 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-400" />
+                <span>Download backup first</span>
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setResetStep(0)}
+                  className="px-3.5 py-2 rounded-lg bg-surface-41 text-slate-300 text-xs font-semibold hover:bg-surface-48 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setResetStep(2)}
+                  className="px-4 py-2 rounded-lg bg-rose-600/80 hover:bg-rose-600 text-white text-xs font-bold cursor-pointer"
+                >
+                  I understand, continue
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset System Confirmation — Step 2 (final) */}
+      {resetStep === 2 && (
+        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-surface-17 border border-rose-500/60 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-2.5 text-rose-400">
+              <AlertTriangle className="w-5 h-5 shrink-0" />
+              <h3 className="text-base font-bold text-white">Final confirmation</h3>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Are you absolutely sure? All school data will be erased <span className="text-rose-300 font-semibold">right now</span> and cannot be recovered unless you saved a backup.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#1c283d]">
+              <button
+                type="button"
+                disabled={isResetting}
+                onClick={() => setResetStep(1)}
+                className="px-3.5 py-2 rounded-lg bg-surface-41 text-slate-300 text-xs font-semibold hover:bg-surface-48 cursor-pointer"
+              >
+                Go back
+              </button>
+              <button
+                type="button"
+                disabled={isResetting}
+                onClick={handleResetSystem}
+                className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold cursor-pointer"
+                id="btn-settings-reset-system-confirm"
+              >
+                {isResetting ? 'Resetting...' : 'Yes, permanently reset everything'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   // =========================================================================
   // VIEW 1: THREE CLEAR BUTTON BOXES (Settings Home)
   // =========================================================================
   if (activeSection === 'menu') {
     return (
       <div className="space-y-6 animate-in fade-in duration-200">
-        <div className="pb-4 border-b border-[#1c2738]">
+        <div className="pb-4 border-b border-surface-45">
           <h1 className="text-2xl font-bold text-white tracking-tight">Settings</h1>
           <BreadcrumbTrail
             items={[
@@ -313,7 +486,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
           <button
             type="button"
             onClick={() => setActiveSection('school-profile')}
-            className="p-8 rounded-2xl bg-[#0f1726] border border-[#1e2d45] hover:border-blue-500/70 hover:bg-[#131d31] transition-all flex flex-col items-center justify-center gap-5 group cursor-pointer shadow-lg hover:shadow-blue-900/20 active:scale-[0.99] min-h-[220px]"
+            className="p-8 rounded-2xl bg-surface-10 border border-edge-21 hover:border-blue-500/70 hover:bg-[#131d31] transition-all flex flex-col items-center justify-center gap-5 group cursor-pointer shadow-lg hover:shadow-blue-900/20 active:scale-[0.99] min-h-[220px]"
           >
             <div className="w-16 h-16 rounded-2xl bg-blue-600/15 border border-blue-500/30 text-blue-400 flex items-center justify-center group-hover:scale-110 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-md">
               <Building2 className="w-8 h-8" />
@@ -327,7 +500,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
           <button
             type="button"
             onClick={() => setActiveSection('bank-challan')}
-            className="p-8 rounded-2xl bg-[#0f1726] border border-[#1e2d45] hover:border-emerald-500/70 hover:bg-[#131d31] transition-all flex flex-col items-center justify-center gap-5 group cursor-pointer shadow-lg hover:shadow-emerald-900/20 active:scale-[0.99] min-h-[220px]"
+            className="p-8 rounded-2xl bg-surface-10 border border-edge-21 hover:border-emerald-500/70 hover:bg-[#131d31] transition-all flex flex-col items-center justify-center gap-5 group cursor-pointer shadow-lg hover:shadow-emerald-900/20 active:scale-[0.99] min-h-[220px]"
           >
             <div className="w-16 h-16 rounded-2xl bg-emerald-600/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center group-hover:scale-110 group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-md">
               <Landmark className="w-8 h-8" />
@@ -341,7 +514,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
           <button
             type="button"
             onClick={() => setActiveSection('templates')}
-            className="p-8 rounded-2xl bg-[#0f1726] border border-[#1e2d45] hover:border-amber-500/70 hover:bg-[#131d31] transition-all flex flex-col items-center justify-center gap-5 group cursor-pointer shadow-lg hover:shadow-amber-900/20 active:scale-[0.99] min-h-[220px]"
+            className="p-8 rounded-2xl bg-surface-10 border border-edge-21 hover:border-amber-500/70 hover:bg-[#131d31] transition-all flex flex-col items-center justify-center gap-5 group cursor-pointer shadow-lg hover:shadow-amber-900/20 active:scale-[0.99] min-h-[220px]"
           >
             <div className="w-16 h-16 rounded-2xl bg-amber-600/15 border border-amber-500/30 text-amber-400 flex items-center justify-center group-hover:scale-110 group-hover:bg-amber-600 group-hover:text-white transition-all shadow-md">
               <FileText className="w-8 h-8" />
@@ -353,6 +526,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
         </div>
 
         {renderDataBackupCard()}
+        {renderSystemCard()}
       </div>
     );
   }
@@ -363,7 +537,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* Clean Top Navigation Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#1c2738]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-surface-45">
         <div>
           <h1 className="text-xl font-bold text-white tracking-tight">
             {activeSection === 'school-profile' && 'School Profile'}
@@ -391,7 +565,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             <button
               type="button"
               onClick={handleResetDefaults}
-              className="px-3.5 py-2 rounded-xl bg-[#141b29] hover:bg-[#1a2436] border border-[#223046] text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer"
+              className="px-3.5 py-2 rounded-xl bg-[#141b29] hover:bg-[#1a2436] border border-edge-24 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
               <span>Reset</span>
@@ -421,10 +595,10 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
       {activeSection === 'school-profile' && (
         <div className="space-y-6 max-w-4xl">
           {/* Logo Section */}
-          <div className="p-5 rounded-2xl bg-[#0f1726] border border-[#1e2d45] space-y-4">
+          <div className="p-5 rounded-2xl bg-surface-10 border border-edge-21 space-y-4">
             <h2 className="text-sm font-bold text-white uppercase tracking-wider">School Logo</h2>
             <div className="flex flex-col sm:flex-row items-center gap-5">
-              <div className="w-24 h-24 rounded-2xl bg-[#080d17] border border-[#233550] p-1 flex items-center justify-center shrink-0">
+              <div className="w-24 h-24 rounded-2xl bg-[#080d17] border border-edge-36 p-1 flex items-center justify-center shrink-0">
                 {settings.schoolLogo ? (
                   <img src={settings.schoolLogo} alt="Logo" className="w-full h-full object-contain rounded-xl" />
                 ) : (
@@ -449,7 +623,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="px-4 py-2 bg-[#142033] hover:bg-[#1a2c47] border border-[#233550] text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-2 cursor-pointer"
+                    className="px-4 py-2 bg-surface-33 hover:bg-[#1a2c47] border border-edge-36 text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-2 cursor-pointer"
                   >
                     <Upload className="w-4 h-4 text-blue-400" />
                     <span>Upload Logo Image</span>
@@ -475,7 +649,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                       key={preset.id}
                       type="button"
                       onClick={() => handleSelectPresetLogo(preset.svg)}
-                      className="w-7 h-7 rounded-lg bg-[#142033] border border-[#233550] hover:border-blue-500 p-0.5 cursor-pointer"
+                      className="w-7 h-7 rounded-lg bg-surface-33 border border-edge-36 hover:border-blue-500 p-0.5 cursor-pointer"
                       title={preset.name}
                     >
                       <img src={preset.svg} alt={preset.name} className="w-full h-full object-contain" />
@@ -487,7 +661,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
           </div>
 
           {/* School Details */}
-          <div className="p-5 rounded-2xl bg-[#0f1726] border border-[#1e2d45] space-y-4">
+          <div className="p-5 rounded-2xl bg-surface-10 border border-edge-21 space-y-4">
             <h2 className="text-sm font-bold text-white uppercase tracking-wider">Institution Details</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div className="sm:col-span-2">
@@ -496,7 +670,8 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.schoolName}
                   onChange={(e) => handleFieldChange('schoolName', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                  placeholder="Enter school name"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -506,7 +681,8 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.campusName}
                   onChange={(e) => handleFieldChange('campusName', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                  placeholder="e.g. Main Campus"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -516,7 +692,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.session}
                   onChange={(e) => handleFieldChange('session', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -526,7 +702,8 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.schoolPhone}
                   onChange={(e) => handleFieldChange('schoolPhone', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                  placeholder="e.g. +92 300 1234567"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -536,7 +713,8 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="email"
                   value={settings.schoolEmail}
                   onChange={(e) => handleFieldChange('schoolEmail', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                  placeholder="e.g. info@yourschool.edu.pk"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -546,7 +724,8 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.schoolAddress}
                   onChange={(e) => handleFieldChange('schoolAddress', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                  placeholder="Enter school address"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -556,7 +735,8 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.principalName}
                   onChange={(e) => handleFieldChange('principalName', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                  placeholder="Enter principal / administrator name"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -566,7 +746,8 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.registrationNumber}
                   onChange={(e) => handleFieldChange('registrationNumber', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                  placeholder="Enter registration / affiliation number"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -581,13 +762,14 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                     if (val) setBillingStartMonth(val);
                     setHasUnsavedChanges(true);
                   }}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white font-mono focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
             </div>
           </div>
 
           {renderDataBackupCard()}
+          {renderSystemCard()}
         </div>
       )}
 
@@ -596,7 +778,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
       {/* ===================================================================== */}
       {activeSection === 'bank-challan' && (
         <div className="space-y-6 max-w-4xl">
-          <div className="p-5 rounded-2xl bg-[#0f1726] border border-[#1e2d45] space-y-4">
+          <div className="p-5 rounded-2xl bg-surface-10 border border-edge-21 space-y-4">
             <h2 className="text-sm font-bold text-white uppercase tracking-wider">Bank Account Information</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div className="sm:col-span-2">
@@ -604,7 +786,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                 <select
                   value={isCustomBank ? 'Custom / Other Bank' : settings.bankName}
                   onChange={handleBankSelectChange}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 >
                   {PAKISTANI_BANKS.map((b) => (
                     <option key={b} value={b}>{b}</option>
@@ -619,7 +801,8 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                     type="text"
                     value={customBankName}
                     onChange={handleCustomBankNameChange}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                    placeholder="Enter bank name"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                   />
                 </div>
               )}
@@ -630,7 +813,8 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.accountNumber}
                   onChange={(e) => handleFieldChange('accountNumber', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white font-mono focus:outline-none focus:border-blue-500"
+                  placeholder="Enter account number"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -640,7 +824,8 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.accountTitle}
                   onChange={(e) => handleFieldChange('accountTitle', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                  placeholder="Enter account title"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -650,7 +835,8 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.branchName}
                   onChange={(e) => handleFieldChange('branchName', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                  placeholder="Enter branch name"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -660,13 +846,14 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.branchCode}
                   onChange={(e) => handleFieldChange('branchCode', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white font-mono focus:outline-none focus:border-blue-500"
+                  placeholder="Enter branch code"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
             </div>
           </div>
 
-          <div className="p-5 rounded-2xl bg-[#0f1726] border border-[#1e2d45] space-y-4">
+          <div className="p-5 rounded-2xl bg-surface-10 border border-edge-21 space-y-4">
             <h2 className="text-sm font-bold text-white uppercase tracking-wider">Challan Rules</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div>
@@ -680,7 +867,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                     if (val) setBillingStartMonth(val);
                     setHasUnsavedChanges(true);
                   }}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white font-mono focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -692,7 +879,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   max="31"
                   value={settings.challanDueDay}
                   onChange={(e) => handleFieldChange('challanDueDay', parseInt(e.target.value, 10) || 10)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white font-mono focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -703,7 +890,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   min="0"
                   value={settings.lateFineAmount}
                   onChange={(e) => handleFieldChange('lateFineAmount', parseInt(e.target.value, 10) || 0)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white font-mono focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -713,8 +900,8 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.iban}
                   onChange={(e) => handleFieldChange('iban', e.target.value)}
-                  placeholder="e.g. PK36MEZN0002140103492811"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white font-mono focus:outline-none focus:border-blue-500"
+                  placeholder="e.g. PK36 XXXX 0000 0000 0000 0000"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
             </div>

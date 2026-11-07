@@ -109,11 +109,11 @@ export const SecurityDeleteModal: React.FC<SecurityDeleteModalProps> = ({
           </p>
 
           {/* Action Footer */}
-          <div className="pt-3 border-t border-[#1e293b] flex items-center justify-end gap-3">
+          <div className="pt-3 border-t border-edge-13 flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl bg-[#141c2c] hover:bg-[#1a253a] border border-[#24334d] text-slate-300 hover:text-white font-semibold transition-colors cursor-pointer text-xs"
+              className="px-4 py-2.5 rounded-xl bg-surface-23 hover:bg-[#1a253a] border border-[#24334d] text-slate-300 hover:text-white font-semibold transition-colors cursor-pointer text-xs"
             >
               Cancel
             </button>

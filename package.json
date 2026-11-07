@@ -9,10 +9,12 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "server": "node server/index.js",
     "start:desktop": "electron .",
     "dist:win": "npm run build && electron-builder --win nsis",
-    "test:smoke": "node scripts/smoke-test.mjs"
+    "test:smoke": "node scripts/smoke-test.mjs",
+    "test:payroll": "node scripts/payroll-test.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -60,6 +62,7 @@
       "**/*.node"
     ],
     "win": {
+      "icon": "icon.ico",
       "target": [
         "nsis"
       ]

@@ -352,7 +352,7 @@ export const RollNumberSlipsModal: React.FC<RollNumberSlipsModalProps> = ({
       <div 
         className={`relative w-full ${
           stage === 1 ? 'max-w-xl' : 'max-w-4xl'
-        } bg-[#0c1424] border border-[#1e2d45] rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-in zoom-in-95 duration-150`}
+        } bg-[#0c1424] border border-edge-21 rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-in zoom-in-95 duration-150`}
         onClick={e => e.stopPropagation()}
       >
         {/* ========================================================================= */}
@@ -361,7 +361,7 @@ export const RollNumberSlipsModal: React.FC<RollNumberSlipsModalProps> = ({
         {stage === 1 && (
           <div className="flex flex-col h-full overflow-hidden">
             {/* Minimal Header */}
-            <div className="px-6 py-4 border-b border-[#1b283d] flex items-center justify-between">
+            <div className="px-6 py-4 border-b border-edge-11 flex items-center justify-between">
               <h2 className="text-base font-bold text-white tracking-tight">
                 Generate Roll Number Slips
               </h2>
@@ -382,7 +382,7 @@ export const RollNumberSlipsModal: React.FC<RollNumberSlipsModalProps> = ({
                   <label className="text-xs font-semibold text-slate-300">
                     1. Select Classes or Individual
                   </label>
-                  <div className="inline-flex rounded-lg bg-[#121c2e] p-0.5 border border-[#233550]">
+                  <div className="inline-flex rounded-lg bg-surface-22 p-0.5 border border-edge-36">
                     <button
                       type="button"
                       onClick={() => setSelectionMode('classes')}
@@ -431,7 +431,7 @@ export const RollNumberSlipsModal: React.FC<RollNumberSlipsModalProps> = ({
                             className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5 ${
                               active
                                 ? 'bg-blue-600/20 border-blue-500 text-white'
-                                : 'bg-[#142033] border-[#233550] text-slate-400 hover:text-white'
+                                : 'bg-surface-33 border-edge-36 text-slate-400 hover:text-white'
                             }`}
                           >
                             {active && <Check className="w-3 h-3 text-blue-400" />}
@@ -476,7 +476,7 @@ export const RollNumberSlipsModal: React.FC<RollNumberSlipsModalProps> = ({
                         value={studentSearchQuery}
                         onChange={e => setStudentSearchQuery(e.target.value)}
                         placeholder="Search student by name, roll no, or class..."
-                        className="w-full pl-8 pr-3 py-2 bg-[#142033] border border-[#233550] rounded-lg text-white text-xs focus:outline-none focus:border-blue-500"
+                        className="w-full pl-8 pr-3 py-2 bg-surface-33 border border-edge-36 rounded-lg text-white text-xs focus:outline-none focus:border-blue-500"
                       />
                     </div>
 
@@ -488,7 +488,7 @@ export const RollNumberSlipsModal: React.FC<RollNumberSlipsModalProps> = ({
                             key={st.id}
                             type="button"
                             onClick={() => handleToggleIndividualStudent(st.id)}
-                            className="w-full px-3 py-2 text-left text-xs flex items-center justify-between hover:bg-[#152238] transition-colors cursor-pointer"
+                            className="w-full px-3 py-2 text-left text-xs flex items-center justify-between hover:bg-edge-2 transition-colors cursor-pointer"
                           >
                             <div>
                               <span className="font-semibold text-white">{st.name}</span>
@@ -579,7 +579,7 @@ export const RollNumberSlipsModal: React.FC<RollNumberSlipsModalProps> = ({
             </div>
 
             {/* Minimal Footer */}
-            <div className="px-6 py-3.5 border-t border-[#1b283d] bg-[#101b2f] flex items-center justify-between">
+            <div className="px-6 py-3.5 border-t border-edge-11 bg-[#101b2f] flex items-center justify-between">
               <span className="text-xs text-slate-400">
                 <strong className="text-white">{matchedStudents.length}</strong> slip{matchedStudents.length !== 1 ? 's' : ''} ready
               </span>
@@ -588,7 +588,7 @@ export const RollNumberSlipsModal: React.FC<RollNumberSlipsModalProps> = ({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 rounded-xl border border-[#233550] text-slate-300 hover:text-white text-xs font-semibold cursor-pointer transition-colors"
+                  className="px-4 py-2 rounded-xl border border-edge-36 text-slate-300 hover:text-white text-xs font-semibold cursor-pointer transition-colors"
                 >
                   Cancel
                 </button>
@@ -612,12 +612,12 @@ export const RollNumberSlipsModal: React.FC<RollNumberSlipsModalProps> = ({
         {stage === 2 && (
           <div className="flex flex-col h-full overflow-hidden">
             {/* Minimal Preview Header */}
-            <div className="px-5 py-3 border-b border-[#1b283d] bg-[#101b2f] flex items-center justify-between gap-3 print:hidden">
+            <div className="px-5 py-3 border-b border-edge-11 bg-[#101b2f] flex items-center justify-between gap-3 print:hidden">
               <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => setStage(1)}
-                  className="px-3 py-1.5 rounded-lg border border-[#233550] bg-[#142033] hover:bg-[#1a2a44] text-slate-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
+                  className="px-3 py-1.5 rounded-lg border border-edge-36 bg-surface-33 hover:bg-[#1a2a44] text-slate-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
                   <span>Back</span>
@@ -631,7 +631,7 @@ export const RollNumberSlipsModal: React.FC<RollNumberSlipsModalProps> = ({
                 <button
                   type="button"
                   onClick={handlePrint}
-                  className="px-3 py-1.5 bg-[#142033] hover:bg-[#1a2a44] border border-[#233550] text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
+                  className="px-3 py-1.5 bg-surface-33 hover:bg-[#1a2a44] border border-edge-36 text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
                 >
                   <Printer className="w-3.5 h-3.5 text-blue-400" />
                   <span>Print</span>
@@ -699,6 +699,131 @@ export function MinimalStreamSlipCard({
   total: number;
 }) {
   const activeTemplate = school.rollNumberSlipTemplate || 'minimal-stream';
+  const isMinimalProfessional = activeTemplate === 'minimal-professional';
+
+  if (isMinimalProfessional) {
+    return (
+      <div className="border border-black p-4 space-y-3 text-black bg-white font-sans">
+        {/* Header */}
+        <div className="text-center border-b border-black pb-2.5">
+          <div className="flex items-center justify-between text-[9px] font-mono font-bold text-black mb-1">
+            <span>SLIP #{index} OF {total}</span>
+            <span>SESSION: {school.session}</span>
+          </div>
+          <h3 className="text-base sm:text-lg font-black uppercase tracking-tight text-black">
+            {school.schoolName || 'DEMO SCHOOL SYSTEM'}
+          </h3>
+          <p className="text-[10px] font-medium text-black">
+            {[school.campusName, school.schoolAddress].filter(Boolean).join(' • ')}
+          </p>
+          <p className="text-[10px] font-bold uppercase tracking-wider border border-black text-black bg-white inline-block px-3.5 py-0.5 mt-1.5">
+            Roll Number Slip — {examTitle}
+          </p>
+        </div>
+
+        {/* Student Info + Photo */}
+        <div className="grid grid-cols-12 gap-3 items-center border-b border-black pb-3 text-xs">
+          <div className="col-span-9 grid grid-cols-2 gap-y-2 gap-x-3">
+            <div>
+              <span className="text-[10px] font-bold uppercase text-black block">Student Name</span>
+              <span className="font-black uppercase text-xs">{slip.student.name}</span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold uppercase text-black block">Father / Guardian</span>
+              <span className="font-bold uppercase text-xs">
+                {slip.student.fatherName || slip.student.family || '-'}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold uppercase text-black block">Class &amp; Section</span>
+              <span className="font-bold text-xs">
+                {slip.student.class} ({slip.student.section || 'A'})
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold uppercase text-black block">Roll Number &amp; ID</span>
+              <span className="font-mono font-black text-xs">
+                {slip.rollNo} • {slip.student.id}
+              </span>
+            </div>
+          </div>
+
+          <div className="col-span-3 flex justify-end">
+            <div className="w-16 h-20 border border-black overflow-hidden bg-white flex items-center justify-center">
+              <img
+                src={getStudentAvatar(slip.student)}
+                alt={slip.student.name}
+                className="w-full h-full object-cover"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* 6-Column Schedule Table */}
+        <div>
+          <table className="w-full text-left text-[11px] border-collapse border border-black">
+            <thead>
+              <tr className="bg-white border-b border-black font-bold text-[10px] uppercase">
+                <th className="py-1 px-2 border-r border-black w-8 text-center">Sr</th>
+                <th className="py-1 px-2 border-r border-black">Subject</th>
+                <th className="py-1 px-2 border-r border-black text-center">Date</th>
+                <th className="py-1 px-2 border-r border-black text-center">Time</th>
+                <th className="py-1 px-2 border-r border-black text-center">Room</th>
+                <th className="py-1 px-2 text-center w-14">Marks</th>
+              </tr>
+            </thead>
+            <tbody>
+              {slip.dateSheet.map((item, idx) => (
+                <tr key={idx} className="border-b border-black/30 last:border-b-0">
+                  <td className="py-1 px-2 border-r border-black/30 text-center font-mono">
+                    {idx + 1}
+                  </td>
+                  <td className="py-1 px-2 border-r border-black/30 font-bold uppercase">
+                    {item.subjectName}
+                  </td>
+                  <td className="py-1 px-2 border-r border-black/30 text-center font-mono text-[10px]">
+                    {item.date}
+                  </td>
+                  <td className="py-1 px-2 border-r border-black/30 text-center text-[10px]">
+                    {item.time}
+                  </td>
+                  <td className="py-1 px-2 border-r border-black/30 text-center font-mono text-[10px]">
+                    {item.room || 'Hall A'}
+                  </td>
+                  <td className="py-1 px-2 text-center font-mono">
+                    {item.totalMarks}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Candidate Instructions */}
+        <div className="bg-white border border-black p-2 text-[9.5px] leading-snug text-black">
+          <p className="font-bold">
+            INSTRUCTIONS: 1. Arrive 20 minutes before exam time. 2. Keep this admit card on your desk during all papers.
+          </p>
+          <p>
+            3. Mobile phones, smartwatches, and unauthorized study material are strictly prohibited in the examination hall.
+          </p>
+        </div>
+
+        {/* Footer Signatures + ID */}
+        <div className="pt-4 flex items-end justify-between text-[10px] font-bold uppercase">
+          <div className="border-t border-black pt-1 w-36 text-center">
+            Candidate Signature
+          </div>
+          <div className="text-[9px] font-mono font-normal text-black">
+            ID: {slip.student.id}
+          </div>
+          <div className="border-t border-black pt-1 w-44 text-center">
+            Controller of Examinations
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (activeTemplate === 'classic-bordered') {
     return (
@@ -708,13 +833,13 @@ export function MinimalStreamSlipCard({
           <div className="text-center border-b-2 border-black pb-2.5">
             <div className="flex items-center justify-between text-[9px] font-mono font-bold text-black/70 mb-1">
               <span>ADMIT CARD #{index} OF {total}</span>
-              <span>SESSION: {school.session || '2025 - 2026'}</span>
+              <span>SESSION: {school.session}</span>
             </div>
             <h3 className="text-base sm:text-lg font-serif font-black uppercase tracking-tight text-black">
               {school.schoolName || 'DEMO SCHOOL SYSTEM'}
             </h3>
             <p className="text-[10px] font-medium text-neutral-700">
-              {school.campusName || 'Main Campus'} • {school.schoolAddress || 'Official Examination Center'}
+              {[school.campusName, school.schoolAddress].filter(Boolean).join(' • ')}
             </p>
             <p className="text-[10px] font-bold uppercase tracking-wider bg-slate-900 text-white inline-block px-3.5 py-0.5 mt-1.5">
               Roll Number Slip — {examTitle}
@@ -829,7 +954,7 @@ export function MinimalStreamSlipCard({
       <div className="text-center border-b border-black pb-2">
         <div className="flex items-center justify-between text-[9px] font-mono text-black/60 mb-0.5">
           <span>SLIP #{index} OF {total}</span>
-          <span>SESSION: {school.session || '2025 - 2026'}</span>
+          <span>SESSION: {school.session}</span>
         </div>
         <h3 className="text-base font-black uppercase tracking-tight text-black">
           {school.schoolName || 'DEMO SCHOOL SYSTEM'}

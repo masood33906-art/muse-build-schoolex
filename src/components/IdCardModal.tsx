@@ -9,13 +9,51 @@ import {
   ChevronRight,
   ShieldCheck,
   QrCode,
-  Check
+  Check,
+  RectangleVertical
 } from 'lucide-react';
 import { Student, CardTemplateType } from '../types';
 import { generateSingleIdCard, generateAllIdCards, SchoolInfo } from '../utils/pdfGenerator';
+import { rasterizeLogoForPdf } from '../utils/logoRaster';
 import { getSchoolSettings, saveSchoolSettings, SchoolSettings } from '../utils/settingsHelper';
 import { getAvatarColor, getInitials } from '../data/initialStudents';
 import { getStudentAvatar } from '../utils/studentAvatarHelper';
+import { code39Spans } from '../utils/barcode';
+
+/** Renders a REAL Code 39 barcode (same encoder as the PDF) as flex bars. */
+function Code39Bars({ value, className }: { value: string; className?: string }) {
+  const { bars, totalUnits } = code39Spans(value || '');
+  const total = totalUnits + 10; // quiet zones: 5 units on each side
+  const segments: { bar: boolean; units: number }[] = [{ bar: false, units: 5 }];
+  let cursor = 0;
+  bars.forEach(b => {
+    if (b.start > cursor) segments.push({ bar: false, units: b.start - cursor });
+    segments.push({ bar: true, units: b.width });
+    cursor = b.start + b.width;
+  });
+  if (totalUnits > cursor) segments.push({ bar: false, units: totalUnits - cursor });
+  segments.push({ bar: false, units: 5 });
+  return (
+    <div className={`flex items-stretch ${className || ''}`} aria-label={`Barcode ${value}`}>
+      {segments.map((s, i) => (
+        <div key={i} style={{ width: `${(s.units / total) * 100}%` }} className={s.bar ? 'bg-black' : undefined} />
+      ))}
+    </div>
+  );
+}
+
+/** Front detail rows for the Vertical Badge: same priority + 4-row cap as the PDF. */
+function vbFrontRows(student: Student): { label: string; val: string }[] {
+  const rows: { label: string; val: string }[] = [
+    { label: 'CLASS', val: `${student.class} - ${student.section}` }
+  ];
+  if (student.family && student.family.trim()) rows.push({ label: 'GUARDIAN', val: student.family });
+  if (student.dob) rows.push({ label: 'DOB', val: student.dob });
+  if (student.rollNo) rows.push({ label: 'ROLL NO', val: String(student.rollNo) });
+  if (student.phone) rows.push({ label: 'PHONE', val: student.phone });
+  if (student.bloodGroup) rows.push({ label: 'BLOOD GROUP', val: student.bloodGroup });
+  return rows.slice(0, 4);
+}
 
 interface IdCardModalProps {
   isOpen: boolean;
@@ -68,12 +106,14 @@ export const IdCardModal: React.FC<IdCardModalProps> = ({
 
   if (!isOpen || !student) return null;
 
+  // Settings values verbatim — no baked-in fallback identity; fields the
+  // school has not filled in stay blank on the card.
   const activeSchool: SchoolInfo = {
-    name: schoolSettings.schoolName || 'Demo School Schoollee Pakistan',
-    campus: schoolSettings.campusName || 'Main Campus',
-    session: schoolSettings.session || '2025 - 2026',
-    phone: schoolSettings.schoolPhone || '+92 42 35890000',
-    address: schoolSettings.schoolAddress || 'Lahore, Pakistan'
+    name: schoolSettings.schoolName,
+    campus: schoolSettings.campusName,
+    session: schoolSettings.session,
+    phone: schoolSettings.schoolPhone,
+    address: schoolSettings.schoolAddress
   };
 
   const currentIndex = allStudents.findIndex(s => s.id === student.id);
@@ -89,14 +129,18 @@ export const IdCardModal: React.FC<IdCardModalProps> = ({
     }
   };
 
-  const handleDownloadSingle = () => {
-    generateSingleIdCard(student, template, activeSchool);
+  const handleDownloadSingle = async () => {
+    // Preset logos are SVG, which jsPDF cannot embed — rasterize to PNG
+    // first so the printed card shows the real school logo.
+    const pdfLogo = await rasterizeLogoForPdf(schoolSettings.schoolLogo || '');
+    generateSingleIdCard(student, template, activeSchool, pdfLogo);
   };
 
-  const handleDownloadAll = () => {
+  const handleDownloadAll = async () => {
     setIsGeneratingAll(true);
+    const pdfLogo = await rasterizeLogoForPdf(schoolSettings.schoolLogo || '');
     setTimeout(() => {
-      generateAllIdCards(allStudents, template, activeSchool);
+      generateAllIdCards(allStudents, template, activeSchool, pdfLogo);
       setIsGeneratingAll(false);
     }, 150);
   };
@@ -110,7 +154,7 @@ export const IdCardModal: React.FC<IdCardModalProps> = ({
         id="modal-id-card"
       >
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-[#232d42] flex items-center justify-between bg-[#171f2e]">
+        <div className="px-6 py-4 border-b border-edge-22 flex items-center justify-between bg-[#171f2e]">
           <div>
             <h2 className="text-base font-bold text-white flex items-center gap-2">
               <GraduationCap className="w-5 h-5 text-blue-400" />
@@ -131,7 +175,7 @@ export const IdCardModal: React.FC<IdCardModalProps> = ({
           {/* Left Column: Template Selection & Controls */}
           <div className="lg:col-span-5 space-y-5">
             {/* Student Navigation Bar */}
-            <div className="bg-[#182232] border border-[#26354d] rounded-xl p-3 flex items-center justify-between">
+            <div className="bg-surface-40 border border-edge-37 rounded-xl p-3 flex items-center justify-between">
               <button
                 type="button"
                 onClick={handlePrev}
@@ -172,7 +216,7 @@ export const IdCardModal: React.FC<IdCardModalProps> = ({
                   className={`text-left p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
                     template === 'modern-tech'
                       ? 'bg-blue-950/40 border-blue-500 ring-1 ring-blue-500/50'
-                      : 'bg-[#182232] border-[#26354d] hover:border-slate-600'
+                      : 'bg-surface-40 border-edge-37 hover:border-slate-600'
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -198,7 +242,7 @@ export const IdCardModal: React.FC<IdCardModalProps> = ({
                   className={`text-left p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
                     template === 'classic-academic'
                       ? 'bg-amber-950/30 border-amber-500 ring-1 ring-amber-500/50'
-                      : 'bg-[#182232] border-[#26354d] hover:border-slate-600'
+                      : 'bg-surface-40 border-edge-37 hover:border-slate-600'
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -212,6 +256,32 @@ export const IdCardModal: React.FC<IdCardModalProps> = ({
                   </div>
                   {template === 'classic-academic' && (
                     <div className="w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0">
+                      <Check className="w-3 h-3 stroke-[3]" />
+                    </div>
+                  )}
+                </button>
+
+                {/* Template 3: Vertical Badge */}
+                <button
+                  type="button"
+                  onClick={() => handleSelectTemplate('vertical-badge')}
+                  className={`text-left p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                    template === 'vertical-badge'
+                      ? 'bg-[#0D2742]/60 border-[#8DB4C8] ring-1 ring-[#8DB4C8]/50'
+                      : 'bg-surface-40 border-edge-37 hover:border-slate-600'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-[#8DB4C8]/20 text-[#8DB4C8] flex items-center justify-center shrink-0">
+                      <RectangleVertical className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-semibold text-white">Vertical Badge</h4>
+                      <p className="text-[11px] text-slate-400">Vertical navy badge with side STUDENT ID strip and barcode, no punch hole</p>
+                    </div>
+                  </div>
+                  {template === 'vertical-badge' && (
+                    <div className="w-5 h-5 rounded-full bg-[#8DB4C8] text-[#0D2742] flex items-center justify-center shrink-0">
                       <Check className="w-3 h-3 stroke-[3]" />
                     </div>
                   )}
@@ -344,7 +414,7 @@ export const IdCardModal: React.FC<IdCardModalProps> = ({
                     </div>
                   </div>
                 </div>
-              ) : (
+              ) : template === 'classic-academic' ? (
                 /* Template 2: Classic Academic Heritage UI */
                 <div className="w-[270px] h-[430px] rounded-2xl bg-[#fbf9f4] border-2 border-[#b89547] text-slate-900 flex flex-col overflow-hidden shadow-2xl relative select-none p-2">
                   <div className="w-full h-full border border-[#d4be7d] rounded-xl flex flex-col p-3 text-center bg-[#fffdfa]">
@@ -416,6 +486,76 @@ export const IdCardModal: React.FC<IdCardModalProps> = ({
                           Principal Signature
                         </span>
                       </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* Template 3: Vertical Badge UI — redesigned 2026-11-07 to mirror the PDF:
+                   8mm strip stopping at a full-width 12mm band, Ø10mm logo, 23mm cover
+                   photo, larger type, priority detail rows, REAL Code39 barcode. */
+                <div className="w-[270px] h-[430px] rounded-2xl text-white shadow-2xl relative overflow-hidden select-none" style={{ backgroundColor: '#0D2742' }}>
+                  {/* Left steel-blue strip (8mm) with vertical STUDENT ID text (bottom-to-top) */}
+                  <div className="absolute left-0 top-0 bottom-[60px] w-[40px] flex items-center justify-center" style={{ backgroundColor: '#8DB4C8' }}>
+                    <span className="text-[#0D2742] font-black tracking-[0.18em] text-[14px] whitespace-nowrap [writing-mode:vertical-rl] rotate-180">
+                      STUDENT ID
+                    </span>
+                  </div>
+
+                  {/* Bottom steel-blue band (12mm, full width): white Code39 strip + ID */}
+                  <div className="absolute left-0 right-0 bottom-0 h-[60px] flex flex-col items-center justify-center" style={{ backgroundColor: '#8DB4C8' }}>
+                    <div className="bg-white rounded-[3px] w-[210px] h-[28px] px-[6px] py-[4px] overflow-hidden">
+                      <Code39Bars value={student.id} className="w-full h-full" />
+                    </div>
+                    <span className="text-[13px] font-black text-[#0D2742] tracking-wide leading-none mt-[5px]">
+                      ID: {student.id}
+                    </span>
+                  </div>
+
+                  {/* Main content zone: right of the strip, above the band (5px = 1mm) */}
+                  <div className="absolute left-[40px] right-0 top-0 bottom-[60px] flex flex-col items-center px-2 text-center">
+                    {/* School logo / monogram (Ø10mm) */}
+                    {schoolSettings.schoolLogo ? (
+                      <img
+                        src={schoolSettings.schoolLogo}
+                        alt={activeSchool.name}
+                        className="w-[50px] h-[50px] mt-[20px] rounded-[10px] object-cover shrink-0"
+                        style={{ backgroundColor: '#8DB4C8' }}
+                      />
+                    ) : (
+                      <div className="w-[50px] h-[50px] mt-[20px] rounded-full flex items-center justify-center text-[13px] font-black text-[#0D2742] shrink-0" style={{ backgroundColor: '#8DB4C8' }}>
+                        {activeSchool.name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w.charAt(0).toUpperCase()).join('')}
+                      </div>
+                    )}
+                    <p className="text-[16px] font-extrabold text-white mt-[3px] leading-[19px]">
+                      {activeSchool.name}
+                    </p>
+                    <p className="text-[11px] font-semibold mt-[1px]" style={{ color: '#BED7E4' }}>
+                      {activeSchool.campus} • {activeSchool.session}
+                    </p>
+
+                    {/* Photo with steel-blue frame (23mm, cover-fit like the PDF) */}
+                    <div className="w-[115px] h-[115px] mt-[11px] p-[4px] shrink-0 rounded-[10px]" style={{ backgroundColor: '#8DB4C8' }}>
+                      <img
+                        src={getStudentAvatar(student)}
+                        alt={student.name}
+                        className="w-full h-full object-cover rounded-[7px]"
+                        style={{ backgroundColor: '#1B3654' }}
+                      />
+                    </div>
+
+                    {/* Student Name */}
+                    <h3 className="text-[21px] font-bold leading-[25px] mt-[9px]" style={{ color: '#E2F0F8' }}>
+                      {student.name}
+                    </h3>
+
+                    {/* Detail rows — same priority set + 4-row cap as the PDF, spread to fill */}
+                    <div className="w-full flex-1 flex flex-col justify-around text-left pl-[15px] pr-[8px] py-1">
+                      {vbFrontRows(student).map(row => (
+                        <div key={row.label} className="flex items-baseline">
+                          <span className="font-bold text-[12px] w-[76px] shrink-0" style={{ color: '#BED7E4' }}>{row.label}</span>
+                          <span className="text-[13px] text-white truncate">{row.val}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>

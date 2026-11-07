@@ -24,8 +24,8 @@ export function runBillingLedgerTests() {
   setBillingStartMonth('2026-09');
 
   const classes: ClassInfo[] = [
-    { id: 'CLS-1', name: 'Class 5', sections: ['A'], fee: 4000 },
-    { id: 'CLS-2', name: 'Class 6', sections: ['A'], fee: 0 }
+    { id: 'CLS-1', name: 'Class 5', sections: ['A'], sectionsCount: 1, fee: 4000 },
+    { id: 'CLS-2', name: 'Class 6', sections: ['A'], sectionsCount: 1, fee: 0 }
   ];
 
   const activeStudent: Student = {
@@ -67,8 +67,8 @@ export function runBillingLedgerTests() {
 
   // 2. With now = 2026-11-02 (even if class fee changes to 4500), a November item appears and Sept/Oct classFeeRate is unchanged
   const updatedClasses: ClassInfo[] = [
-    { id: 'CLS-1', name: 'Class 5', sections: ['A'], fee: 4500 },
-    { id: 'CLS-2', name: 'Class 6', sections: ['A'], fee: 0 }
+    { id: 'CLS-1', name: 'Class 5', sections: ['A'], sectionsCount: 1, fee: 4500 },
+    { id: 'CLS-2', name: 'Class 6', sections: ['A'], sectionsCount: 1, fee: 0 }
   ];
 
   const novItems = ensureStudentLedgerGenerated(

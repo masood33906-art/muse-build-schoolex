@@ -53,13 +53,13 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
         map.set(key, {
           familyId: student.familyId || 'F0000',
           familyName: student.family || 'Unknown Family',
-          phone: student.phone || student.emergencyContact || '03356226026',
+          phone: student.phone || student.emergencyContact || '',
           guardianCnic: student.guardianCnic || '7647646475',
           guardianOccupation: student.guardianOccupation || 'Business',
           motherName: student.motherName || '-',
           motherCnic: student.motherCnic || '-',
           motherOccupation: student.motherOccupation || 'Homemaker',
-          whatsapp: student.whatsapp || student.phone || '03356226026',
+          whatsapp: student.whatsapp || student.phone || '',
           email: student.email || 'guardian@school.edu.pk',
           address: student.address || 'House #14, Sector G-10, Islamabad',
           caste: student.caste || '-',
@@ -82,7 +82,10 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
 
     return Array.from(map.values()).map(fam => {
       const totalDue = fam.students.reduce((sum, s) => sum + (s.totalDue ?? 0), 0);
-      const totalPaid = fam.students.reduce((sum, s) => sum + (s.totalPaid ?? 40000), 0);
+      // Fix #7b: an unrecorded totalPaid contributes 0 — the old
+      // `?? 40000` invented 40,000 PKR of payments per student (the
+      // same fabrication Fix #4b removed from FamilyDetailsView).
+      const totalPaid = fam.students.reduce((sum, s) => sum + (s.totalPaid ?? 0), 0);
       return {
         ...fam,
         totalDue,
@@ -161,7 +164,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
 
   if (familyGroups.length === 0) {
     return (
-      <div className="bg-[#111724] border border-[#20293d] rounded-xl p-12 text-center text-slate-400">
+      <div className="bg-surface-12 border border-[#20293d] rounded-xl p-12 text-center text-slate-400">
         <Users className="w-8 h-8 text-slate-500 mx-auto mb-2" />
         <p className="text-sm font-medium text-slate-300">No families found</p>
       </div>
@@ -179,7 +182,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
       )}
 
       {/* Search and Summary Sub-bar: Family Accounts number alongside search box */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#111724] border border-[#20293d] rounded-xl p-3.5 shadow-md">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-surface-12 border border-[#20293d] rounded-xl p-3.5 shadow-md">
         <div className="flex items-center gap-2 text-xs text-slate-300">
           <div className="w-8 h-8 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-400 flex items-center justify-center font-bold">
             <Users className="w-4 h-4" />
@@ -201,14 +204,14 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
             placeholder="Search family, phone, CNIC..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3.5 py-1.5 bg-[#162032] border border-[#24344d] rounded-lg text-xs text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-purple-500 transition-all"
+            className="w-full pl-9 pr-3.5 py-1.5 bg-surface-36 border border-edge-34 rounded-lg text-xs text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-purple-500 transition-all"
             id="input-search-family"
           />
         </div>
       </div>
 
       {/* Redesigned Family Table */}
-      <div className="bg-[#111724] border border-[#20293d] rounded-xl overflow-hidden shadow-xl">
+      <div className="bg-surface-12 border border-[#20293d] rounded-xl overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             
@@ -351,7 +354,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                               e.stopPropagation();
                               setOpenActionMenuFamilyId(prev => prev === family.familyId ? null : family.familyId);
                             }}
-                            className="p-1.5 rounded-lg bg-[#152033] hover:bg-[#1f2f4a] text-slate-300 hover:text-white border border-[#22334e] text-xs transition-all cursor-pointer shadow-sm group-hover:border-purple-500/40"
+                            className="p-1.5 rounded-lg bg-surface-35 hover:bg-[#1f2f4a] text-slate-300 hover:text-white border border-edge-32 text-xs transition-all cursor-pointer shadow-sm group-hover:border-purple-500/40"
                             id={`btn-menu-family-${family.familyId}`}
                             title="Family Options"
                           >
@@ -365,7 +368,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                                 className="fixed inset-0 z-20"
                                 onClick={() => setOpenActionMenuFamilyId(null)}
                               />
-                              <div className="absolute right-0 mt-1 w-44 rounded-xl bg-[#141c2c] border border-[#263750] shadow-2xl z-30 py-1 text-xs animate-in fade-in zoom-in-95">
+                              <div className="absolute right-0 mt-1 w-44 rounded-xl bg-surface-23 border border-[#263750] shadow-2xl z-30 py-1 text-xs animate-in fade-in zoom-in-95">
                                 <button
                                   type="button"
                                   onClick={(e) => {
@@ -373,7 +376,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                                     setOpenActionMenuFamilyId(null);
                                     setEditingFamily(family);
                                   }}
-                                  className="w-full text-left px-3.5 py-2 hover:bg-[#1f2e46] text-slate-200 hover:text-purple-300 flex items-center gap-2 transition-colors cursor-pointer"
+                                  className="w-full text-left px-3.5 py-2 hover:bg-edge-23 text-slate-200 hover:text-purple-300 flex items-center gap-2 transition-colors cursor-pointer"
                                   id={`btn-action-edit-${family.familyId}`}
                                 >
                                   <Pencil className="w-3.5 h-3.5 text-purple-400" />
@@ -387,7 +390,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                                     setOpenActionMenuFamilyId(null);
                                     onSelectFamily && onSelectFamily(family);
                                   }}
-                                  className="w-full text-left px-3.5 py-2 hover:bg-[#1f2e46] text-slate-200 hover:text-sky-300 flex items-center gap-2 transition-colors cursor-pointer border-t border-[#1e2a3d]"
+                                  className="w-full text-left px-3.5 py-2 hover:bg-edge-23 text-slate-200 hover:text-sky-300 flex items-center gap-2 transition-colors cursor-pointer border-t border-[#1e2a3d]"
                                   id={`btn-action-view-${family.familyId}`}
                                 >
                                   <Eye className="w-3.5 h-3.5 text-sky-400" />
@@ -412,8 +415,8 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
       {/* Edit Family Modal */}
       {editingFamily && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-[#101726] border border-[#22334c] rounded-2xl w-full max-w-2xl p-6 shadow-2xl animate-in zoom-in-95 my-8">
-            <div className="flex items-center justify-between pb-4 border-b border-[#1b273b] mb-4">
+          <div className="bg-surface-13 border border-edge-30 rounded-2xl w-full max-w-2xl p-6 shadow-2xl animate-in zoom-in-95 my-8">
+            <div className="flex items-center justify-between pb-4 border-b border-edge-8 mb-4">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold">
                   <Pencil className="w-4 h-4" />
@@ -441,7 +444,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                     name="familyName"
                     defaultValue={editingFamily.familyName}
                     required
-                    className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                    className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
                 <div>
@@ -451,7 +454,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                     name="guardianCnic"
                     defaultValue={editingFamily.guardianCnic}
                     required
-                    className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white font-mono focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                    className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white font-mono focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
               </div>
@@ -464,7 +467,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                     name="phone"
                     defaultValue={editingFamily.phone}
                     required
-                    className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white font-mono focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                    className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white font-mono focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
                 <div>
@@ -473,7 +476,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                     type="text"
                     name="whatsapp"
                     defaultValue={editingFamily.whatsapp || editingFamily.phone}
-                    className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white font-mono focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                    className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white font-mono focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
                 <div>
@@ -482,7 +485,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                     type="text"
                     name="guardianOccupation"
                     defaultValue={editingFamily.guardianOccupation || 'Business'}
-                    className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                    className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
               </div>
@@ -494,7 +497,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                     type="email"
                     name="email"
                     defaultValue={editingFamily.email || 'guardian@school.edu.pk'}
-                    className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                    className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
                 <div>
@@ -503,12 +506,12 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                     type="text"
                     name="address"
                     defaultValue={editingFamily.address || 'House #14, Sector G-10, Islamabad'}
-                    className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                    className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-[#1b273b]">
+              <div className="pt-2 border-t border-edge-8">
                 <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">
                   Mother & Background Details
                 </h4>
@@ -519,7 +522,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                       type="text"
                       name="motherName"
                       defaultValue={editingFamily.motherName || '-'}
-                      className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                      className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
                     />
                   </div>
                   <div>
@@ -528,7 +531,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                       type="text"
                       name="motherCnic"
                       defaultValue={editingFamily.motherCnic || '-'}
-                      className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white font-mono focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                      className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white font-mono focus:ring-1 focus:ring-purple-500 focus:outline-none"
                     />
                   </div>
                   <div>
@@ -537,7 +540,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                       type="text"
                       name="motherOccupation"
                       defaultValue={editingFamily.motherOccupation || 'Homemaker'}
-                      className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                      className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
                     />
                   </div>
                 </div>
@@ -550,7 +553,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                     type="text"
                     name="religion"
                     defaultValue={editingFamily.religion || 'Islam'}
-                    className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                    className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
                 <div>
@@ -559,16 +562,16 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                     type="text"
                     name="caste"
                     defaultValue={editingFamily.caste || '-'}
-                    className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                    className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-[#1b273b]">
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-edge-8">
                 <button
                   type="button"
                   onClick={() => setEditingFamily(null)}
-                  className="px-4 py-2 rounded-lg bg-[#141d2b] hover:bg-[#1a2538] text-slate-300 font-medium cursor-pointer"
+                  className="px-4 py-2 rounded-lg bg-surface-24 hover:bg-surface-43 text-slate-300 font-medium cursor-pointer"
                 >
                   Cancel
                 </button>

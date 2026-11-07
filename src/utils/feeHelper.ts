@@ -1,7 +1,7 @@
 import { Student, PaymentMethod } from '../types';
 import { loadAllLedgerItems, type StudentFeeItem } from './studentFeeLedgerHelper';
 import { FEE_PAYMENTS_KEY, FeePayment, listPayments, totalsOf, collectionInMonth } from './paymentStore';
-import { monthKeyOf } from './dates';
+import { monthKeyOf, monthLabelFromKey } from './dates';
 
 export interface StudentFeeData {
   studentId: string;
@@ -17,6 +17,11 @@ export interface StudentFeeData {
   currentMonthCollection: number;
   balance: number;
   status: 'Unpaid' | 'Partially Paid' | 'Paid';
+  // The source Student record this fee row was derived from, when the caller
+  // has it at hand (FeesModule attaches it when building its fee list and when
+  // opening the pay flow for a student not yet present in that list). Lets
+  // consumers recover the registry record without a second lookup.
+  originalStudent?: Student;
 }
 
 export interface FamilyFeeSummary {
@@ -260,7 +265,7 @@ export function buildStudentBreakdownsForFamily(
       .filter(item => (item.total - item.paidAmount) > 0)
       .map(item => ({
         description: item.reason || item.type || 'Monthly Fee',
-        month: item.month || 'September 2026',
+        month: item.month || monthLabelFromKey(monthKeyOf()),
         pendingAmount: item.total - item.paidAmount,
         totalAmount: item.total,
         paidAmount: item.paidAmount
@@ -308,7 +313,7 @@ export function generatePersonalizedFeeMessage(options: {
     const sClass = options.studentClass ? `Class: ${options.studentClass}` : '';
     const famInfo = familyName ? `Family: ${familyName}${familyId ? ` (${familyId})` : ''}` : '';
 
-    let breakdownLines = `  ▸ Monthly Fee (September 2026): ${formatPKR(options.totalDue)}`;
+    let breakdownLines = `  ▸ Monthly Fee (${monthLabelFromKey(monthKeyOf())}): ${formatPKR(options.totalDue)}`;
     if (options.breakdowns && options.breakdowns.length > 0 && options.breakdowns[0].lines.length > 0) {
       breakdownLines = options.breakdowns[0].lines.map(line => {
         if (line.paidAmount && line.paidAmount > 0 && line.totalAmount) {

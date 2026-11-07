@@ -9,12 +9,15 @@ import {
 } from 'lucide-react';
 import { Student, ClassInfo } from '../types';
 import { SchoolSettings, getSchoolSettings } from '../utils/settingsHelper';
-import { 
-  buildStudentFeeCardData, 
+import {
+  buildStudentFeeCardData,
+  buildRegisterCardData,
   generateFeeCardPdf,
   formatOrBlank,
-  StudentFeeCardData
+  StudentFeeCardData,
+  RegisterCardData
 } from '../utils/feeCardHelper';
+import { FeeRegisterCardSheet } from './FeeRegisterCardSheet';
 
 interface FeeCardModalProps {
   isOpen: boolean;
@@ -46,6 +49,17 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
   }, []);
   const currentSchool = liveSchool;
   const isMinimalTemplate = currentSchool.studentFeeCardTemplate === 'minimal-modern';
+  // 'minimal-professional': strict black & white only — black text, thin black
+  // borders/dividers, white background, no fills and no decoration. It needs its
+  // own branch: 'minimal-modern' uses slate tones (e.g. #0f172a, #475569) whose
+  // RGB channels are not equal, so they are blue-tinted, not true greys. Every
+  // colour used in the professional branches below is black, white, or an
+  // equal-channel grey (#333333, #555555, #999999).
+  const isMinimalProfessional = currentSchool.studentFeeCardTemplate === 'minimal-professional';
+  // 'register-card': the rebuilt B&W register card renders through the
+  // shared FeeRegisterCardSheet (preview and print container alike);
+  // the PDF download branches inside generateFeeCardPdf.
+  const isRegisterCard = currentSchool.studentFeeCardTemplate === 'register-card';
 
   // Selected student IDs in container
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => {
@@ -155,6 +169,12 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
     return selectedStudentsList.map(st => buildStudentFeeCardData(st, classes, currentSchool));
   }, [selectedStudentsList, classes, currentSchool]);
 
+  // Register-card data for the rebuilt template's preview/print
+  const registerCardsData = useMemo<RegisterCardData[]>(() => {
+    if (!isRegisterCard) return [];
+    return selectedStudentsList.map(st => buildRegisterCardData(st, classes, currentSchool));
+  }, [isRegisterCard, selectedStudentsList, classes, currentSchool]);
+
   // Print cards for real printer
   const handlePrintToPrinter = () => {
     if (selectedStudentsList.length === 0) {
@@ -184,17 +204,17 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
       <div 
-        className="w-full max-w-4xl bg-[#0c121e] border border-[#1e2d42] rounded-2xl shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[94vh]"
+        className="w-full max-w-4xl bg-surface-6 border border-[#1e2d42] rounded-2xl shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[94vh]"
         id="modal-fee-cards"
       >
         {/* Header */}
-        <div className="px-5 py-3.5 bg-[#121a28] border-b border-[#1b283d] flex items-center justify-between no-print">
+        <div className="px-5 py-3.5 bg-[#121a28] border-b border-edge-11 flex items-center justify-between no-print">
           <div className="flex items-center gap-3">
             {viewMode === 'preview' && (
               <button
                 type="button"
                 onClick={() => setViewMode('select')}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-[#1a2538] transition-colors cursor-pointer mr-1"
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-surface-43 transition-colors cursor-pointer mr-1"
                 title="Back to Student Selection"
               >
                 <ArrowLeft className="w-4 h-4" />
@@ -213,7 +233,7 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#1a2538] transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-surface-43 transition-colors cursor-pointer"
             id="btn-close-fee-card-modal"
           >
             <X className="w-5 h-5" />
@@ -221,7 +241,7 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-5 no-print bg-[#080d16]">
+        <div className="flex-1 overflow-y-auto p-5 no-print bg-surface-1">
           {viewMode === 'select' ? (
             /* SELECTION VIEW */
             <div className="space-y-5 max-w-2xl mx-auto py-2">
@@ -261,7 +281,7 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
                       searchInputRef.current?.focus();
                       setIsDropdownOpen(true);
                     }}
-                    className="min-h-[50px] p-2 rounded-xl bg-[#0f1725] border border-[#22334b] focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 flex flex-wrap items-center gap-1.5 transition-all cursor-text"
+                    className="min-h-[50px] p-2 rounded-xl bg-surface-9 border border-edge-29 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 flex flex-wrap items-center gap-1.5 transition-all cursor-text"
                     id="container-fee-card-search"
                   >
                     <Search className="w-4 h-4 text-slate-400 ml-1 mr-1 shrink-0" />
@@ -320,7 +340,7 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
                   {/* Dropdown Menu */}
                   {isDropdownOpen && (
                     <div 
-                      className="absolute left-0 right-0 mt-1.5 bg-[#0f1725] border border-[#263a56] rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto py-1 text-xs divide-y divide-[#172338]"
+                      className="absolute left-0 right-0 mt-1.5 bg-surface-9 border border-[#263a56] rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto py-1 text-xs divide-y divide-[#172338]"
                       id="dropdown-student-search-results"
                     >
                       {searchResults.length === 0 ? (
@@ -370,7 +390,7 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
                 <button
                   type="button"
                   onClick={handleCancelEverything}
-                  className="px-4 py-2 rounded-xl bg-[#141d2c] hover:bg-[#1a263a] border border-[#23354e] text-slate-300 hover:text-white text-xs font-semibold cursor-pointer transition-all"
+                  className="px-4 py-2 rounded-xl bg-[#141d2c] hover:bg-surface-44 border border-edge-35 text-slate-300 hover:text-white text-xs font-semibold cursor-pointer transition-all"
                   id="btn-cancel-fee-cards"
                 >
                   Cancel
@@ -402,7 +422,7 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setViewMode('select')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#152033] hover:bg-[#1c2c45] border border-[#223552] text-slate-300 hover:text-white font-medium cursor-pointer transition-all"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-35 hover:bg-[#1c2c45] border border-[#223552] text-slate-300 hover:text-white font-medium cursor-pointer transition-all"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
                   <span>Edit Selection</span>
@@ -416,7 +436,7 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
                   <button
                     type="button"
                     onClick={handleDownloadPdf}
-                    className="px-3 py-1.5 rounded-lg bg-[#152033] hover:bg-[#1c2c45] border border-[#223552] text-slate-200 hover:text-white font-medium flex items-center gap-1.5 cursor-pointer transition-all"
+                    className="px-3 py-1.5 rounded-lg bg-surface-35 hover:bg-[#1c2c45] border border-[#223552] text-slate-200 hover:text-white font-medium flex items-center gap-1.5 cursor-pointer transition-all"
                     id="btn-preview-download-pdf"
                   >
                     <Download className="w-3.5 h-3.5" />
@@ -437,79 +457,81 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
 
               {/* Scrollable Fee Cards List (Each student card matches reference format, no rules page) */}
               <div className="space-y-8 max-w-4xl mx-auto" id="scrollable-fee-cards-list">
-                {allCardsData.map((cardData, idx) => (
+                {isRegisterCard ? registerCardsData.map((rData) => (
+                  <FeeRegisterCardSheet key={rData.student.id} data={rData} />
+                )) : allCardsData.map((cardData, idx) => (
                   <div 
                     key={cardData.student.id} 
-                    className="bg-white text-slate-900 rounded-xl p-5 shadow-2xl overflow-x-auto border border-slate-300 relative"
+                    className={isMinimalProfessional ? "bg-white text-black rounded-none p-4 shadow-none overflow-x-auto border border-black relative" : "bg-white text-slate-900 rounded-xl p-5 shadow-2xl overflow-x-auto border border-slate-300 relative"}
                     id={`preview-fee-card-${cardData.student.id}`}
                   >
-                    <div className={isMinimalTemplate ? "border border-slate-900 p-4 relative" : "border-2 border-[#1b365d] p-3.5 relative"}>
-                      <div className={isMinimalTemplate ? "p-1" : "border border-[#1b365d] p-3.5"}>
+                    <div className={isMinimalProfessional ? "border border-black p-3 relative" : isMinimalTemplate ? "border border-slate-900 p-4 relative" : "border-2 border-doc-deep p-3.5 relative"}>
+                      <div className={isMinimalProfessional ? "p-1" : isMinimalTemplate ? "p-1" : "border border-doc-deep p-3.5"}>
                         {/* Top Header Row */}
-                        <div className={`flex items-center justify-between text-[11px] font-bold mb-1 ${isMinimalTemplate ? 'text-slate-900' : 'text-[#1b365d]'}`}>
+                        <div className={`flex items-center justify-between text-[11px] font-bold mb-1 ${isMinimalProfessional ? 'text-black' : isMinimalTemplate ? 'text-slate-900' : 'text-doc-deep'}`}>
                           <span>School NO- {cardData.schoolNo}</span>
-                          <div className={`${isMinimalTemplate ? 'bg-slate-900' : 'bg-[#dc2626]'} text-white px-5 py-0.5 rounded-full text-xs font-black tracking-wider uppercase`}>
+                          <div className={isMinimalProfessional ? 'border border-black text-black px-5 py-0.5 text-xs font-black tracking-widest uppercase' : `${isMinimalTemplate ? 'bg-slate-900' : 'bg-[#dc2626]'} text-white px-5 py-0.5 rounded-full text-xs font-black tracking-wider uppercase`}>
                             FEE CARD
                           </div>
                           <span>Affiliation No- {cardData.affiliationNo}</span>
                         </div>
 
                         {/* UDISE */}
-                        <div className={`text-center text-[10px] font-bold mb-1 ${isMinimalTemplate ? 'text-slate-600' : 'text-[#1b365d]'}`}>
+                        <div className={`text-center text-[10px] font-bold mb-1 ${isMinimalProfessional ? 'text-[#333333]' : isMinimalTemplate ? 'text-slate-600' : 'text-doc-deep'}`}>
                           UDISE- {cardData.udiseNo}
                         </div>
 
                         {/* School Name */}
                         <div className="text-center mb-1 leading-tight">
-                          <h1 className={`text-2xl sm:text-3xl font-black tracking-tight uppercase ${isMinimalTemplate ? 'text-slate-950 font-sans' : 'text-[#be1818] font-serif'}`}>
+                          <h1 className={`text-2xl sm:text-3xl font-black tracking-tight uppercase ${isMinimalProfessional ? 'text-black font-sans' : isMinimalTemplate ? 'text-slate-950 font-sans' : 'text-[#be1818] font-serif'}`}>
                             {cardData.schoolName}
                           </h1>
-                          <p className={`text-[11px] italic ${isMinimalTemplate ? 'text-slate-600 font-sans' : 'text-[#991b1b] font-serif'}`}>
+                          <p className={isMinimalProfessional ? 'text-[11px] text-[#333333] font-sans font-medium' : `text-[11px] italic ${isMinimalTemplate ? 'text-slate-600 font-sans' : 'text-[#991b1b] font-serif'}`}>
                             {cardData.trustName}
                           </p>
                         </div>
 
                         {/* Certification and Address */}
-                        <div className="text-center text-[9px] text-slate-500 font-medium">
+                        <div className={isMinimalProfessional ? "text-center text-[9px] text-[#555555] font-medium" : "text-center text-[9px] text-slate-500 font-medium"}>
                           An ISO 9001:2015 Certified School
                         </div>
-                        <div className="text-center text-[10px] font-bold text-slate-800">
+                        <div className={isMinimalProfessional ? "text-center text-[10px] font-bold text-black" : "text-center text-[10px] font-bold text-slate-800"}>
                           {cardData.schoolAddress}
                         </div>
 
                         {/* Session Pill */}
                         <div className="flex justify-center my-2">
-                          <div className={`px-6 py-0.5 border rounded-full text-[10px] font-bold ${isMinimalTemplate ? 'border-slate-900 text-slate-900' : 'border-[#1b365d] text-[#1b365d]'}`}>
+                          <div className={isMinimalProfessional ? 'px-6 py-0.5 border border-black text-[10px] font-bold text-black' : `px-6 py-0.5 border rounded-full text-[10px] font-bold ${isMinimalTemplate ? 'border-slate-900 text-slate-900' : 'border-doc-deep text-doc-deep'}`}>
                             Session : {cardData.academicSession}
                           </div>
                         </div>
 
                         {/* Member Info Grid */}
-                        <div className="space-y-1.5 text-xs text-slate-800 my-3 font-medium">
+                        <div className={isMinimalProfessional ? "space-y-1 text-xs text-black my-2 font-medium" : "space-y-1.5 text-xs text-slate-800 my-3 font-medium"}>
                           <div className="flex items-baseline">
-                            <span className="font-bold shrink-0 mr-2 text-slate-900">Name</span>
-                            <div className="flex-1 border-b border-slate-400 font-bold text-slate-900 px-2 pb-0.5">
+                            <span className={isMinimalProfessional ? "font-bold shrink-0 mr-2 text-black" : "font-bold shrink-0 mr-2 text-slate-900"}>Name</span>
+                            <div className={isMinimalProfessional ? "flex-1 border-b border-[#999999] font-bold text-black px-2 pb-0.5" : "flex-1 border-b border-slate-400 font-bold text-slate-900 px-2 pb-0.5"}>
                               {cardData.student.name}
                             </div>
                           </div>
 
                           <div className="flex items-baseline">
-                            <span className="font-bold shrink-0 mr-2 text-slate-900">Father&apos;s Name</span>
-                            <div className="flex-1 border-b border-slate-400 text-slate-900 px-2 pb-0.5">
+                            <span className={isMinimalProfessional ? "font-bold shrink-0 mr-2 text-black" : "font-bold shrink-0 mr-2 text-slate-900"}>Father&apos;s Name</span>
+                            <div className={isMinimalProfessional ? "flex-1 border-b border-[#999999] text-black px-2 pb-0.5" : "flex-1 border-b border-slate-400 text-slate-900 px-2 pb-0.5"}>
                               {cardData.fatherName}
                             </div>
                           </div>
 
                           <div className="flex items-baseline gap-4">
                             <div className="flex items-baseline flex-1">
-                              <span className="font-bold shrink-0 mr-2 text-slate-900">Class</span>
-                              <div className="flex-1 border-b border-slate-400 text-slate-900 px-2 pb-0.5">
+                              <span className={isMinimalProfessional ? "font-bold shrink-0 mr-2 text-black" : "font-bold shrink-0 mr-2 text-slate-900"}>Class</span>
+                              <div className={isMinimalProfessional ? "flex-1 border-b border-[#999999] text-black px-2 pb-0.5" : "flex-1 border-b border-slate-400 text-slate-900 px-2 pb-0.5"}>
                                 {cardData.className}
                               </div>
                             </div>
                             <div className="flex items-baseline w-1/3">
-                              <span className="font-bold shrink-0 mr-2 text-slate-900">Sec</span>
-                              <div className="flex-1 border-b border-slate-400 text-slate-900 px-2 pb-0.5">
+                              <span className={isMinimalProfessional ? "font-bold shrink-0 mr-2 text-black" : "font-bold shrink-0 mr-2 text-slate-900"}>Sec</span>
+                              <div className={isMinimalProfessional ? "flex-1 border-b border-[#999999] text-black px-2 pb-0.5" : "flex-1 border-b border-slate-400 text-slate-900 px-2 pb-0.5"}>
                                 {cardData.section}
                               </div>
                             </div>
@@ -517,29 +539,29 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
 
                           <div className="flex items-baseline gap-4">
                             <div className="flex items-baseline flex-1">
-                              <span className="font-bold shrink-0 mr-2 text-slate-900">Roll No.</span>
-                              <div className="flex-1 border-b border-slate-400 text-slate-900 font-mono px-2 pb-0.5">
+                              <span className={isMinimalProfessional ? "font-bold shrink-0 mr-2 text-black" : "font-bold shrink-0 mr-2 text-slate-900"}>Roll No.</span>
+                              <div className={isMinimalProfessional ? "flex-1 border-b border-[#999999] text-black font-mono px-2 pb-0.5" : "flex-1 border-b border-slate-400 text-slate-900 font-mono px-2 pb-0.5"}>
                                 {cardData.rollNo}
                               </div>
                             </div>
                             <div className="flex items-baseline w-1/3">
-                              <span className="font-bold shrink-0 mr-2 text-slate-900">A/c. No.</span>
-                              <div className="flex-1 border-b border-slate-400 text-slate-900 font-mono px-2 pb-0.5">
+                              <span className={isMinimalProfessional ? "font-bold shrink-0 mr-2 text-black" : "font-bold shrink-0 mr-2 text-slate-900"}>A/c. No.</span>
+                              <div className={isMinimalProfessional ? "flex-1 border-b border-[#999999] text-black font-mono px-2 pb-0.5" : "flex-1 border-b border-slate-400 text-slate-900 font-mono px-2 pb-0.5"}>
                                 {cardData.accountNo}
                               </div>
                             </div>
                           </div>
 
                           <div className="flex items-baseline">
-                            <span className="font-bold shrink-0 mr-2 text-slate-900">Address</span>
-                            <div className="flex-1 border-b border-slate-400 text-slate-900 px-2 pb-0.5">
+                            <span className={isMinimalProfessional ? "font-bold shrink-0 mr-2 text-black" : "font-bold shrink-0 mr-2 text-slate-900"}>Address</span>
+                            <div className={isMinimalProfessional ? "flex-1 border-b border-[#999999] text-black px-2 pb-0.5" : "flex-1 border-b border-slate-400 text-slate-900 px-2 pb-0.5"}>
                               {cardData.address}
                             </div>
                           </div>
 
                           <div className="flex items-baseline">
-                            <span className="font-bold shrink-0 mr-2 text-slate-900">Contact No.</span>
-                            <div className="flex-1 border-b border-slate-400 text-slate-900 font-mono px-2 pb-0.5">
+                            <span className={isMinimalProfessional ? "font-bold shrink-0 mr-2 text-black" : "font-bold shrink-0 mr-2 text-slate-900"}>Contact No.</span>
+                            <div className={isMinimalProfessional ? "flex-1 border-b border-[#999999] text-black font-mono px-2 pb-0.5" : "flex-1 border-b border-slate-400 text-slate-900 font-mono px-2 pb-0.5"}>
                               {cardData.phone}
                             </div>
                           </div>
@@ -547,61 +569,61 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
 
                         {/* 12-Month Table */}
                         <div className="mt-3 overflow-x-auto">
-                          <table className="w-full text-left text-[10px] border-collapse border border-[#2b5b84]">
-                            <thead className="bg-[#d6e6f5] text-[#1b365d] font-bold uppercase text-[9px]">
+                          <table className={isMinimalProfessional ? "w-full text-left text-[10px] border-collapse border border-black" : "w-full text-left text-[10px] border-collapse border border-[#2b5b84]"}>
+                            <thead className={isMinimalProfessional ? "text-black font-bold uppercase text-[9px]" : "bg-[#d6e6f5] text-doc-deep font-bold uppercase text-[9px]"}>
                               <tr>
-                                <th className="p-1.5 border border-[#4682b4]">MONTH</th>
-                                <th className="p-1.5 border border-[#4682b4] text-center leading-tight">ADMISSION<br/>FEE</th>
-                                <th className="p-1.5 border border-[#4682b4] text-center leading-tight">ANNUAL<br/>FEE</th>
-                                <th className="p-1.5 border border-[#4682b4] text-center leading-tight">TUITION<br/>FEE</th>
-                                <th className="p-1.5 border border-[#4682b4] text-center leading-tight">CONVEY<br/>FEE</th>
-                                <th className="p-1.5 border border-[#4682b4] text-center">L.fine</th>
-                                <th className="p-1.5 border border-[#4682b4] text-center">ARREAR</th>
-                                <th className="p-1.5 border border-[#4682b4] text-center leading-tight">TOTAL AMT.<br/>PAYABLE</th>
-                                <th className="p-1.5 border border-[#4682b4] text-center leading-tight">AMOUNT<br/>PAID</th>
-                                <th className="p-1.5 border border-[#4682b4] text-center">DUES</th>
-                                <th className="p-1.5 border border-[#4682b4] text-center">REC. NO.</th>
-                                <th className="p-1.5 border border-[#4682b4] text-center leading-tight">SIGN &amp;<br/>DATE</th>
+                                <th className={isMinimalProfessional ? "p-1.5 border border-black" : "p-1.5 border border-doc"}>MONTH</th>
+                                <th className={isMinimalProfessional ? "p-1.5 border border-black text-center leading-tight" : "p-1.5 border border-doc text-center leading-tight"}>ADMISSION<br/>FEE</th>
+                                <th className={isMinimalProfessional ? "p-1.5 border border-black text-center leading-tight" : "p-1.5 border border-doc text-center leading-tight"}>ANNUAL<br/>FEE</th>
+                                <th className={isMinimalProfessional ? "p-1.5 border border-black text-center leading-tight" : "p-1.5 border border-doc text-center leading-tight"}>TUITION<br/>FEE</th>
+                                <th className={isMinimalProfessional ? "p-1.5 border border-black text-center leading-tight" : "p-1.5 border border-doc text-center leading-tight"}>CONVEY<br/>FEE</th>
+                                <th className={isMinimalProfessional ? "p-1.5 border border-black text-center" : "p-1.5 border border-doc text-center"}>L.fine</th>
+                                <th className={isMinimalProfessional ? "p-1.5 border border-black text-center" : "p-1.5 border border-doc text-center"}>ARREAR</th>
+                                <th className={isMinimalProfessional ? "p-1.5 border border-black text-center leading-tight" : "p-1.5 border border-doc text-center leading-tight"}>TOTAL AMT.<br/>PAYABLE</th>
+                                <th className={isMinimalProfessional ? "p-1.5 border border-black text-center leading-tight" : "p-1.5 border border-doc text-center leading-tight"}>AMOUNT<br/>PAID</th>
+                                <th className={isMinimalProfessional ? "p-1.5 border border-black text-center" : "p-1.5 border border-doc text-center"}>DUES</th>
+                                <th className={isMinimalProfessional ? "p-1.5 border border-black text-center" : "p-1.5 border border-doc text-center"}>REC. NO.</th>
+                                <th className={isMinimalProfessional ? "p-1.5 border border-black text-center leading-tight" : "p-1.5 border border-doc text-center leading-tight"}>SIGN &amp;<br/>DATE</th>
                               </tr>
                             </thead>
                             <tbody>
                               {cardData.months.map((row) => (
-                                <tr key={row.month} className="hover:bg-slate-50 transition-colors">
-                                  <td className="p-1 font-bold text-[#1b365d] border border-[#7aa3c7] whitespace-nowrap">
+                                <tr key={row.month} className={isMinimalProfessional ? "" : "hover:bg-slate-50 transition-colors"}>
+                                  <td className={isMinimalProfessional ? "p-1 font-bold text-black border border-black whitespace-nowrap" : "p-1 font-bold text-doc-deep border border-doc-soft whitespace-nowrap"}>
                                     {row.month}
                                   </td>
                                   {/* ZERO RULE: NOTHING IN BOX IF ZERO */}
-                                  <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                                  <td className={isMinimalProfessional ? "p-1 text-right font-mono text-black border border-black" : "p-1 text-right font-mono border border-doc-soft"}>
                                     {formatOrBlank(row.admissionFee)}
                                   </td>
-                                  <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                                  <td className={isMinimalProfessional ? "p-1 text-right font-mono text-black border border-black" : "p-1 text-right font-mono border border-doc-soft"}>
                                     {formatOrBlank(row.annualFee)}
                                   </td>
-                                  <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                                  <td className={isMinimalProfessional ? "p-1 text-right font-mono text-black border border-black" : "p-1 text-right font-mono border border-doc-soft"}>
                                     {formatOrBlank(row.tuitionFee)}
                                   </td>
-                                  <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                                  <td className={isMinimalProfessional ? "p-1 text-right font-mono text-black border border-black" : "p-1 text-right font-mono border border-doc-soft"}>
                                     {formatOrBlank(row.conveyFee)}
                                   </td>
-                                  <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                                  <td className={isMinimalProfessional ? "p-1 text-right font-mono text-black border border-black" : "p-1 text-right font-mono border border-doc-soft"}>
                                     {formatOrBlank(row.lateFine)}
                                   </td>
-                                  <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                                  <td className={isMinimalProfessional ? "p-1 text-right font-mono text-black border border-black" : "p-1 text-right font-mono border border-doc-soft"}>
                                     {formatOrBlank(row.arrear)}
                                   </td>
-                                  <td className="p-1 text-right font-mono font-bold text-slate-900 border border-[#7aa3c7]">
+                                  <td className={isMinimalProfessional ? "p-1 text-right font-mono font-bold text-black border border-black" : "p-1 text-right font-mono font-bold text-slate-900 border border-doc-soft"}>
                                     {formatOrBlank(row.totalPayable)}
                                   </td>
-                                  <td className="p-1 text-right font-mono font-bold text-slate-900 border border-[#7aa3c7]">
+                                  <td className={isMinimalProfessional ? "p-1 text-right font-mono font-bold text-black border border-black" : "p-1 text-right font-mono font-bold text-slate-900 border border-doc-soft"}>
                                     {formatOrBlank(row.amountPaid)}
                                   </td>
-                                  <td className="p-1 text-right font-mono font-bold text-slate-900 border border-[#7aa3c7]">
+                                  <td className={isMinimalProfessional ? "p-1 text-right font-mono font-bold text-black border border-black" : "p-1 text-right font-mono font-bold text-slate-900 border border-doc-soft"}>
                                     {formatOrBlank(row.dues)}
                                   </td>
-                                  <td className="p-1 text-center font-mono text-slate-700 border border-[#7aa3c7] whitespace-nowrap">
+                                  <td className={isMinimalProfessional ? "p-1 text-center font-mono text-[#333333] border border-black whitespace-nowrap" : "p-1 text-center font-mono text-slate-700 border border-doc-soft whitespace-nowrap"}>
                                     {row.receiptNo}
                                   </td>
-                                  <td className="p-1 text-center font-mono text-slate-700 border border-[#7aa3c7] whitespace-nowrap">
+                                  <td className={isMinimalProfessional ? "p-1 text-center font-mono text-[#333333] border border-black whitespace-nowrap" : "p-1 text-center font-mono text-slate-700 border border-doc-soft whitespace-nowrap"}>
                                     {row.signDate}
                                   </td>
                                 </tr>
@@ -613,8 +635,8 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
                         {/* Authorised Signatory at Bottom Right */}
                         <div className="pt-8 pb-2 pr-4 flex justify-end">
                           <div className="text-center">
-                            <div className="w-44 border-b border-dotted border-slate-700 mb-1.5" />
-                            <span className="font-serif italic text-xs font-semibold text-slate-800">
+                            <div className={isMinimalProfessional ? "w-44 border-b border-black mb-1.5" : "w-44 border-b border-dotted border-slate-700 mb-1.5"} />
+                            <span className={isMinimalProfessional ? "font-sans text-xs font-semibold text-black" : "font-serif italic text-xs font-semibold text-slate-800"}>
                               Authorised Signatory
                             </span>
                           </div>
@@ -629,11 +651,11 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 bg-[#121a28] border-t border-[#1b283d] flex items-center justify-between text-xs no-print">
+        <div className="px-5 py-3 bg-[#121a28] border-t border-edge-11 flex items-center justify-between text-xs no-print">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-1.5 rounded-lg bg-[#182335] hover:bg-[#202e44] border border-[#263753] text-slate-300 hover:text-white font-medium cursor-pointer transition-all"
+            className="px-4 py-1.5 rounded-lg bg-edge-3 hover:bg-[#202e44] border border-edge-39 text-slate-300 hover:text-white font-medium cursor-pointer transition-all"
           >
             Close
           </button>
@@ -658,81 +680,89 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
         {/* HIDDEN PRINT CONTAINER (Rendered ONLY during window.print()) */}
         {/* Strictly 1 page per student; NO rules page */}
         {/* ======================================================== */}
-        <div className="hidden print:block font-sans text-slate-900 bg-white" id="fee-cards-print-container">
-          {selectedStudentsList.map((st) => {
+        <div className={isMinimalProfessional ? "hidden print:block font-sans text-black bg-white" : "hidden print:block font-sans text-slate-900 bg-white"} id="fee-cards-print-container">
+          {isRegisterCard ? selectedStudentsList.map((st) => (
+            <div
+              key={`print-register-card-${st.id}`}
+              className="bg-white"
+              style={{ pageBreakAfter: 'always', breakAfter: 'page' }}
+            >
+              <FeeRegisterCardSheet data={buildRegisterCardData(st, classes, currentSchool)} />
+            </div>
+          )) : selectedStudentsList.map((st) => {
             const cData = buildStudentFeeCardData(st, classes, currentSchool);
             return (
               <div 
                 key={`print-card-${st.id}`}
-                className="p-6 bg-white text-slate-900 min-h-screen flex flex-col justify-between"
+                className={isMinimalProfessional ? "p-4 bg-white text-black min-h-screen flex flex-col justify-between" : "p-6 bg-white text-slate-900 min-h-screen flex flex-col justify-between"}
                 style={{ pageBreakAfter: 'always', breakAfter: 'page' }}
               >
-                <div className={isMinimalTemplate ? "border border-slate-900 p-3" : "border-2 border-[#1b365d] p-3"}>
-                  <div className={isMinimalTemplate ? "p-1" : "border border-[#1b365d] p-3"}>
+                <div className={isMinimalProfessional ? "border border-black p-2.5" : isMinimalTemplate ? "border border-slate-900 p-3" : "border-2 border-doc-deep p-3"}>
+                  <div className={isMinimalProfessional ? "p-0.5" : isMinimalTemplate ? "p-1" : "border border-doc-deep p-3"}>
                     {/* Top Bar */}
-                    <div className={`flex items-center justify-between text-[11px] font-bold mb-1 ${isMinimalTemplate ? 'text-slate-900' : 'text-[#1b365d]'}`}>
+                    <div className={`flex items-center justify-between text-[11px] font-bold mb-1 ${isMinimalProfessional ? 'text-black' : isMinimalTemplate ? 'text-slate-900' : 'text-doc-deep'}`}>
                       <span>School NO- {cData.schoolNo}</span>
-                      <div className={`${isMinimalTemplate ? 'bg-slate-900' : 'bg-[#dc2626]'} text-white px-4 py-0.5 rounded-full text-xs font-black tracking-wider uppercase`}>
+                      <div className={isMinimalProfessional ? 'border border-black text-black px-4 py-0.5 text-xs font-black tracking-widest uppercase' : `${isMinimalTemplate ? 'bg-slate-900' : 'bg-[#dc2626]'} text-white px-4 py-0.5 rounded-full text-xs font-black tracking-wider uppercase`}>
                         FEE CARD
                       </div>
                       <span>Affiliation No- {cData.affiliationNo}</span>
                     </div>
 
                     {/* UDISE */}
-                    <div className={`text-center text-[10px] font-bold mb-1 ${isMinimalTemplate ? 'text-slate-600' : 'text-[#1b365d]'}`}>
+                    <div className={`text-center text-[10px] font-bold mb-1 ${isMinimalProfessional ? 'text-[#333333]' : isMinimalTemplate ? 'text-slate-600' : 'text-doc-deep'}`}>
                       UDISE- {cData.udiseNo}
                     </div>
 
                     {/* School Name */}
                     <div className="text-center mb-1 leading-tight">
-                      <h1 className={`text-2xl font-black tracking-tight uppercase ${isMinimalTemplate ? 'text-slate-950 font-sans' : 'text-[#be1818] font-serif'}`}>
+                      <h1 className={`text-2xl font-black tracking-tight uppercase ${isMinimalProfessional ? 'text-black font-sans' : isMinimalTemplate ? 'text-slate-950 font-sans' : 'text-[#be1818] font-serif'}`}>
                         {cData.schoolName}
                       </h1>
-                      <p className={`text-[10px] italic ${isMinimalTemplate ? 'text-slate-600 font-sans' : 'text-[#991b1b] font-serif'}`}>
+                      <p className={isMinimalProfessional ? 'text-[10px] text-[#333333] font-sans font-medium' : `text-[10px] italic ${isMinimalTemplate ? 'text-slate-600 font-sans' : 'text-[#991b1b] font-serif'}`}>
                         {cData.trustName}
                       </p>
                     </div>
 
-                    <div className="text-center text-[9px] text-slate-500 font-medium">
+                    <div className={isMinimalProfessional ? "text-center text-[9px] text-[#555555] font-medium" : "text-center text-[9px] text-slate-500 font-medium"}>
                       An ISO 9001:2015 Certified School
                     </div>
-                    <div className="text-center text-[10px] font-bold text-slate-800">
+                    <div className={isMinimalProfessional ? "text-center text-[10px] font-bold text-black" : "text-center text-[10px] font-bold text-slate-800"}>
                       {cData.schoolAddress}
                     </div>
 
                     {/* Session */}
                     <div className="flex justify-center my-1.5">
-                      <div className={`px-5 py-0.5 border rounded-full text-[10px] font-bold ${isMinimalTemplate ? 'border-slate-900 text-slate-900' : 'border-[#1b365d] text-[#1b365d]'}`}>
+                      <div className={isMinimalProfessional ? 'px-5 py-0.5 border border-black text-[10px] font-bold text-black' : `px-5 py-0.5 border rounded-full text-[10px] font-bold ${isMinimalTemplate ? 'border-slate-900 text-slate-900' : 'border-doc-deep text-doc-deep'}`}>
                         Session : {cData.academicSession}
                       </div>
                     </div>
 
                     {/* Member Info */}
-                    <div className="space-y-1 text-xs text-slate-800 my-2 font-medium">
+                    <div className={isMinimalProfessional ? "space-y-0.5 text-xs text-black my-1.5 font-medium" : "space-y-1 text-xs text-slate-800 my-2 font-medium"}>
                       <div className="flex items-baseline">
-                        <span className="font-bold shrink-0 mr-2 text-slate-900">Name</span>
-                        <div className="flex-1 border-b border-slate-400 font-bold text-slate-900 px-2">
+                        <span className={isMinimalProfessional ? "font-bold shrink-0 mr-2 text-black" : "font-bold shrink-0 mr-2 text-slate-900"}>Name</span>
+                        <div className={isMinimalProfessional ? "flex-1 border-b border-[#999999] font-bold text-black px-2" : "flex-1 border-b border-slate-400 font-bold text-slate-900 px-2"}>
                           {cData.student.name}
                         </div>
                       </div>
 
                       <div className="flex items-baseline">
-                        <span className="font-bold shrink-0 mr-2 text-slate-900">Father&apos;s Name</span>
-                        <div className="flex-1 border-b border-slate-400 text-slate-900 px-2">
+                        <span className={isMinimalProfessional ? "font-bold shrink-0 mr-2 text-black" : "font-bold shrink-0 mr-2 text-slate-900"}>Father&apos;s Name</span>
+                        <div className={isMinimalProfessional ? "flex-1 border-b border-[#999999] text-black px-2" : "flex-1 border-b border-slate-400 text-slate-900 px-2"}>
                           {cData.fatherName}
                         </div>
                       </div>
 
                       <div className="flex items-baseline gap-4">
                         <div className="flex items-baseline flex-1">
-                          <span className="font-bold shrink-0 mr-2 text-slate-900">Class</span>
-                          <div className="flex-1 border-b border-slate-400 text-slate-900 px-2">
+                          <span className={isMinimalProfessional ? "font-bold shrink-0 mr-2 text-black" : "font-bold shrink-0 mr-2 text-slate-900"}>Class</span>
+                          <div className={isMinimalProfessional ? "flex-1 border-b border-[#999999] text-black px-2" : "flex-1 border-b border-slate-400 text-slate-900 px-2"}>
                             {cData.className}
                           </div>
                         </div>
                         <div className="flex items-baseline w-1/3">
-                          <span className="font-bold shrink-0 mr-2 text-slate-900">Sec</span>
-                          <div className="flex-1 border-b border-slate-400 text-slate-900 px-2">
+                          <span className={isMinimalProfessional ? "font-bold shrink-0 mr-2 text-black" : "font-bold shrink-0 mr-2 text-slate-900"}>Sec</span>
+                          <div className={isMinimalProfessional ? "flex-1 border-b border-[#999999] text-black px-2" : "flex-1 border-b border-slate-400 text-slate-900 px-2"}>
                             {cData.section}
                           </div>
                         </div>
@@ -740,89 +770,89 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
 
                       <div className="flex items-baseline gap-4">
                         <div className="flex items-baseline flex-1">
-                          <span className="font-bold shrink-0 mr-2 text-slate-900">Roll No.</span>
-                          <div className="flex-1 border-b border-slate-400 text-slate-900 font-mono px-2">
+                          <span className={isMinimalProfessional ? "font-bold shrink-0 mr-2 text-black" : "font-bold shrink-0 mr-2 text-slate-900"}>Roll No.</span>
+                          <div className={isMinimalProfessional ? "flex-1 border-b border-[#999999] text-black font-mono px-2" : "flex-1 border-b border-slate-400 text-slate-900 font-mono px-2"}>
                             {cData.rollNo}
                           </div>
                         </div>
                         <div className="flex items-baseline w-1/3">
-                          <span className="font-bold shrink-0 mr-2 text-slate-900">A/c. No.</span>
-                          <div className="flex-1 border-b border-slate-400 text-slate-900 font-mono px-2">
+                          <span className={isMinimalProfessional ? "font-bold shrink-0 mr-2 text-black" : "font-bold shrink-0 mr-2 text-slate-900"}>A/c. No.</span>
+                          <div className={isMinimalProfessional ? "flex-1 border-b border-[#999999] text-black font-mono px-2" : "flex-1 border-b border-slate-400 text-slate-900 font-mono px-2"}>
                             {cData.accountNo}
                           </div>
                         </div>
                       </div>
 
                       <div className="flex items-baseline">
-                        <span className="font-bold shrink-0 mr-2 text-slate-900">Address</span>
-                        <div className="flex-1 border-b border-slate-400 text-slate-900 px-2">
+                        <span className={isMinimalProfessional ? "font-bold shrink-0 mr-2 text-black" : "font-bold shrink-0 mr-2 text-slate-900"}>Address</span>
+                        <div className={isMinimalProfessional ? "flex-1 border-b border-[#999999] text-black px-2" : "flex-1 border-b border-slate-400 text-slate-900 px-2"}>
                           {cData.address}
                         </div>
                       </div>
 
                       <div className="flex items-baseline">
-                        <span className="font-bold shrink-0 mr-2 text-slate-900">Contact No.</span>
-                        <div className="flex-1 border-b border-slate-400 text-slate-900 font-mono px-2">
+                        <span className={isMinimalProfessional ? "font-bold shrink-0 mr-2 text-black" : "font-bold shrink-0 mr-2 text-slate-900"}>Contact No.</span>
+                        <div className={isMinimalProfessional ? "flex-1 border-b border-[#999999] text-black font-mono px-2" : "flex-1 border-b border-slate-400 text-slate-900 font-mono px-2"}>
                           {cData.phone}
                         </div>
                       </div>
                     </div>
 
                     {/* 12-Month Table */}
-                    <table className="w-full text-left text-[9px] border-collapse border border-[#2b5b84] mt-2">
-                      <thead className="bg-[#d6e6f5] text-[#1b365d] font-bold uppercase text-[8px]">
+                    <table className={isMinimalProfessional ? "w-full text-left text-[9px] border-collapse border border-black mt-2" : "w-full text-left text-[9px] border-collapse border border-[#2b5b84] mt-2"}>
+                      <thead className={isMinimalProfessional ? "text-black font-bold uppercase text-[8px]" : "bg-[#d6e6f5] text-doc-deep font-bold uppercase text-[8px]"}>
                         <tr>
-                          <th className="p-1 border border-[#4682b4]">MONTH</th>
-                          <th className="p-1 border border-[#4682b4] text-center leading-tight">ADMISSION<br/>FEE</th>
-                          <th className="p-1 border border-[#4682b4] text-center leading-tight">ANNUAL<br/>FEE</th>
-                          <th className="p-1 border border-[#4682b4] text-center leading-tight">TUITION<br/>FEE</th>
-                          <th className="p-1 border border-[#4682b4] text-center leading-tight">CONVEY<br/>FEE</th>
-                          <th className="p-1 border border-[#4682b4] text-center">L.fine</th>
-                          <th className="p-1 border border-[#4682b4] text-center">ARREAR</th>
-                          <th className="p-1 border border-[#4682b4] text-center leading-tight">TOTAL AMT.<br/>PAYABLE</th>
-                          <th className="p-1 border border-[#4682b4] text-center leading-tight">AMOUNT<br/>PAID</th>
-                          <th className="p-1 border border-[#4682b4] text-center">DUES</th>
-                          <th className="p-1 border border-[#4682b4] text-center">REC. NO.</th>
-                          <th className="p-1 border border-[#4682b4] text-center leading-tight">SIGN &amp;<br/>DATE</th>
+                          <th className={isMinimalProfessional ? "p-1 border border-black" : "p-1 border border-doc"}>MONTH</th>
+                          <th className={isMinimalProfessional ? "p-1 border border-black text-center leading-tight" : "p-1 border border-doc text-center leading-tight"}>ADMISSION<br/>FEE</th>
+                          <th className={isMinimalProfessional ? "p-1 border border-black text-center leading-tight" : "p-1 border border-doc text-center leading-tight"}>ANNUAL<br/>FEE</th>
+                          <th className={isMinimalProfessional ? "p-1 border border-black text-center leading-tight" : "p-1 border border-doc text-center leading-tight"}>TUITION<br/>FEE</th>
+                          <th className={isMinimalProfessional ? "p-1 border border-black text-center leading-tight" : "p-1 border border-doc text-center leading-tight"}>CONVEY<br/>FEE</th>
+                          <th className={isMinimalProfessional ? "p-1 border border-black text-center" : "p-1 border border-doc text-center"}>L.fine</th>
+                          <th className={isMinimalProfessional ? "p-1 border border-black text-center" : "p-1 border border-doc text-center"}>ARREAR</th>
+                          <th className={isMinimalProfessional ? "p-1 border border-black text-center leading-tight" : "p-1 border border-doc text-center leading-tight"}>TOTAL AMT.<br/>PAYABLE</th>
+                          <th className={isMinimalProfessional ? "p-1 border border-black text-center leading-tight" : "p-1 border border-doc text-center leading-tight"}>AMOUNT<br/>PAID</th>
+                          <th className={isMinimalProfessional ? "p-1 border border-black text-center" : "p-1 border border-doc text-center"}>DUES</th>
+                          <th className={isMinimalProfessional ? "p-1 border border-black text-center" : "p-1 border border-doc text-center"}>REC. NO.</th>
+                          <th className={isMinimalProfessional ? "p-1 border border-black text-center leading-tight" : "p-1 border border-doc text-center leading-tight"}>SIGN &amp;<br/>DATE</th>
                         </tr>
                       </thead>
                       <tbody>
                         {cData.months.map((row) => (
                           <tr key={row.month}>
-                            <td className="p-1 font-bold text-[#1b365d] border border-[#7aa3c7] whitespace-nowrap">
+                            <td className={isMinimalProfessional ? "p-1 font-bold text-black border border-black whitespace-nowrap" : "p-1 font-bold text-doc-deep border border-doc-soft whitespace-nowrap"}>
                               {row.month}
                             </td>
-                            <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                            <td className={isMinimalProfessional ? "p-1 text-right font-mono text-black border border-black" : "p-1 text-right font-mono border border-doc-soft"}>
                               {formatOrBlank(row.admissionFee)}
                             </td>
-                            <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                            <td className={isMinimalProfessional ? "p-1 text-right font-mono text-black border border-black" : "p-1 text-right font-mono border border-doc-soft"}>
                               {formatOrBlank(row.annualFee)}
                             </td>
-                            <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                            <td className={isMinimalProfessional ? "p-1 text-right font-mono text-black border border-black" : "p-1 text-right font-mono border border-doc-soft"}>
                               {formatOrBlank(row.tuitionFee)}
                             </td>
-                            <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                            <td className={isMinimalProfessional ? "p-1 text-right font-mono text-black border border-black" : "p-1 text-right font-mono border border-doc-soft"}>
                               {formatOrBlank(row.conveyFee)}
                             </td>
-                            <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                            <td className={isMinimalProfessional ? "p-1 text-right font-mono text-black border border-black" : "p-1 text-right font-mono border border-doc-soft"}>
                               {formatOrBlank(row.lateFine)}
                             </td>
-                            <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                            <td className={isMinimalProfessional ? "p-1 text-right font-mono text-black border border-black" : "p-1 text-right font-mono border border-doc-soft"}>
                               {formatOrBlank(row.arrear)}
                             </td>
-                            <td className="p-1 text-right font-mono font-bold text-slate-900 border border-[#7aa3c7]">
+                            <td className={isMinimalProfessional ? "p-1 text-right font-mono font-bold text-black border border-black" : "p-1 text-right font-mono font-bold text-slate-900 border border-doc-soft"}>
                               {formatOrBlank(row.totalPayable)}
                             </td>
-                            <td className="p-1 text-right font-mono font-bold text-slate-900 border border-[#7aa3c7]">
+                            <td className={isMinimalProfessional ? "p-1 text-right font-mono font-bold text-black border border-black" : "p-1 text-right font-mono font-bold text-slate-900 border border-doc-soft"}>
                               {formatOrBlank(row.amountPaid)}
                             </td>
-                            <td className="p-1 text-right font-mono font-bold text-slate-900 border border-[#7aa3c7]">
+                            <td className={isMinimalProfessional ? "p-1 text-right font-mono font-bold text-black border border-black" : "p-1 text-right font-mono font-bold text-slate-900 border border-doc-soft"}>
                               {formatOrBlank(row.dues)}
                             </td>
-                            <td className="p-1 text-center font-mono text-slate-700 border border-[#7aa3c7] whitespace-nowrap">
+                            <td className={isMinimalProfessional ? "p-1 text-center font-mono text-[#333333] border border-black whitespace-nowrap" : "p-1 text-center font-mono text-slate-700 border border-doc-soft whitespace-nowrap"}>
                               {row.receiptNo}
                             </td>
-                            <td className="p-1 text-center font-mono text-slate-700 border border-[#7aa3c7] whitespace-nowrap">
+                            <td className={isMinimalProfessional ? "p-1 text-center font-mono text-[#333333] border border-black whitespace-nowrap" : "p-1 text-center font-mono text-slate-700 border border-doc-soft whitespace-nowrap"}>
                               {row.signDate}
                             </td>
                           </tr>
@@ -833,8 +863,8 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
                     {/* Authorised Signatory */}
                     <div className="pt-6 pb-2 pr-4 flex justify-end">
                       <div className="text-center">
-                        <div className="w-40 border-b border-dotted border-slate-700 mb-1" />
-                        <span className="font-serif italic text-xs font-semibold text-slate-800">
+                        <div className={isMinimalProfessional ? "w-40 border-b border-black mb-1" : "w-40 border-b border-dotted border-slate-700 mb-1"} />
+                        <span className={isMinimalProfessional ? "font-sans text-xs font-semibold text-black" : "font-serif italic text-xs font-semibold text-slate-800"}>
                           Authorised Signatory
                         </span>
                       </div>

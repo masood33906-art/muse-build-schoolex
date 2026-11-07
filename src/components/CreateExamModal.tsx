@@ -3,6 +3,7 @@ import { X, Plus, Trash2, Calendar, ChevronDown, Check } from 'lucide-react';
 import { Exam, ExamSubject, DEFAULT_GRADING_SCHEMA } from '../utils/examStore';
 import { ClassInfo } from '../types';
 import { DateTimePickerPopover } from './DateTimePickerPopover';
+import { nextSubjectStartDate } from '../utils/dates';
 
 interface CreateExamModalProps {
   isOpen: boolean;
@@ -131,7 +132,12 @@ export const CreateExamModal: React.FC<CreateExamModalProps> = ({
       return;
     }
 
-    const defaultDateTime = '09/18/2026 09:00 AM';
+    // Date rule: the first subject defaults to tomorrow; each next subject
+    // defaults to the previous subject's date + 1 day (same time). The date
+    // stays fully editable per subject afterwards.
+    const defaultDateTime = nextSubjectStartDate(
+      subjects.length > 0 ? subjects[subjects.length - 1].startDate : undefined
+    );
 
     const newSub: ExamSubject = {
       id: `SUB-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
@@ -259,7 +265,7 @@ export const CreateExamModal: React.FC<CreateExamModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
       <div 
-        className="relative w-full max-w-xl bg-[#0e1626] border border-[#1e2d45] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] text-white"
+        className="relative w-full max-w-xl bg-surface-8 border border-edge-21 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] text-white"
         onClick={e => e.stopPropagation()}
       >
         {/* Header: Clean title without any bulk tags */}
@@ -275,7 +281,7 @@ export const CreateExamModal: React.FC<CreateExamModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-[#1a2840] transition-colors cursor-pointer"
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-edge-12 transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -299,7 +305,7 @@ export const CreateExamModal: React.FC<CreateExamModalProps> = ({
               placeholder="e.g. Mid Term Exam 2026, Final Assessment"
               value={examName}
               onChange={e => setExamName(e.target.value)}
-              className="w-full px-4 py-2.5 bg-[#121c2e] border border-[#233550] rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full px-4 py-2.5 bg-surface-22 border border-edge-36 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
             />
           </div>
 
@@ -333,7 +339,7 @@ export const CreateExamModal: React.FC<CreateExamModalProps> = ({
                   setClassSearch(e.target.value);
                   setIsClassDropdownOpen(true);
                 }}
-                className="w-full pl-4 pr-10 py-2.5 bg-[#121c2e] border border-[#233550] rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors cursor-text"
+                className="w-full pl-4 pr-10 py-2.5 bg-surface-22 border border-edge-36 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors cursor-text"
               />
               <button
                 type="button"
@@ -346,7 +352,7 @@ export const CreateExamModal: React.FC<CreateExamModalProps> = ({
 
             {/* Dropdown Menu */}
             {isClassDropdownOpen && (
-              <div className="absolute top-full left-0 right-0 mt-1 z-30 bg-[#121c2e] border border-[#233550] rounded-xl shadow-2xl max-h-52 overflow-y-auto p-1 divide-y divide-[#1b2a40]">
+              <div className="absolute top-full left-0 right-0 mt-1 z-30 bg-surface-22 border border-edge-36 rounded-xl shadow-2xl max-h-52 overflow-y-auto p-1 divide-y divide-[#1b2a40]">
                 {filteredClasses.length > 0 ? (
                   filteredClasses.map(cls => {
                     const isSelected = selectedClasses.includes(cls.name);
@@ -489,7 +495,7 @@ export const CreateExamModal: React.FC<CreateExamModalProps> = ({
                     handleAddSubject();
                   }
                 }}
-                className="flex-1 px-4 py-2.5 bg-[#121c2e] border border-[#233550] rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+                className="flex-1 px-4 py-2.5 bg-surface-22 border border-edge-36 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
               />
               <button
                 type="button"
@@ -507,7 +513,7 @@ export const CreateExamModal: React.FC<CreateExamModalProps> = ({
                 {subjects.map(sub => (
                   <div
                     key={sub.id}
-                    className="p-3 bg-[#121c2e] border border-[#1e2d45] rounded-xl flex items-center justify-between gap-3 transition-all"
+                    className="p-3 bg-surface-22 border border-edge-21 rounded-xl flex items-center justify-between gap-3 transition-all"
                   >
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-sm text-white uppercase">{sub.name}</span>
@@ -520,7 +526,7 @@ export const CreateExamModal: React.FC<CreateExamModalProps> = ({
                       {/* Date & Time field (Only Exam Date/Time - No End Date) */}
                       <div 
                         onClick={() => handleOpenDatePicker(sub.id)}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-[#0d1522] border border-[#22334e] hover:border-blue-500/60 rounded-xl cursor-pointer transition-colors"
+                        className="flex items-center gap-2 px-3 py-1.5 bg-[#0d1522] border border-edge-32 hover:border-blue-500/60 rounded-xl cursor-pointer transition-colors"
                         title="Change exam date and time"
                       >
                         <Calendar className="w-3.5 h-3.5 text-blue-400 shrink-0" />
@@ -557,7 +563,7 @@ export const CreateExamModal: React.FC<CreateExamModalProps> = ({
           )}
 
           {/* Footer Actions */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#1a2840]">
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-edge-12">
             <button
               type="button"
               onClick={onClose}

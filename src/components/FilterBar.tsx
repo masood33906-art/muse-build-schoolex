@@ -8,7 +8,7 @@ interface FilterBarProps {
   classes: string[];
   activeTab: ActiveTab;
   onTabChange: (tab: ActiveTab) => void;
-  studentsCount: number;
+  totalStudents: number;
   familiesCount: number;
   filteredCount: number;
 }
@@ -19,7 +19,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   classes,
   activeTab,
   onTabChange,
-  studentsCount,
+  totalStudents,
   familiesCount,
   filteredCount
 }) => {
@@ -32,7 +32,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   return (
     <div className="space-y-3 mb-4">
       {/* Top Tabs: Students vs Families */}
-      <div className="flex items-center gap-2 border-b border-[#232d42] pb-2.5">
+      <div className="flex items-center gap-2 border-b border-edge-22 pb-2.5">
         <button
           type="button"
           onClick={() => onTabChange('students')}
@@ -47,7 +47,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           <span className={`text-[11px] px-1.5 py-0.2 rounded-full ${
             activeTab === 'students' ? 'bg-blue-500/20 text-blue-300' : 'bg-slate-800 text-slate-400'
           }`}>
-            {studentsCount}
+            {totalStudents}
           </span>
         </button>
 
@@ -72,7 +72,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
         {isFiltered && activeTab === 'students' && (
           <div className="ml-auto flex items-center gap-2">
             <span className="text-xs text-slate-400">
-              {filteredCount} of {studentsCount}
+              {filteredCount} of {totalStudents}
             </span>
             <button
               type="button"
@@ -95,7 +95,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               <select
                 value={filters.class}
                 onChange={(e) => onFilterChange({ class: e.target.value })}
-                className="w-full bg-[#141a26] text-slate-200 text-xs font-medium rounded-lg border border-[#26354d] focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none pl-3 pr-8 py-2.5 appearance-none cursor-pointer hover:bg-[#182030] hover:border-slate-500 transition-colors"
+                className="w-full bg-[#141a26] text-slate-200 text-xs font-medium rounded-lg border border-edge-37 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none pl-3 pr-8 py-2.5 appearance-none cursor-pointer hover:bg-surface-37 hover:border-slate-500 transition-colors"
                 id="filter-class"
               >
                 <option value="">All Classes</option>
@@ -120,7 +120,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
                 value={filters.search}
                 onChange={(e) => onFilterChange({ search: e.target.value })}
                 placeholder="Search by name, ID, family, class, phone..."
-                className="w-full bg-[#141a26] text-slate-100 text-xs rounded-lg pl-9 pr-8 py-2.5 border border-[#26354d] focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none placeholder-slate-500 hover:border-slate-500 transition-colors"
+                className="w-full bg-[#141a26] text-slate-100 text-xs rounded-lg pl-9 pr-8 py-2.5 border border-edge-37 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none placeholder-slate-500 hover:border-slate-500 transition-colors"
                 id="search-input"
               />
               {filters.search && (
@@ -141,7 +141,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               <select
                 value={filters.status}
                 onChange={(e) => onFilterChange({ status: e.target.value as FilterStatus })}
-                className="w-full bg-[#141a26] text-slate-200 text-xs font-medium rounded-lg border border-[#26354d] focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none pl-3 pr-8 py-2.5 appearance-none cursor-pointer hover:bg-[#182030] hover:border-slate-500 transition-colors"
+                className="w-full bg-[#141a26] text-slate-200 text-xs font-medium rounded-lg border border-edge-37 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none pl-3 pr-8 py-2.5 appearance-none cursor-pointer hover:bg-surface-37 hover:border-slate-500 transition-colors"
                 id="filter-status"
               >
                 <option value="All">All Status</option>

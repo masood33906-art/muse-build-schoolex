@@ -8,6 +8,14 @@ export interface Student {
   rollNo?: string;
   fatherName?: string;
   class: string; // e.g. 'Class 6', 'Prep', 'Class 2'
+  // Stable id of the ClassInfo record this student belongs to (Fix P0-3).
+  // Optional only for legacy tolerance: records saved before the classId
+  // migration may not carry it; those are matched by class NAME (see
+  // studentBelongsToClass in utils/classExportHelper.ts) and are backfilled
+  // with the id at the App level whenever their class name matches a class.
+  // Matching prefers classId whenever it is present, so renaming a class can
+  // no longer orphan its students.
+  classId?: string;
   section: string; // e.g. 'A', 'B'
   status: StudentStatus;
   avatarColor?: string;
@@ -46,7 +54,7 @@ export interface Student {
   achievementsList?: { id: string; title: string; date: string; category: string }[];
 }
 
-export type CardTemplateType = 'modern-tech' | 'classic-academic';
+export type CardTemplateType = 'modern-tech' | 'classic-academic' | 'vertical-badge';
 
 export type FilterStatus = 'All' | 'Active' | 'Inactive' | 'New Admission';
 
@@ -184,7 +192,12 @@ export interface ClassInfo {
   name: string;
   sectionsCount: number;
   sections: string[];
-  studentsCount: number;
+  /** @deprecated Legacy stored counter (Fix P0-1): it was written once at class
+   * creation and never updated, so exports that read it were permanently stale.
+   * Never read this field — compute enrollment live from the students array with
+   * `countStudentsInClass` (src/utils/classExportHelper.ts). Kept optional only
+   * so previously saved/seed class records still parse. */
+  studentsCount?: number;
   fee?: number;
   createdAt?: string;
   latestSession?: string;

@@ -1,12 +1,12 @@
 import { loadJSON, saveJSON } from './storage';
 
-export type RollNumberSlipTemplateType = 'minimal-stream' | 'classic-bordered';
-export type IdCardTemplateSettingType = 'modern-tech' | 'classic-academic';
-export type FeeChallanTemplateType = 'standard-3copy' | 'compact-2copy';
-export type StudentFeeCardTemplateType = 'classic-ledger' | 'minimal-modern';
-export type StaffSalarySlipTemplateType = 'executive-emerald' | 'minimal-classic';
-export type ExamDmcTemplateType = 'official-crest' | 'minimal-classic';
-export type AttendanceRegisterTemplateType = 'official-weekly' | 'compact-monochrome';
+export type RollNumberSlipTemplateType = 'minimal-stream' | 'classic-bordered' | 'minimal-professional';
+export type IdCardTemplateSettingType = 'modern-tech' | 'classic-academic' | 'vertical-badge';
+export type FeeChallanTemplateType = 'standard-3copy' | 'compact-2copy' | 'minimal-professional';
+export type StudentFeeCardTemplateType = 'classic-ledger' | 'minimal-modern' | 'minimal-professional' | 'register-card';
+export type StaffSalarySlipTemplateType = 'executive-emerald' | 'minimal-classic' | 'minimal-professional';
+export type ExamDmcTemplateType = 'official-crest' | 'minimal-classic' | 'minimal-professional';
+export type AttendanceRegisterTemplateType = 'official-weekly' | 'compact-monochrome' | 'minimal-professional';
 
 export interface SchoolSettings {
   // 1. School Profile & Branding
@@ -97,26 +97,29 @@ export const PRESET_SCHOOL_LOGOS = [
 ];
 
 export const DEFAULT_SCHOOL_SETTINGS: SchoolSettings = {
-  // School Identity
-  schoolName: 'Demo School Schoollee Pakistan',
+  // School Identity — intentionally BLANK. A fresh install must never print
+  // a fake school's name, contact details or bank account on documents;
+  // the school fills in its own identity in Settings → School Profile.
+  schoolName: '',
   schoolTagline: 'Excellence in Education & Character Building',
   schoolLogo: PRESET_SCHOOL_LOGOS[0].svg,
-  campusName: 'Main Campus',
-  schoolPhone: '+92 42 35800000',
-  schoolEmail: 'info@schoollee.pk',
-  schoolWebsite: 'https://schoollee.pk',
-  schoolAddress: 'Main Boulevard, Gulberg III, Lahore, Pakistan',
-  session: '2025 - 2026',
-  principalName: 'Prof. Muhammad Tariq',
-  registrationNumber: 'REG-BISE-LHR-49210',
+  campusName: '',
+  schoolPhone: '',
+  schoolEmail: '',
+  schoolWebsite: '',
+  schoolAddress: '',
+  session: '2026 - 2027',
+  principalName: '',
+  registrationNumber: '',
 
-  // Bank & Account Details
-  bankName: 'Meezan Bank',
-  accountNumber: '0214-0103492811',
-  accountTitle: 'Demo School Schoollee Pakistan Collection A/C',
-  branchName: 'Main Boulevard Branch, Lahore',
-  branchCode: '0214',
-  iban: 'PK36MEZN0002140103492811',
+  // Bank & Account Details — blank until the school enters its own account;
+  // documents omit the bank block entirely while these are empty.
+  bankName: '',
+  accountNumber: '',
+  accountTitle: '',
+  branchName: '',
+  branchCode: '',
+  iban: '',
 
   // Challan Rules
   challanDueDay: 10,
@@ -127,7 +130,7 @@ export const DEFAULT_SCHOOL_SETTINGS: SchoolSettings = {
   studentIdCardTemplate: 'modern-tech',
   staffIdCardTemplate: 'modern-tech',
   feeChallanTemplate: 'standard-3copy',
-  studentFeeCardTemplate: 'classic-ledger',
+  studentFeeCardTemplate: 'register-card',
   staffSalarySlipTemplate: 'executive-emerald',
   examDmcTemplate: 'official-crest',
   attendanceRegisterTemplate: 'official-weekly'

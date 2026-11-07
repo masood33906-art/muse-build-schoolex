@@ -55,7 +55,7 @@ export const LedgerDocumentModal: React.FC<LedgerDocumentModalProps> = ({
         id="modal-ledger-document-preview"
       >
         {/* Header */}
-        <div className="px-5 py-3.5 bg-[#121b2b] border-b border-[#1b283d] flex items-center justify-between">
+        <div className="px-5 py-3.5 bg-surface-20 border-b border-edge-11 flex items-center justify-between">
           <div className="flex items-center gap-2 font-bold text-sm text-white">
             <FileText className="w-4 h-4 text-blue-400" />
             <span>Document Preview • {doc?.name || 'Invoice'}</span>
@@ -63,7 +63,7 @@ export const LedgerDocumentModal: React.FC<LedgerDocumentModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-[#1a2538] transition-colors cursor-pointer"
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-surface-43 transition-colors cursor-pointer"
             id="btn-close-doc-preview"
           >
             <X className="w-4 h-4" />
@@ -73,7 +73,7 @@ export const LedgerDocumentModal: React.FC<LedgerDocumentModalProps> = ({
         {/* Content */}
         <div className="p-5 space-y-4">
           {/* Transaction Metadata Card */}
-          <div className="p-3 rounded-xl bg-[#080d16] border border-[#1b283d] space-y-2 text-xs">
+          <div className="p-3 rounded-xl bg-surface-1 border border-edge-11 space-y-2 text-xs">
             <div className="flex justify-between items-center text-slate-400">
               <span>Transaction ID</span>
               <span className="font-mono text-white">{transaction.id}</span>
@@ -99,12 +99,12 @@ export const LedgerDocumentModal: React.FC<LedgerDocumentModalProps> = ({
           </div>
 
           {/* Document Display */}
-          <div className="rounded-xl border border-[#22334b] bg-[#090f1a] p-6 flex flex-col items-center justify-center text-center space-y-3 min-h-[220px]">
+          <div className="rounded-xl border border-edge-29 bg-surface-4 p-6 flex flex-col items-center justify-center text-center space-y-3 min-h-[220px]">
             {previewUrl && isImage ? (
               <img 
                 src={previewUrl} 
                 alt="Invoice Preview" 
-                className="max-h-56 object-contain rounded-lg border border-[#23354e]" 
+                className="max-h-56 object-contain rounded-lg border border-edge-35" 
               />
             ) : (
               <div className="flex flex-col items-center space-y-2">
@@ -130,7 +130,7 @@ export const LedgerDocumentModal: React.FC<LedgerDocumentModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-[#141d2c] hover:bg-[#1a263a] border border-[#23354e] text-slate-300 hover:text-white text-xs font-semibold cursor-pointer transition-all"
+              className="px-4 py-2 rounded-xl bg-[#141d2c] hover:bg-surface-44 border border-edge-35 text-slate-300 hover:text-white text-xs font-semibold cursor-pointer transition-all"
             >
               Close
             </button>
