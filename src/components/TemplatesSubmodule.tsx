@@ -983,7 +983,6 @@ function StudentIdCardPreview({
             {school.schoolAddress && <p className="text-[12px] leading-snug">{school.schoolAddress}</p>}
             {school.schoolPhone && <p className="text-[12px]">{school.schoolPhone}</p>}
             {school.schoolEmail && <p className="text-[12px]">{school.schoolEmail}</p>}
-            {school.schoolWebsite && <p className="text-[12px]">{school.schoolWebsite}</p>}
           </div>
 
           {/* Seal (left) + principal signature (right) */}

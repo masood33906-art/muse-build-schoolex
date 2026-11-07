@@ -650,48 +650,49 @@ function renderVerticalBadgeBack(doc: jsPDF, student: Student, school: SchoolInf
   const logo = pdfLogo || settings.schoolLogo || '';
   let renderedLogo = false;
   if (/^data:image\/(png|jpe?g|webp)/i.test(logo)) {
-    renderedLogo = drawImageCover(doc, logo, CX - 6, 6, 12, 12, 2);
+    renderedLogo = drawImageCover(doc, logo, CX - 6, 5, 12, 12, 2);
   }
   if (!renderedLogo) {
     doc.setFillColor(...STEEL);
-    doc.circle(CX, 12, 6, 'F');
+    doc.circle(CX, 11, 6, 'F');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7);
     doc.setTextColor(...NAVY);
-    doc.text(schoolInitials(school.name), CX, 13.3, { align: 'center' });
+    doc.text(schoolInitials(school.name), CX, 12.3, { align: 'center' });
   }
 
   // School name + campus
   doc.setTextColor(255, 255, 255);
   const schoolNameFit = fitText(doc, school.name, 46, 'helvetica', 'bold', 9.5, 7);
-  doc.text(schoolNameFit, CX, 22.5, { align: 'center' });
+  doc.text(schoolNameFit, CX, 21.5, { align: 'center' });
   doc.setTextColor(...STEEL_LIGHT);
   const campusFit = fitText(doc, school.campus, 46, 'helvetica', 'normal', 6.5, 5.5);
-  doc.text(campusFit, CX, 26, { align: 'center' });
+  doc.text(campusFit, CX, 25, { align: 'center' });
 
   // Divider
   doc.setDrawColor(...STEEL);
   doc.setLineWidth(0.4);
-  doc.line(8, 29, 46, 29);
+  doc.line(8, 27, 46, 27);
 
   // Student identity
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(6.5);
   doc.setTextColor(...STEEL);
-  doc.text('STUDENT', CX, 33.5, { align: 'center' });
+  doc.text('STUDENT', CX, 33, { align: 'center' });
 
   doc.setTextColor(255, 255, 255);
   const studentNameFit = fitText(doc, student.name, 46, 'helvetica', 'bold', 10.5, 8);
-  doc.text(studentNameFit, CX, 38, { align: 'center' });
+  doc.text(studentNameFit, CX, 37.5, { align: 'center' });
 
   doc.setTextColor(...PALE);
   const idLine = fitText(doc, `${student.id} • ${student.class} – ${student.section}`, 46, 'helvetica', 'normal', 7, 6);
-  doc.text(idLine, CX, 42.5, { align: 'center' });
+  doc.text(idLine, CX, 42, { align: 'center' });
 
   // School contact lines are computed first: their count decides how many
   // lines the student address may wrap to, so the two blocks never meet.
-  // Address and phone come from SchoolInfo; email/website exist only in
-  // the school settings, so they are read from there directly.
+  // Address and phone come from SchoolInfo; email exists only in the
+  // school settings, so it is read from there directly. (The school
+  // website is deliberately NOT printed on the card back.)
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   const schoolLines: string[] = [];
@@ -707,7 +708,6 @@ function renderVerticalBadgeBack(doc: jsPDF, student: Student, school: SchoolInf
   }
   if (school.phone && school.phone.trim()) schoolLines.push(school.phone);
   if (settings.schoolEmail && settings.schoolEmail.trim()) schoolLines.push(settings.schoolEmail);
-  if (settings.schoolWebsite && settings.schoolWebsite.trim()) schoolLines.push(settings.schoolWebsite);
 
   // Contact rows (left-aligned): Guardian, Phone, Emergency, Address
   interface ContactRow { label: string; lines: string[]; size: number }
@@ -731,8 +731,8 @@ function renderVerticalBadgeBack(doc: jsPDF, student: Student, school: SchoolInf
     rows.push({ label: 'ADDRESS', lines, size: 7 });
   }
 
-  let cy = 48.5;
-  let lastBaseline = 45;
+  let cy = 48;
+  let lastBaseline = 44.5;
   rows.forEach(row => {
     doc.setTextColor(...STEEL_LIGHT);
     const labelFit = fitText(doc, row.label, 16, 'helvetica', 'bold', 6.5, 5.5);
