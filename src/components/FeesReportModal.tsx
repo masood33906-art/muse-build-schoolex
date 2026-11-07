@@ -23,7 +23,7 @@ export const FeesReportModal: React.FC<FeesReportModalProps> = ({
 
   const schoolSettings = getSchoolSettings();
   const bankSettings = getBankSettings();
-  const schoolName = schoolSettings.schoolName || bankSettings.schoolName || 'Demo School Schooliee Pakistan';
+  const schoolName = schoolSettings.schoolName || bankSettings.schoolName || '';
   const schoolPhone = schoolSettings.schoolPhone || bankSettings.schoolPhone || '';
   // Fix P0-4: the report is dated the day it is generated — never a fixed date.
   const currentDateFormatted = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });

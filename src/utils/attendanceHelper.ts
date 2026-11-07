@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Student, StaffMember, AttendanceRecord, AttendanceStatus } from '../types';
-import { DEFAULT_SCHOOL, SchoolInfo } from './pdfGenerator';
+import { DEFAULT_SCHOOL, SchoolInfo, joinInfoParts } from './pdfGenerator';
 import { getSchoolSettings } from './settingsHelper';
 import { loadJSON } from './storage';
 
@@ -286,7 +286,7 @@ export function generateWeeklyAttendancePdf(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(isMinimalProfessional ? 0 : 100, isMinimalProfessional ? 0 : 116, isMinimalProfessional ? 0 : 139);
-  doc.text(`${school.campus} • ${school.address} • Contact: ${school.phone}`, 148, 19, { align: 'center' });
+  doc.text(joinInfoParts([school.campus, school.address, school.phone ? `Contact: ${school.phone}` : '']), 148, 19, { align: 'center' });
 
   // Title Box (minimal-professional: thin black outline only, no fill at all)
   doc.setDrawColor(isMinimalProfessional || isCompactMono ? 0 : 203, isMinimalProfessional || isCompactMono ? 0 : 213, isMinimalProfessional || isCompactMono ? 0 : 225);
@@ -446,7 +446,7 @@ export function generateWeeklyAttendancePdf(
       const pageHeight = doc.internal.pageSize.height;
       doc.setFontSize(7.5);
       doc.setTextColor(isMinimalProfessional ? 0 : 100, isMinimalProfessional ? 0 : 116, isMinimalProfessional ? 0 : 139);
-      doc.text(`Generated on ${new Date().toLocaleDateString()} via Schooliee Management System • Confidential Official Record`, 14, pageHeight - 8);
+      doc.text(`Generated on ${new Date().toLocaleDateString()} via SchoolEx • Confidential Official Record`, 14, pageHeight - 8);
       doc.text(`Page ${data.pageNumber}`, 283, pageHeight - 8, { align: 'right' });
     }
   });

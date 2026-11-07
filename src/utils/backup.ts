@@ -4,7 +4,6 @@ import { listFileIds, getFile, putFile, blobToDataURL, dataURLToBlob } from './b
 import { exportPayroll, importPayroll } from './payrollApi';
 
 const PREFIXES = ['schoollee_', 'schooliee_'];
-const LAST_BACKUP_KEY = 'schoollee_last_backup_at';
 const isAppKey = (k: string) =>
   PREFIXES.some(p => k.startsWith(p)) && !k.includes('__corrupt_') && !k.includes('__pre');
 
@@ -40,11 +39,6 @@ export async function buildBackup() {
 }
 
 export async function downloadBackup(tag = '') {
-  try {
-    localStorage.setItem(LAST_BACKUP_KEY, new Date().toISOString());
-  } catch {
-    // ignore if storage is completely full
-  }
   const payload = await buildBackup();
   const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -53,11 +47,6 @@ export async function downloadBackup(tag = '') {
   a.download = `schoolex-backup-${localISODate()}${tag}.json`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  try {
-    window.dispatchEvent(new CustomEvent('backupCompleted'));
-  } catch {
-    // ignore
-  }
 }
 
 export async function restoreBackup(file: File) {
@@ -74,9 +63,6 @@ export async function restoreBackup(file: File) {
   Object.entries<string>(data.keys).forEach(([k, v]) => {
     if (isAppKey(k)) localStorage.setItem(k, v);
   });
-  if (!localStorage.getItem(LAST_BACKUP_KEY)) {
-    localStorage.setItem(LAST_BACKUP_KEY, new Date().toISOString());
-  }
   if (data.files && typeof data.files === 'object') {
     for (const [id, dataUrl] of Object.entries<string>(data.files)) {
       if (typeof dataUrl === 'string') {
@@ -102,10 +88,3 @@ export async function restoreBackup(file: File) {
     location.reload();
   }
 }
-
-export const daysSinceBackup = (): number => {
-  const t = localStorage.getItem(LAST_BACKUP_KEY);
-  if (!t) return Infinity;
-  const ms = Date.now() - new Date(t).getTime();
-  return Number.isNaN(ms) ? Infinity : Math.max(0, Math.floor(ms / 86_400_000));
-};

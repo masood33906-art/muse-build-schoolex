@@ -19,6 +19,7 @@ import {
   StudentFeeBreakdownItem 
 } from '../utils/feeHelper';
 import { getSchoolSettings } from '../utils/settingsHelper';
+import { monthKeyOf, monthLabelFromKey } from '../utils/dates';
 
 // WhatsApp icon SVG component
 const WhatsAppIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (
@@ -85,7 +86,7 @@ export const FeeReminderModal: React.FC<FeeReminderModalProps> = ({
           lines: [
             {
               description: 'Monthly Fee',
-              month: 'September 2026',
+              month: monthLabelFromKey(monthKeyOf()),
               pendingAmount: amountDue
             }
           ]
@@ -107,7 +108,7 @@ export const FeeReminderModal: React.FC<FeeReminderModalProps> = ({
         lines: [
           {
             description: 'Monthly Fee',
-            month: 'September 2026',
+            month: monthLabelFromKey(monthKeyOf()),
             pendingAmount: amountDue
           }
         ]

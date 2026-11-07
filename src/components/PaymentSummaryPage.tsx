@@ -211,7 +211,7 @@ export const PaymentSummaryPage: React.FC<PaymentSummaryPageProps> = ({
 
             <div>
               <h2 className="text-base sm:text-lg font-bold text-white tracking-tight leading-tight">
-                Demo School Schooliee Pakistan
+                {DEFAULT_SCHOOL.name}
               </h2>
               <div className="text-xs text-slate-400 mt-0.5 font-medium">
                 {salarySlipSubtitle}

@@ -19,7 +19,8 @@ import { generateSingleIdCard, DEFAULT_SCHOOL } from '../utils/pdfGenerator';
 import { rasterizeLogoForPdf } from '../utils/logoRaster';
 import { generateSingleStaffIdCard, generateMonthlyIndividualSlipsCombinedPdf, getSalarySlipTheme } from '../utils/staffPdfGenerator';
 import { generateSingleRollNumberSlipPDF, RollSlipData } from '../utils/rollSlipPdfGenerator';
-import { generateFeeCardPdf, buildStudentFeeCardData, formatOrBlank } from '../utils/feeCardHelper';
+import { generateFeeCardPdf, buildStudentFeeCardData, buildRegisterCardData, formatOrBlank } from '../utils/feeCardHelper';
+import { FeeRegisterCardSheet } from './FeeRegisterCardSheet';
 import { generateWeeklyAttendancePdf, getWeekDays, calculateWeeklyAttendance, loadAttendance } from '../utils/attendanceHelper';
 import { localISODate } from '../utils/dates';
 import { code39Spans } from '../utils/barcode';
@@ -145,6 +146,7 @@ const DOCUMENTS: DocumentItem[] = [
     format: '12-Month Ledger (A4 Portrait)',
     settingKey: 'studentFeeCardTemplate',
     templates: [
+      { id: 'register-card', label: 'Register Card', description: 'Black & white register card — arched school name, admission / tuition / fine-extra split, signature columns' },
       { id: 'classic-ledger', label: 'Classic Ledger', description: 'Double-framed navy & crimson 12-month fee card' },
       { id: 'minimal-modern', label: 'Minimal Modern', description: 'Monochrome clean-lined institutional ledger' },
       { id: 'minimal-professional', label: 'Minimal Professional', description: 'Strict black & white, compact professional layout, print-ready' }
@@ -747,7 +749,7 @@ function RollNumberSlipPreview({
           <div className="text-center border-b border-black pb-2">
             <div className="flex items-center justify-between text-[9px] font-mono text-[#666] mb-0.5">
               <span>SLIP #1 OF 1</span>
-              <span>SESSION: {school.session || '2025 - 2026'}</span>
+              <span>SESSION: {school.session}</span>
             </div>
             <h3 className="text-base font-black uppercase tracking-tight text-black">
               {school.schoolName || 'DEMO SCHOOL SYSTEM'}
@@ -893,7 +895,7 @@ function StudentIdCardPreview({
               {school.schoolName || 'DEMO SCHOOL'}
             </h2>
             <span className="text-[11px] font-semibold mt-[1px]" style={{ color: '#BED7E4' }}>
-              {school.campusName || 'Main Campus'} • {school.session || '2025 - 2026'}
+              {[school.campusName, school.session].filter(Boolean).join(' • ')}
             </span>
 
             {/* Photo frame (23mm, cover-fit like the PDF) */}
@@ -943,7 +945,7 @@ function StudentIdCardPreview({
               {school.schoolName || 'DEMO SCHOOL'}
             </h2>
             <span className="text-[11px] font-semibold mt-[1px]" style={{ color: '#BED7E4' }}>
-              {school.campusName || 'Main Campus'}
+              {school.campusName}
             </span>
             <div className="w-[202px] border-t-2 mt-[10px]" style={{ borderColor: '#8DB4C8' }} />
           </div>
@@ -1072,7 +1074,7 @@ function StudentIdCardPreview({
             <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-center space-y-0.5 mt-3">
               <span className="text-[9px] text-slate-500 font-bold block uppercase">Emergency Contact</span>
               <p className="font-mono text-xs font-bold text-accent-deep">{school.schoolPhone || '+92 42 35889012'}</p>
-              <p className="text-[9px] text-slate-600">{school.schoolAddress || 'Main Campus'}</p>
+              <p className="text-[9px] text-slate-600">{school.schoolAddress}</p>
             </div>
           </div>
 
@@ -1098,7 +1100,7 @@ function StudentIdCardPreview({
         
         <div className="text-center border-b border-cyan-500/30 pb-3">
           <h2 className="text-xs font-black uppercase tracking-wider text-cyan-400">
-            {school.schoolName || 'SCHOOLLEE GRAMMAR SCHOOL'}
+            {school.schoolName || 'School Name'}
           </h2>
           <span className="text-[9px] font-bold text-slate-300 tracking-widest block uppercase mt-0.5">
             STUDENT IDENTITY CARD
@@ -1151,7 +1153,7 @@ function StudentIdCardPreview({
           <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-center space-y-0.5 mt-3">
             <span className="text-[9px] text-slate-400 font-bold block uppercase">Emergency Contact</span>
             <p className="font-mono text-xs font-bold text-cyan-300">{school.schoolPhone || '+92 42 35889012'}</p>
-            <p className="text-[9px] text-slate-400">{school.schoolAddress || 'Lahore, Pakistan'}</p>
+            <p className="text-[9px] text-slate-400">{school.schoolAddress}</p>
           </div>
         </div>
 
@@ -1235,7 +1237,7 @@ function StaffIdCardPreview({
       <div className="w-72 h-[420px] rounded-2xl bg-gradient-to-b from-[#0e1726] to-[#0a0f18] text-white p-5 border-2 border-indigo-500/50 shadow-2xl flex flex-col justify-between font-sans relative">
         <div className="text-center border-b border-indigo-500/30 pb-3">
           <h2 className="text-xs font-black uppercase tracking-wider text-indigo-400">
-            {school.schoolName || 'SCHOOLLEE GRAMMAR SCHOOL'}
+            {school.schoolName || 'School Name'}
           </h2>
           <span className="text-[9px] font-bold text-slate-300 tracking-widest block uppercase mt-0.5">
             FACULTY &amp; STAFF IDENTITY CARD
@@ -1320,6 +1322,13 @@ function StudentFeeCardPreview({
   student: Student;
   classes: ClassInfo[];
 }) {
+  // 'register-card' (the rebuilt default) renders the shared sheet —
+  // the same component and data builder as the Fee Card modal and the
+  // PDF download, so the preview cannot drift from what prints.
+  if (school.studentFeeCardTemplate === 'register-card') {
+    return <FeeRegisterCardSheet data={buildRegisterCardData(student, classes, school)} framed />;
+  }
+
   const cardData = buildStudentFeeCardData(student, classes, school);
   const isMinimalProfessional = school.studentFeeCardTemplate === 'minimal-professional';
   const isMinimalTemplate = school.studentFeeCardTemplate === 'minimal-modern';
@@ -1604,7 +1613,7 @@ function StaffSalarySlipPreview({
         <div className="bg-slate-900 text-white p-4 rounded-xl flex items-center justify-between">
           <div>
             <h2 className="text-base font-black uppercase tracking-tight">{school.schoolName || 'DEMO SCHOOL'}</h2>
-            <p className="text-[11px] text-slate-300">{school.campusName || 'Main Campus'} • {school.schoolAddress}</p>
+            <p className="text-[11px] text-slate-300">{[school.campusName, school.schoolAddress].filter(Boolean).join(' • ')}</p>
           </div>
           <div className="text-right">
             <span className="inline-block bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 px-3 py-1 rounded-lg text-[10px] font-black uppercase">

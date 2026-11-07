@@ -183,7 +183,9 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
     e.preventDefault();
     if (!validate()) return;
 
-    const emailVal = formData.email?.trim() || `${formData.name?.toLowerCase().replace(/\s+/g, '.')}@schoollee.edu.pk`;
+    // No invented email: a staff member without an email on the form is
+    // saved with a blank email, never a fabricated address.
+    const emailVal = formData.email?.trim() || '';
 
     const completedStaff: StaffMember = {
       ...(editingStaff || {}),
@@ -654,7 +656,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   type="email"
                   value={formData.email || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                  placeholder="e.g. name@schoollee.edu.pk"
+                  placeholder="e.g. name@school.edu.pk"
                   className="w-full bg-surface-39 border border-edge-38 rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
                 />
               </div>

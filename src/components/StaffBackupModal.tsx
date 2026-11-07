@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { StaffMember } from '../types';
 import { exportStaffToCSV, exportPayrollSummaryToCSV } from '../utils/staffCsvHelper';
+import { monthKeyOf, monthLabelFromKey } from '../utils/dates';
 
 interface StaffBackupModalProps {
   isOpen: boolean;
@@ -41,7 +42,7 @@ export const StaffBackupModal: React.FC<StaffBackupModalProps> = ({
   };
 
   const handleDownloadPayrollCsv = () => {
-    exportPayrollSummaryToCSV(staffList, 'September 2026');
+    exportPayrollSummaryToCSV(staffList, monthLabelFromKey(monthKeyOf()));
     setDownloadSuccess('Payroll Summary CSV downloaded successfully!');
     setTimeout(() => setDownloadSuccess(null), 3500);
   };

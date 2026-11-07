@@ -398,7 +398,7 @@ export const StaffSalarySlipsModal: React.FC<StaffSalarySlipsModalProps> = ({
                 </div>
 
                 <div className="mt-6 text-center text-[10px] text-slate-400 italic">
-                  This is a computer-generated salary slip verified by Schoollee Academic Management System.
+                  This is a computer-generated salary slip verified by SchoolEx.
                 </div>
               </div>
             );

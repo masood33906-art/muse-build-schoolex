@@ -494,7 +494,7 @@ export default function App() {
         isOpen: true,
         doc,
         title: 'Student Registry Report',
-        subtitle: 'Official printable records registry • Demo School Schoollee Pakistan',
+        subtitle: `Official printable records registry${getSchoolSettings().schoolName ? ` • ${getSchoolSettings().schoolName}` : ''}`,
         fileName: `Student_Registry_${todayStr}.pdf`,
         recordCount: studentsToExport.length,
         sectionName: 'Students'
@@ -506,7 +506,7 @@ export default function App() {
         isOpen: true,
         doc,
         title: 'Family Accounts Directory Report',
-        subtitle: 'Official printable accounts directory • Demo School Schoollee Pakistan',
+        subtitle: `Official printable accounts directory${getSchoolSettings().schoolName ? ` • ${getSchoolSettings().schoolName}` : ''}`,
         fileName: `Family_Directory_${todayStr}.pdf`,
         recordCount: allFamilies.length,
         sectionName: 'Families'

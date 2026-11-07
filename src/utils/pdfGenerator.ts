@@ -14,14 +14,25 @@ export interface SchoolInfo {
 }
 
 export function getLiveSchoolInfo(): SchoolInfo {
+  // Raw settings values only — no baked-in fallback identity. Blank stays
+  // blank, so a school that has not filled in Settings prints nothing fake.
   const s = getSchoolSettings();
   return {
-    name: s.schoolName || 'Demo School Schoollee Pakistan',
-    campus: s.campusName || 'Main Campus',
-    session: s.session || '2025 - 2026',
-    phone: s.schoolPhone || '+92 42 35890000',
-    address: s.schoolAddress || 'Lahore, Pakistan',
+    name: s.schoolName,
+    campus: s.campusName,
+    session: s.session,
+    phone: s.schoolPhone,
+    address: s.schoolAddress,
   };
+}
+
+/**
+ * Join non-empty display parts with ' • '. Blank settings fields are
+ * omitted entirely, so document headers never print dangling separators
+ * or labels for values the school has not entered.
+ */
+export function joinInfoParts(parts: (string | undefined | null)[]): string {
+  return parts.filter((p): p is string => !!p && p.trim() !== '').join(' • ');
 }
 
 export const DEFAULT_SCHOOL: SchoolInfo = {
@@ -403,7 +414,7 @@ function renderCardOnPage(doc: jsPDF, student: Student, template: CardTemplateTy
     doc.text(schoolNameFit, CX, 17.5, { align: 'center' });
 
     doc.setTextColor(...STEEL_LIGHT);
-    const campusLine = fitText(doc, `${school.campus} • ${school.session}`, ZONE_W, 'helvetica', 'normal', 6.5, 5.5);
+    const campusLine = fitText(doc, joinInfoParts([school.campus, school.session]), ZONE_W, 'helvetica', 'normal', 6.5, 5.5);
     doc.text(campusLine, CX, 21, { align: 'center' });
 
     // Photo: steel frame; the image is COVER-fitted (fills the square,
@@ -892,13 +903,6 @@ export function createStudentRegistryPdfDoc(students: Student[], school: SchoolI
   return doc;
 }
 
-// Generates complete PDF Registry Backup with AutoTable
-export function generateBackupPdf(students: Student[], school: SchoolInfo = DEFAULT_SCHOOL) {
-  const doc = createStudentRegistryPdfDoc(students, school);
-  const timestamp = new Date().toISOString().slice(0, 10);
-  doc.save(`Student_Registry_Backup_${timestamp}.pdf`);
-}
-
 // Creates Family Directory jsPDF document (for preview, print, or save)
 export function createFamilyRegistryPdfDoc(families: FamilyData[], school: SchoolInfo = DEFAULT_SCHOOL): jsPDF {
   const doc = new jsPDF({
@@ -991,10 +995,4 @@ export function createFamilyRegistryPdfDoc(families: FamilyData[], school: Schoo
   });
 
   return doc;
-}
-
-export function generateFamilyBackupPdf(families: FamilyData[], school: SchoolInfo = DEFAULT_SCHOOL) {
-  const doc = createFamilyRegistryPdfDoc(families, school);
-  const timestamp = new Date().toISOString().slice(0, 10);
-  doc.save(`Family_Directory_Backup_${timestamp}.pdf`);
 }

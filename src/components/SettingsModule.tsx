@@ -670,6 +670,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.schoolName}
                   onChange={(e) => handleFieldChange('schoolName', e.target.value)}
+                  placeholder="Enter school name"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -680,6 +681,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.campusName}
                   onChange={(e) => handleFieldChange('campusName', e.target.value)}
+                  placeholder="e.g. Main Campus"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -700,6 +702,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.schoolPhone}
                   onChange={(e) => handleFieldChange('schoolPhone', e.target.value)}
+                  placeholder="e.g. +92 300 1234567"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -710,6 +713,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="email"
                   value={settings.schoolEmail}
                   onChange={(e) => handleFieldChange('schoolEmail', e.target.value)}
+                  placeholder="e.g. info@yourschool.edu.pk"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -720,6 +724,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.schoolAddress}
                   onChange={(e) => handleFieldChange('schoolAddress', e.target.value)}
+                  placeholder="Enter school address"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -730,6 +735,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.principalName}
                   onChange={(e) => handleFieldChange('principalName', e.target.value)}
+                  placeholder="Enter principal / administrator name"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -740,6 +746,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.registrationNumber}
                   onChange={(e) => handleFieldChange('registrationNumber', e.target.value)}
+                  placeholder="Enter registration / affiliation number"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -794,6 +801,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                     type="text"
                     value={customBankName}
                     onChange={handleCustomBankNameChange}
+                    placeholder="Enter bank name"
                     className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                   />
                 </div>
@@ -805,6 +813,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.accountNumber}
                   onChange={(e) => handleFieldChange('accountNumber', e.target.value)}
+                  placeholder="Enter account number"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -815,6 +824,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.accountTitle}
                   onChange={(e) => handleFieldChange('accountTitle', e.target.value)}
+                  placeholder="Enter account title"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -825,6 +835,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.branchName}
                   onChange={(e) => handleFieldChange('branchName', e.target.value)}
+                  placeholder="Enter branch name"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -835,6 +846,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.branchCode}
                   onChange={(e) => handleFieldChange('branchCode', e.target.value)}
+                  placeholder="Enter branch code"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -888,7 +900,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.iban}
                   onChange={(e) => handleFieldChange('iban', e.target.value)}
-                  placeholder="e.g. PK36MEZN0002140103492811"
+                  placeholder="e.g. PK36 XXXX 0000 0000 0000 0000"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>

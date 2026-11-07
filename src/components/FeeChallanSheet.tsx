@@ -38,6 +38,24 @@ export function challanHeadLabel(item: StudentFeeItem): string {
   }
 }
 
+export type FeeHeadGroup = 'admission' | 'tuition' | 'fineExtra';
+
+/**
+ * The ONE fee-head classification, shared by the challan and the
+ * Student Fee Card so a charge can never land in a different group on
+ * two documents. It is derived from challanHeadLabel above: the base
+ * head (Tuition Fee, from 'Monthly Fee' items) is the tuition group,
+ * 'Admission Fee' is the admission group, and EVERY other real head
+ * (Fine, Exam Fund, Security Fee, Other Charges…) falls into the
+ * fee card's Fine / Extra group.
+ */
+export function feeHeadGroup(item: StudentFeeItem): FeeHeadGroup {
+  const label = challanHeadLabel(item);
+  if (label === CHALLAN_BASE_HEAD_LABEL) return 'tuition';
+  if (label === 'Admission Fee') return 'admission';
+  return 'fineExtra';
+}
+
 /**
  * Group {label, amount} pairs into challan rows: amounts summed per
  * head, the base head (Tuition Fee) first, remaining heads in
@@ -117,16 +135,22 @@ export const FeeChallanSheet: React.FC<FeeChallanSheetProps> = ({
               idx < copies.length - 1 ? 'md:border-r-2 md:border-dashed md:border-black' : ''
             }`}
           >
-            {/* Header */}
+            {/* Header — bank block prints ONLY what the school actually
+                configured in Settings; with no bank/account set it is
+                omitted entirely (never a fallback bank or account). */}
             <div className="text-center border-b border-black pb-2 space-y-0.5">
-              <span className={`font-bold text-[10px] uppercase block truncate ${isMinimalProfessional ? 'text-black' : 'text-blue-900'}`}>
-                {school.bankName || 'Faysal Bank Limited'}
-              </span>
-              <span className={`font-mono text-[9px] block ${isMinimalProfessional ? 'text-[#666]' : 'text-neutral-600'}`}>
-                A/C: {school.accountNumber || '301829300000192'}
-              </span>
+              {school.bankName && (
+                <span className={`font-bold text-[10px] uppercase block truncate ${isMinimalProfessional ? 'text-black' : 'text-blue-900'}`}>
+                  {school.bankName}
+                </span>
+              )}
+              {school.accountNumber && (
+                <span className={`font-mono text-[9px] block ${isMinimalProfessional ? 'text-[#666]' : 'text-neutral-600'}`}>
+                  A/C: {school.accountNumber}
+                </span>
+              )}
               <h4 className="font-black text-xs uppercase truncate">
-                {school.schoolName || 'Demo School'}
+                {school.schoolName}
               </h4>
               <span className={`inline-block px-2 py-0.5 text-[9px] font-black uppercase mt-1 ${isMinimalProfessional ? 'bg-white text-black border border-black' : 'bg-neutral-200 text-black'}`}>
                 {copyName}

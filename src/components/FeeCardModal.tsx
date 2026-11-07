@@ -9,12 +9,15 @@ import {
 } from 'lucide-react';
 import { Student, ClassInfo } from '../types';
 import { SchoolSettings, getSchoolSettings } from '../utils/settingsHelper';
-import { 
-  buildStudentFeeCardData, 
+import {
+  buildStudentFeeCardData,
+  buildRegisterCardData,
   generateFeeCardPdf,
   formatOrBlank,
-  StudentFeeCardData
+  StudentFeeCardData,
+  RegisterCardData
 } from '../utils/feeCardHelper';
+import { FeeRegisterCardSheet } from './FeeRegisterCardSheet';
 
 interface FeeCardModalProps {
   isOpen: boolean;
@@ -53,6 +56,10 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
   // colour used in the professional branches below is black, white, or an
   // equal-channel grey (#333333, #555555, #999999).
   const isMinimalProfessional = currentSchool.studentFeeCardTemplate === 'minimal-professional';
+  // 'register-card': the rebuilt B&W register card renders through the
+  // shared FeeRegisterCardSheet (preview and print container alike);
+  // the PDF download branches inside generateFeeCardPdf.
+  const isRegisterCard = currentSchool.studentFeeCardTemplate === 'register-card';
 
   // Selected student IDs in container
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => {
@@ -161,6 +168,12 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
   const allCardsData = useMemo<StudentFeeCardData[]>(() => {
     return selectedStudentsList.map(st => buildStudentFeeCardData(st, classes, currentSchool));
   }, [selectedStudentsList, classes, currentSchool]);
+
+  // Register-card data for the rebuilt template's preview/print
+  const registerCardsData = useMemo<RegisterCardData[]>(() => {
+    if (!isRegisterCard) return [];
+    return selectedStudentsList.map(st => buildRegisterCardData(st, classes, currentSchool));
+  }, [isRegisterCard, selectedStudentsList, classes, currentSchool]);
 
   // Print cards for real printer
   const handlePrintToPrinter = () => {
@@ -444,7 +457,9 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
 
               {/* Scrollable Fee Cards List (Each student card matches reference format, no rules page) */}
               <div className="space-y-8 max-w-4xl mx-auto" id="scrollable-fee-cards-list">
-                {allCardsData.map((cardData, idx) => (
+                {isRegisterCard ? registerCardsData.map((rData) => (
+                  <FeeRegisterCardSheet key={rData.student.id} data={rData} />
+                )) : allCardsData.map((cardData, idx) => (
                   <div 
                     key={cardData.student.id} 
                     className={isMinimalProfessional ? "bg-white text-black rounded-none p-4 shadow-none overflow-x-auto border border-black relative" : "bg-white text-slate-900 rounded-xl p-5 shadow-2xl overflow-x-auto border border-slate-300 relative"}
@@ -666,7 +681,15 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
         {/* Strictly 1 page per student; NO rules page */}
         {/* ======================================================== */}
         <div className={isMinimalProfessional ? "hidden print:block font-sans text-black bg-white" : "hidden print:block font-sans text-slate-900 bg-white"} id="fee-cards-print-container">
-          {selectedStudentsList.map((st) => {
+          {isRegisterCard ? selectedStudentsList.map((st) => (
+            <div
+              key={`print-register-card-${st.id}`}
+              className="bg-white"
+              style={{ pageBreakAfter: 'always', breakAfter: 'page' }}
+            >
+              <FeeRegisterCardSheet data={buildRegisterCardData(st, classes, currentSchool)} />
+            </div>
+          )) : selectedStudentsList.map((st) => {
             const cData = buildStudentFeeCardData(st, classes, currentSchool);
             return (
               <div 

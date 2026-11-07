@@ -228,7 +228,7 @@ export function exportClassesToPDF(classes: ClassInfo[], students: Student[], sc
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(255, 255, 255);
-  doc.text(school.name || 'Demo School Schooliee Pakistan', margin + 8, margin + 11);
+  doc.text(school.name, margin + 8, margin + 11);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);

@@ -67,12 +67,14 @@ export const StaffIdCardModal: React.FC<StaffIdCardModalProps> = ({
 
   if (!isOpen || !staff) return null;
 
+  // Settings values verbatim — no baked-in fallback identity; fields the
+  // school has not filled in stay blank on the card.
   const activeSchool: SchoolInfo = {
-    name: schoolSettings.schoolName || 'Demo School Schoollee Pakistan',
-    campus: schoolSettings.campusName || 'Main Campus',
-    session: schoolSettings.session || '2025 - 2026',
-    phone: schoolSettings.schoolPhone || '+92 42 35890000',
-    address: schoolSettings.schoolAddress || 'Lahore, Pakistan'
+    name: schoolSettings.schoolName,
+    campus: schoolSettings.campusName,
+    session: schoolSettings.session,
+    phone: schoolSettings.schoolPhone,
+    address: schoolSettings.schoolAddress
   };
 
   const currentIndex = allStaff.findIndex(s => s.id === staff.id);

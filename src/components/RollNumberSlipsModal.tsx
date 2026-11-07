@@ -708,13 +708,13 @@ export function MinimalStreamSlipCard({
         <div className="text-center border-b border-black pb-2.5">
           <div className="flex items-center justify-between text-[9px] font-mono font-bold text-black mb-1">
             <span>SLIP #{index} OF {total}</span>
-            <span>SESSION: {school.session || '2025 - 2026'}</span>
+            <span>SESSION: {school.session}</span>
           </div>
           <h3 className="text-base sm:text-lg font-black uppercase tracking-tight text-black">
             {school.schoolName || 'DEMO SCHOOL SYSTEM'}
           </h3>
           <p className="text-[10px] font-medium text-black">
-            {school.campusName || 'Main Campus'} • {school.schoolAddress || 'Official Examination Center'}
+            {[school.campusName, school.schoolAddress].filter(Boolean).join(' • ')}
           </p>
           <p className="text-[10px] font-bold uppercase tracking-wider border border-black text-black bg-white inline-block px-3.5 py-0.5 mt-1.5">
             Roll Number Slip — {examTitle}
@@ -833,13 +833,13 @@ export function MinimalStreamSlipCard({
           <div className="text-center border-b-2 border-black pb-2.5">
             <div className="flex items-center justify-between text-[9px] font-mono font-bold text-black/70 mb-1">
               <span>ADMIT CARD #{index} OF {total}</span>
-              <span>SESSION: {school.session || '2025 - 2026'}</span>
+              <span>SESSION: {school.session}</span>
             </div>
             <h3 className="text-base sm:text-lg font-serif font-black uppercase tracking-tight text-black">
               {school.schoolName || 'DEMO SCHOOL SYSTEM'}
             </h3>
             <p className="text-[10px] font-medium text-neutral-700">
-              {school.campusName || 'Main Campus'} • {school.schoolAddress || 'Official Examination Center'}
+              {[school.campusName, school.schoolAddress].filter(Boolean).join(' • ')}
             </p>
             <p className="text-[10px] font-bold uppercase tracking-wider bg-slate-900 text-white inline-block px-3.5 py-0.5 mt-1.5">
               Roll Number Slip — {examTitle}
@@ -954,7 +954,7 @@ export function MinimalStreamSlipCard({
       <div className="text-center border-b border-black pb-2">
         <div className="flex items-center justify-between text-[9px] font-mono text-black/60 mb-0.5">
           <span>SLIP #{index} OF {total}</span>
-          <span>SESSION: {school.session || '2025 - 2026'}</span>
+          <span>SESSION: {school.session}</span>
         </div>
         <h3 className="text-base font-black uppercase tracking-tight text-black">
           {school.schoolName || 'DEMO SCHOOL SYSTEM'}

@@ -384,6 +384,11 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
 
+    // The certificate carries the school's REAL identity from Settings —
+    // never a hard-coded name. Blank settings simply omit those lines.
+    const certSettings = getSchoolSettings();
+    const certSchoolName = certSettings.schoolName || '';
+
     // Institution Header
     doc.setFillColor(15, 23, 42); // slate-900
     doc.rect(0, 0, pageWidth, 40, 'F');
@@ -391,7 +396,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
-    doc.text('DEMO SCHOOL SCHOOLIEE PAKISTAN', pageWidth / 2, 18, { align: 'center' });
+    doc.text(certSchoolName.toUpperCase(), pageWidth / 2, 18, { align: 'center' });
 
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
@@ -423,7 +428,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
 
     doc.setFont('helvetica', 'normal');
     const introText = `This is to officially certify that ${staff.gender === 'Female' ? 'Ms./Mrs.' : 'Mr.'} ${staff.name.toUpperCase()}, ` +
-      `bearing CNIC No. ${staff.cnic || 'N/A'} (Staff ID: ${staff.id}), has been an esteemed employee of Demo School Schooliee Pakistan ` +
+      `bearing CNIC No. ${staff.cnic || 'N/A'} (Staff ID: ${staff.id}), has been an esteemed employee${certSchoolName ? ` of ${certSchoolName}` : ''} ` +
       `serving as ${staff.role} in the department of ${staff.department}.`;
 
     const splitIntro = doc.splitTextToSize(introText, pageWidth - 40);
@@ -447,12 +452,12 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
     doc.text('Authorized Signatory', 25, 225);
     doc.setFont('helvetica', 'normal');
     doc.text('Head of Human Resources', 25, 231);
-    doc.text('Demo School Schooliee Pakistan', 25, 237);
+    doc.text(certSchoolName, 25, 237);
 
     doc.setFont('helvetica', 'bold');
     doc.text('Principal / Director', pageWidth - 75, 225);
     doc.setFont('helvetica', 'normal');
-    doc.text('Demo School Schooliee Pakistan', pageWidth - 75, 231);
+    doc.text(certSchoolName, pageWidth - 75, 231);
     doc.text('Official Stamp & Seal', pageWidth - 75, 237);
 
     // Dotted signature lines
@@ -464,7 +469,11 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
     // Footer
     doc.setFontSize(8);
     doc.setTextColor(148, 163, 184);
-    doc.text('This document is electronically verified. For authenticity queries: hr@schoollee.com', pageWidth / 2, 280, { align: 'center' });
+    doc.text(
+      certSettings.schoolEmail
+        ? `This document is electronically verified. For authenticity queries: ${certSettings.schoolEmail}`
+        : 'This document is electronically verified.',
+      pageWidth / 2, 280, { align: 'center' });
 
     doc.save(`Experience_Letter_${staff.id}_${staff.name.replace(/\s+/g, '_')}.pdf`);
   };
@@ -1124,7 +1133,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                               url = doc.fileData;
                             }
                             if (!url) {
-                              const file = new Blob([`Official Schoollee Document: ${doc.title}\nEmployee: ${staff.name} (${staff.id})\nType: ${doc.type}\nUploaded: ${doc.uploadedAt}`], {type: 'text/plain'});
+                              const file = new Blob([`Official SchoolEx Document: ${doc.title}\nEmployee: ${staff.name} (${staff.id})\nType: ${doc.type}\nUploaded: ${doc.uploadedAt}`], {type: 'text/plain'});
                               url = URL.createObjectURL(file);
                             }
                             const element = document.createElement("a");
@@ -1725,7 +1734,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
               <div className="p-3 bg-[#0f1522] rounded-lg text-xs text-slate-300 border border-[#1b273a] text-left font-mono">
                 [Certified Document Record]<br/>
                 Employee: {staff.name} ({staff.id})<br/>
-                Verification Status: Verified by Demo School Human Resources
+                Verification Status: Verified by {getSchoolSettings().schoolName || 'School'} Human Resources
               </div>
             </div>
 

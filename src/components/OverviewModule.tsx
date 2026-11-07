@@ -59,7 +59,6 @@ import { groupStudentsIntoFamilies } from '../utils/familyHelper';
 import { getStudentFeeDefaults } from '../utils/feeHelper';
 import { loadAllLedgerItems } from '../utils/studentFeeLedgerHelper';
 import { addCharge, listPayments } from '../utils/paymentStore';
-import { daysSinceBackup, downloadBackup } from '../utils/backup';
 import { getStoredExams, Exam } from '../utils/examStore';
 import { 
   StudentInquiry, 
@@ -129,17 +128,6 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
   const [inquiries, setInquiries] = useState<StudentInquiry[]>(() => getStoredInquiries());
   const [announcements, setAnnouncements] = useState<Announcement[]>(() => getStoredAnnouncements());
   const [exams, setExams] = useState<Exam[]>(() => getStoredExams());
-  const [backupAgeDays, setBackupAgeDays] = useState<number>(() => daysSinceBackup());
-
-  useEffect(() => {
-    const refreshBackupAge = () => setBackupAgeDays(daysSinceBackup());
-    window.addEventListener('backupCompleted', refreshBackupAge);
-    window.addEventListener('storage', refreshBackupAge);
-    return () => {
-      window.removeEventListener('backupCompleted', refreshBackupAge);
-      window.removeEventListener('storage', refreshBackupAge);
-    };
-  }, []);
 
   // Salary-due aggregate from the payroll tables (PAYROLL_PLAN §3.5): the sum
   // of outstanding over all prepared periods up to the current month. Zeros
@@ -873,31 +861,6 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
 
   return (
     <div className="w-full space-y-5 pb-16 text-slate-100 font-sans selection:bg-blue-600 selection:text-white" id="schoolex-overview-dashboard">
-      {backupAgeDays > 7 && (
-        <div
-          className="px-4 py-3 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2"
-          id="banner-backup-reminder"
-        >
-          <div className="flex items-center gap-2 font-semibold">
-            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>
-              No backup for {Number.isFinite(backupAgeDays) ? `${backupAgeDays} days` : '7+ days'} — Download now
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={async () => {
-              await downloadBackup();
-              setBackupAgeDays(daysSinceBackup());
-              onShowToast?.('Full backup downloaded', 'success');
-            }}
-            className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs cursor-pointer transition-colors self-start sm:self-auto"
-          >
-            Download now
-          </button>
-        </div>
-      )}
-
       {/* ========================================================================= */}
       {/* TOP HEADER                                                                */}
       {/* ========================================================================= */}

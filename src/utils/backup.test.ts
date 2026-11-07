@@ -1,4 +1,4 @@
-// Self-contained test for §5 & §6 (storageUsageBytes, buildBackup, restoreBackup, daysSinceBackup)
+// Self-contained test for §5 & §6 (storageUsageBytes, buildBackup, restoreBackup)
 const store = new Map<string, string>();
 (globalThis as any).localStorage = {
   getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
@@ -33,7 +33,7 @@ const store = new Map<string, string>();
 };
 
 import { storageUsageBytes, loadJSON, getFaults } from './storage';
-import { buildBackup, restoreBackup, daysSinceBackup } from './backup';
+import { buildBackup, restoreBackup } from './backup';
 
 function assert(cond: boolean, msg: string) {
   if (!cond) throw new Error(`Assertion failed: ${msg}`);
@@ -83,7 +83,6 @@ async function runTests() {
     'restored schooliee_ key should match backup'
   );
   assert(getFaults().length === 0, 'faults should be cleared after restoreBackup');
-  assert(daysSinceBackup() === 0, 'daysSinceBackup should be 0 right after backup');
 
   console.log('All §5 & §6 backup and storage tests passed!');
 }

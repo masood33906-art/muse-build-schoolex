@@ -781,7 +781,7 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
 
                 {/* Footer Note */}
                 <div className={`mt-6 text-center text-[10px] ${isMinimalProfessional ? 'text-black' : 'text-slate-400'}`}>
-                  Weekly Attendance Register • Generated via Schooliee Management System • Official Record
+                  Weekly Attendance Register • Generated via SchoolEx • Official Record
                 </div>
               </div>
             </div>

@@ -201,7 +201,7 @@ function renderMinimalStreamSlipPDF(
   doc.setFontSize(7.5);
   doc.setTextColor(90, 90, 90);
   doc.text(`SLIP #${index} OF ${total}`, innerX, curY);
-  doc.text(`SESSION: ${school.session || '2025 - 2026'}`, innerX + innerW, curY, { align: 'right' });
+  doc.text(`SESSION: ${school.session}`, innerX + innerW, curY, { align: 'right' });
 
   // School Name (Centered, bold uppercase)
   curY += 5.5;
@@ -446,7 +446,7 @@ function renderClassicBorderedSlipPDF(
   doc.setFontSize(7.5);
   doc.setTextColor(70, 70, 70);
   doc.text(`ADMIT CARD #${index} OF ${total}`, innerX, curY);
-  doc.text(`SESSION: ${school.session || '2025 - 2026'}`, innerX + innerW, curY, { align: 'right' });
+  doc.text(`SESSION: ${school.session}`, innerX + innerW, curY, { align: 'right' });
 
   // School Name & Campus
   curY += 5.5;
@@ -460,7 +460,7 @@ function renderClassicBorderedSlipPDF(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(80, 80, 80);
-  doc.text(`${school.campusName || 'Main Campus'} • ${school.schoolAddress || 'Official Examination Center'}`, x + w / 2, curY, { align: 'center' });
+  doc.text([school.campusName, school.schoolAddress].filter(Boolean).join(' • '), x + w / 2, curY, { align: 'center' });
 
   // Exam Title Banner
   curY += 2.2;
@@ -689,7 +689,7 @@ function renderMinimalProfessionalSlipPDF(
   doc.setFontSize(7.5);
   doc.setTextColor(0, 0, 0);
   doc.text(`SLIP #${index} OF ${total}`, innerX, curY);
-  doc.text(`SESSION: ${school.session || '2025 - 2026'}`, innerX + innerW, curY, { align: 'right' });
+  doc.text(`SESSION: ${school.session}`, innerX + innerW, curY, { align: 'right' });
 
   // School Name (centered, bold uppercase) + Campus / Address line
   curY += 5.5;
@@ -703,7 +703,7 @@ function renderMinimalProfessionalSlipPDF(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(0, 0, 0);
-  doc.text(`${school.campusName || 'Main Campus'} • ${school.schoolAddress || 'Official Examination Center'}`, x + w / 2, curY, { align: 'center' });
+  doc.text([school.campusName, school.schoolAddress].filter(Boolean).join(' • '), x + w / 2, curY, { align: 'center' });
 
   // Exam Title Box: outlined only — black border, black text, no fill
   curY += 2.2;

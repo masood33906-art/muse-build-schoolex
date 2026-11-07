@@ -322,7 +322,7 @@ export function parseCSVToStaff(
     }
 
     const phone = (colIndex.phone !== -1 ? cells[colIndex.phone] : cells[7]) || '';
-    const email = (colIndex.email !== -1 ? cells[colIndex.email] : cells[8]) || `${name.toLowerCase().replace(/\s+/g, '.')}@schoollee.edu.pk`;
+    const email = (colIndex.email !== -1 ? cells[colIndex.email] : cells[8]) || '';
 
     const rawStatus = colIndex.status !== -1 ? cells[colIndex.status]?.toLowerCase() || 'active' : 'active';
     let status: StaffStatus = 'Active';
