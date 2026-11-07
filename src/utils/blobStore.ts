@@ -24,6 +24,7 @@ export const putFile = (id: string, blob: Blob) => run('readwrite', s => s.put(b
 export const getFile = (id: string) => run<Blob | undefined>('readonly', s => s.get(id));
 export const deleteFile = (id: string) => run('readwrite', s => s.delete(id));
 export const listFileIds = () => run<IDBValidKey[]>('readonly', s => s.getAllKeys());
+export const clearAllFiles = () => run('readwrite', s => s.clear());
 
 export function dataURLToBlob(dataUrl: string): Blob {
   const commaIdx = dataUrl.indexOf(',');

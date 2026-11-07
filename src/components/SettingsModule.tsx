@@ -12,7 +12,9 @@ import {
   CheckCircle2,
   Database,
   Download,
-  AlertTriangle
+  AlertTriangle,
+  Sparkles,
+  Wrench
 } from 'lucide-react';
 import { 
   SchoolSettings, 
@@ -24,8 +26,8 @@ import {
   compressImageFileToDataUrl
 } from '../utils/settingsHelper';
 import { getBillingStartMonth, setBillingStartMonth } from '../utils/studentFeeLedgerHelper';
-import { storageUsageBytes } from '../utils/storage';
 import { downloadBackup, restoreBackup } from '../utils/backup';
+import { loadDummyData, resetSystem } from '../utils/systemActions';
 import { Student, ClassInfo, StaffMember, AttendanceRecord } from '../types';
 import { TemplatesSubmodule } from './TemplatesSubmodule';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
@@ -69,21 +71,14 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   });
 
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
-  const [usageBytes, setUsageBytes] = useState<number>(() => storageUsageBytes());
   const [pendingRestoreFile, setPendingRestoreFile] = useState<File | null>(null);
   const [isRestoring, setIsRestoring] = useState<boolean>(false);
+  const [showDummyConfirm, setShowDummyConfirm] = useState<boolean>(false);
+  const [isLoadingDummy, setIsLoadingDummy] = useState<boolean>(false);
+  const [resetStep, setResetStep] = useState<0 | 1 | 2>(0);
+  const [isResetting, setIsResetting] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const restoreInputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    const refreshUsage = () => setUsageBytes(storageUsageBytes());
-    window.addEventListener('storage', refreshUsage);
-    window.addEventListener('backupCompleted', refreshUsage);
-    return () => {
-      window.removeEventListener('storage', refreshUsage);
-      window.removeEventListener('backupCompleted', refreshUsage);
-    };
-  }, [activeSection, settings]);
 
   useEffect(() => {
     if (initialSchoolSettings) {
@@ -175,9 +170,35 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
     onShowToast('Settings reset to defaults', 'info');
   };
 
-  const usedMB = usageBytes / (1024 * 1024);
-  const isHighUsage = usedMB > 3.5;
-  const usagePct = Math.min(100, (usedMB / 5) * 100);
+  const handleLoadDummyData = async () => {
+    setIsLoadingDummy(true);
+    try {
+      const result = await loadDummyData();
+      setShowDummyConfirm(false);
+      onShowToast(
+        `Dummy data loaded: ${result.loaded.students} students, ${result.loaded.staff} staff, ${result.loaded.classes} classes. Reloading…`,
+        'success'
+      );
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (err: any) {
+      setShowDummyConfirm(false);
+      onShowToast(err?.message || 'Could not load dummy data', 'error');
+    } finally {
+      setIsLoadingDummy(false);
+    }
+  };
+
+  const handleResetSystem = async () => {
+    setIsResetting(true);
+    try {
+      await resetSystem();
+      window.location.reload();
+    } catch (err: any) {
+      onShowToast(err?.message || 'System reset failed', 'error');
+      setIsResetting(false);
+      setResetStep(0);
+    }
+  };
 
   const renderDataBackupCard = () => (
     <div className="p-5 rounded-2xl bg-surface-10 border border-edge-21 space-y-4 max-w-5xl">
@@ -197,7 +218,6 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             type="button"
             onClick={async () => {
               await downloadBackup();
-              setUsageBytes(storageUsageBytes());
               onShowToast('Full backup downloaded', 'success');
             }}
             className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-2 cursor-pointer transition-all shadow-sm"
@@ -227,23 +247,6 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             <Upload className="w-4 h-4 text-amber-400" />
             <span>Restore from backup</span>
           </button>
-        </div>
-      </div>
-
-      {/* Storage Usage Meter */}
-      <div className="pt-2 border-t border-edge-8 space-y-1.5">
-        <div className="flex items-center justify-between text-xs">
-          <span className={isHighUsage ? 'text-amber-300 font-semibold flex items-center gap-1.5' : 'text-slate-300 font-medium'}>
-            {isHighUsage && <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />}
-            Storage used: {usedMB.toFixed(2)} MB / ~5 MB
-          </span>
-          <span className="text-[11px] text-slate-400 font-mono">{usagePct.toFixed(0)}%</span>
-        </div>
-        <div className="w-full h-2 rounded-full bg-surface-2 border border-edge-21 overflow-hidden">
-          <div
-            className={`h-full transition-all ${isHighUsage ? 'bg-amber-400' : 'bg-blue-500'}`}
-            style={{ width: `${Math.max(2, usagePct)}%` }}
-          />
         </div>
       </div>
 
@@ -284,6 +287,176 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                 className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold cursor-pointer"
               >
                 {isRestoring ? 'Restoring...' : 'Confirm & Restore'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderSystemCard = () => (
+    <div className="p-5 rounded-2xl bg-surface-10 border border-edge-21 space-y-4 max-w-5xl">
+      <div className="flex items-center gap-2.5">
+        <div className="w-9 h-9 rounded-xl bg-violet-600/15 border border-violet-500/30 text-violet-400 flex items-center justify-center">
+          <Wrench className="w-5 h-5" />
+        </div>
+        <div>
+          <h2 className="text-sm font-bold text-white uppercase tracking-wider">System</h2>
+          <p className="text-xs text-slate-400">Practice data for training, or a full factory reset of this installation</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* Load Dummy Data */}
+        <div className="p-4 rounded-xl bg-surface-2 border border-edge-21 space-y-2.5">
+          <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
+            <Sparkles className="w-4 h-4 text-violet-400" />
+            Load Dummy Data
+          </h3>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Fill the empty system with the sample school (117 students, 28 staff, 19 classes and related sample data) so you can practise safely. Only works while the system is empty.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowDummyConfirm(true)}
+            className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold flex items-center gap-2 cursor-pointer transition-all shadow-sm"
+            id="btn-settings-load-dummy-data"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>Load dummy data</span>
+          </button>
+        </div>
+
+        {/* Reset System */}
+        <div className="p-4 rounded-xl bg-rose-500/5 border border-rose-500/25 space-y-2.5">
+          <h3 className="text-xs font-bold text-rose-300 flex items-center gap-1.5">
+            <AlertTriangle className="w-4 h-4 text-rose-400" />
+            Reset System
+          </h3>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Permanently delete <span className="text-slate-200 font-semibold">everything</span> — students, staff, classes, fees, ledger, payroll and settings — and return to the empty first-run state.
+          </p>
+          <button
+            type="button"
+            onClick={() => setResetStep(1)}
+            className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-2 cursor-pointer transition-all shadow-sm"
+            id="btn-settings-reset-system"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>Reset system</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Load Dummy Data Confirmation Dialog */}
+      {showDummyConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-surface-17 border border-[#24344e] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-2.5 text-violet-400">
+              <Sparkles className="w-5 h-5 shrink-0" />
+              <h3 className="text-base font-bold text-white">Load dummy data</h3>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              This loads the sample school — <span className="text-white font-semibold">117 students, 28 staff and 19 classes</span>, with related sample fees and records — so you can practise with realistic data.
+            </p>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Dummy data can only be loaded into an <span className="text-white font-semibold">empty system</span>. If this system already holds data, nothing will be loaded and you will be told why.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#1c283d]">
+              <button
+                type="button"
+                disabled={isLoadingDummy}
+                onClick={() => setShowDummyConfirm(false)}
+                className="px-3.5 py-2 rounded-lg bg-surface-41 text-slate-300 text-xs font-semibold hover:bg-surface-48 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isLoadingDummy}
+                onClick={handleLoadDummyData}
+                className="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold cursor-pointer"
+              >
+                {isLoadingDummy ? 'Loading...' : 'Load dummy data'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset System Confirmation — Step 1 */}
+      {resetStep === 1 && (
+        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-surface-17 border border-rose-500/40 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-2.5 text-rose-400">
+              <AlertTriangle className="w-5 h-5 shrink-0" />
+              <h3 className="text-base font-bold text-white">Reset the whole system?</h3>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              This <span className="text-rose-300 font-semibold">permanently deletes all data</span> in this installation: every student, staff member, class, fee record, ledger entry, payroll record and all settings. The app returns to the empty state it had when first installed.
+            </p>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              This cannot be undone. If you might need this data again, download a full backup first.
+            </p>
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#1c283d]">
+              <button
+                type="button"
+                onClick={async () => { await downloadBackup(); onShowToast('Full backup downloaded', 'success'); }}
+                className="px-3.5 py-2 rounded-lg bg-surface-41 text-slate-200 text-xs font-semibold hover:bg-surface-48 flex items-center gap-1.5 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-400" />
+                <span>Download backup first</span>
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setResetStep(0)}
+                  className="px-3.5 py-2 rounded-lg bg-surface-41 text-slate-300 text-xs font-semibold hover:bg-surface-48 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setResetStep(2)}
+                  className="px-4 py-2 rounded-lg bg-rose-600/80 hover:bg-rose-600 text-white text-xs font-bold cursor-pointer"
+                >
+                  I understand, continue
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset System Confirmation — Step 2 (final) */}
+      {resetStep === 2 && (
+        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-surface-17 border border-rose-500/60 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-2.5 text-rose-400">
+              <AlertTriangle className="w-5 h-5 shrink-0" />
+              <h3 className="text-base font-bold text-white">Final confirmation</h3>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Are you absolutely sure? All school data will be erased <span className="text-rose-300 font-semibold">right now</span> and cannot be recovered unless you saved a backup.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#1c283d]">
+              <button
+                type="button"
+                disabled={isResetting}
+                onClick={() => setResetStep(1)}
+                className="px-3.5 py-2 rounded-lg bg-surface-41 text-slate-300 text-xs font-semibold hover:bg-surface-48 cursor-pointer"
+              >
+                Go back
+              </button>
+              <button
+                type="button"
+                disabled={isResetting}
+                onClick={handleResetSystem}
+                className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold cursor-pointer"
+                id="btn-settings-reset-system-confirm"
+              >
+                {isResetting ? 'Resetting...' : 'Yes, permanently reset everything'}
               </button>
             </div>
           </div>
@@ -353,6 +526,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
         </div>
 
         {renderDataBackupCard()}
+        {renderSystemCard()}
       </div>
     );
   }
@@ -588,6 +762,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
           </div>
 
           {renderDataBackupCard()}
+          {renderSystemCard()}
         </div>
       )}
 

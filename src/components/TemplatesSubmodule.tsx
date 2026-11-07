@@ -1576,7 +1576,7 @@ function StaffSalarySlipPreview({
         </div>
 
         <div className="p-2 flex justify-between items-center text-[13px] font-black bg-white border border-black text-black">
-          <span>NET SALARY PAYABLE:</span>
+          <span>AMOUNT PAID:</span>
           <span className="text-sm font-mono">PKR {staff.salary ? staff.salary.toLocaleString() : '65,000'}/-</span>
         </div>
 
@@ -1647,7 +1647,7 @@ function StaffSalarySlipPreview({
           ? 'bg-neutral-100 border-2 border-black text-black'
           : 'bg-emerald-50 border border-emerald-300 text-emerald-950 rounded-xl'
       }`}>
-        <span>NET SALARY PAYABLE:</span>
+        <span>AMOUNT PAID:</span>
         <span className="text-base font-mono">PKR {staff.salary ? staff.salary.toLocaleString() : '65,000'}/-</span>
       </div>
 

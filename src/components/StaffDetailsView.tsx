@@ -939,12 +939,14 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
             </div>
 
             <div className="overflow-x-auto border border-edge-4 rounded-xl">
-              <table className="w-full text-left border-collapse min-w-[700px]">
+              <table className="w-full text-left border-collapse min-w-[860px]">
                 <thead className="bg-surface-7 border-b border-edge-4 text-[11px] font-semibold text-slate-400">
                   <tr>
                     <th className="py-3 px-4">Month</th>
                     <th className="py-3 px-4">Basic Pay</th>
-                    <th className="py-3 px-4">Net Paid</th>
+                    <th className="py-3 px-4">Amount Paid</th>
+                    <th className="py-3 px-4">Net Payable</th>
+                    <th className="py-3 px-4">Outstanding</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4">Method</th>
                     <th className="py-3 px-4">Date</th>
@@ -954,13 +956,13 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                 <tbody className="divide-y divide-surface-32 text-xs">
                   {payrollUnavailable ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-amber-300">
+                      <td colSpan={9} className="py-8 text-center text-amber-300">
                         Payroll requires the SchoolEx app server — salary history is stored in the app database and is not available in the browser-only demo.
                       </td>
                     </tr>
                   ) : payrollRecords.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-500">
+                      <td colSpan={9} className="py-8 text-center text-slate-500">
                         No payroll records yet. Prepare a month's payroll in Pay Staff to start this employee's salary history (older history can be imported there via “Import Legacy History”).
                       </td>
                     </tr>
@@ -972,6 +974,8 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                         <td className="py-3 px-4 font-bold text-white">{monthLabelFromKey(record.periodKey)}</td>
                         <td className="py-3 px-4 text-slate-300">{record.baseSalary.toLocaleString()} PKR</td>
                         <td className="py-3 px-4 font-extrabold text-emerald-400">{record.paid.toLocaleString()} PKR</td>
+                        <td className="py-3 px-4 text-slate-300">{record.due.toLocaleString()} PKR</td>
+                        <td className={`py-3 px-4 font-semibold ${record.outstanding > 0 ? 'text-amber-300' : 'text-slate-500'}`}>{record.outstanding.toLocaleString()} PKR</td>
                         <td className="py-3 px-4">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
                             record.status === 'Paid'

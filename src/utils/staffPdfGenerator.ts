@@ -1306,7 +1306,7 @@ function renderSinglePayslipSheet(
 
   const finalY = (doc as any).lastAutoTable?.finalY || 120;
 
-  // Net Payable Highlight Box
+  // Amount Paid Highlight Box (net payable / outstanding are context below)
   if (isMinimalClassic) {
     doc.setFillColor(...theme.netBoxFill);
     doc.setDrawColor(...(theme.netBoxBorder as RgbColor));
@@ -1315,9 +1315,9 @@ function renderSinglePayslipSheet(
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10.5);
     doc.setTextColor(...theme.netTextColor);
-    doc.text('NET SALARY PAYABLE:', margin + 6, finalY + 14);
+    doc.text('AMOUNT PAID:', margin + 6, finalY + 14);
     doc.setFontSize(13);
-    doc.text(`Rs. ${net.toLocaleString()}`, pageWidth - margin - 6, finalY + 14, { align: 'right' });
+    doc.text(`Rs. ${b.totalPaid.toLocaleString()}`, pageWidth - margin - 6, finalY + 14, { align: 'right' });
   } else {
     doc.setFillColor(...theme.netBoxFill);
     doc.roundedRect(margin, finalY + 5, pageWidth - margin * 2, 14, 2, 2, 'F');
@@ -1325,18 +1325,20 @@ function renderSinglePayslipSheet(
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10.5);
     doc.setTextColor(...theme.netTextColor);
-    doc.text('NET SALARY PAYABLE:', margin + 6, finalY + 14);
+    doc.text('AMOUNT PAID:', margin + 6, finalY + 14);
 
     doc.setFontSize(13);
-    doc.text(`Rs. ${net.toLocaleString()}`, pageWidth - margin - 6, finalY + 14, { align: 'right' });
+    doc.text(`Rs. ${b.totalPaid.toLocaleString()}`, pageWidth - margin - 6, finalY + 14, { align: 'right' });
   }
 
-  // Bank Account & Notes
+  // Bank Account & Notes — the highlight box above foregrounds the AMOUNT
+  // PAID; net payable and the outstanding balance stay visible here as
+  // clearly labeled context figures.
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(...mutedColor);
-  doc.text(`Disbursed to Employee via ${b.paymentMethod || staff.paymentMethod || '—'}. Account: ${staff.bankAccount || 'Verified On File'}`, margin, finalY + 27);
-  doc.text(`Remarks: Salary for ${month}. Paid: Rs. ${b.totalPaid.toLocaleString()} · Outstanding: Rs. ${b.outstanding.toLocaleString()}.`, margin, finalY + 32);
+  doc.text(`Net Salary Payable: Rs. ${net.toLocaleString()} · Outstanding Balance: Rs. ${b.outstanding.toLocaleString()} (salary for ${month}).`, margin, finalY + 27);
+  doc.text(`Disbursed to Employee via ${b.paymentMethod || staff.paymentMethod || '—'}. Account: ${staff.bankAccount || 'Verified On File'}`, margin, finalY + 32);
 
   // Signatures
   const signY = finalY + 52;

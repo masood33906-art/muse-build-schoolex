@@ -193,6 +193,11 @@ export const StaffSalarySlipsModal: React.FC<StaffSalarySlipsModalProps> = ({
             const deductions = bd ? bd.deductions : 0;
             const gross = base + allowances + bonus;
             const net = gross - deductions;
+            // Actual cash paid is the headline figure; without a payroll
+            // breakdown, mirror the honest legacy fallback (paid in full
+            // only when the staff record itself says Paid).
+            const totalPaid = bd ? bd.totalPaid : (staff.payStatus === 'Paid' ? net : 0);
+            const outstanding = bd ? bd.outstanding : (staff.payStatus === 'Paid' ? 0 : net);
             const monthShort = selectedMonth.substring(0, 3).toUpperCase();
             const yearPart = selectedMonth.split(' ')[1] || String(new Date().getFullYear());
             const isPaidSlip = bd ? bd.isPaid : staff.payStatus === 'Paid';
@@ -338,7 +343,8 @@ export const StaffSalarySlipsModal: React.FC<StaffSalarySlipsModalProps> = ({
                     </tbody>
                   </table>
 
-                  {/* Net Salary Banner */}
+                  {/* Amount Paid Banner — actual cash paid is the headline;
+                      net payable and outstanding stay visible as context. */}
                   <div className={`p-3.5 flex items-center justify-between ${
                     isMinimalProfessional
                       ? 'bg-white text-black border-t-2 border-black'
@@ -347,11 +353,21 @@ export const StaffSalarySlipsModal: React.FC<StaffSalarySlipsModalProps> = ({
                         : 'bg-emerald-600 text-white'
                   }`}>
                     <div className="font-bold uppercase tracking-wider text-xs">
-                      NET SALARY PAYABLE:
+                      AMOUNT PAID:
                     </div>
                     <div className="text-xl sm:text-2xl font-black font-mono">
-                      Rs. {net.toLocaleString()}
+                      Rs. {totalPaid.toLocaleString()}
                     </div>
+                  </div>
+                  <div className={`px-3.5 py-2 flex items-center justify-between text-[11px] font-semibold ${
+                    isMinimalProfessional
+                      ? 'bg-white text-black border-t border-black'
+                      : isMinimalClassic
+                        ? 'bg-neutral-50 text-black border-t border-black'
+                        : 'bg-emerald-50 text-emerald-900 border-t border-emerald-200'
+                  }`}>
+                    <span>Net Salary Payable: Rs. {net.toLocaleString()}</span>
+                    <span>Outstanding Balance: Rs. {outstanding.toLocaleString()}</span>
                   </div>
                 </div>
 
@@ -361,7 +377,7 @@ export const StaffSalarySlipsModal: React.FC<StaffSalarySlipsModalProps> = ({
                     <strong>Disbursement Information:</strong> Disbursed via {slipMethod}. Account: {staff.bankAccount || 'Verified on Payroll File'}.
                   </p>
                   <p className="mt-0.5 text-slate-500">
-                    Remarks: Salary for {selectedMonth}.{bd ? ` Paid: Rs. ${bd.totalPaid.toLocaleString()} · Outstanding: Rs. ${bd.outstanding.toLocaleString()}.` : ''}
+                    Remarks: Salary for {selectedMonth}.
                   </p>
                 </div>
 

@@ -1,6 +1,8 @@
 // SchoolEx payroll test — PAYROLL_PLAN §5.
-// Boots the server on a temp DB (seed = 28 staff), drives the payroll API
-// with fetch, and checks the owner's 10 tests + the migration fixture.
+// Boots the server on a temp DB (fresh installs start empty; the 28-staff
+// sample school is loaded on demand via /api/system/load-dummy-data),
+// drives the payroll API with fetch, and checks the owner's 10 tests +
+// the migration fixture + system reset.
 // Run: npm run test:payroll  (or node scripts/payroll-test.mjs)
 import fs from 'fs';
 import os from 'os';
@@ -38,6 +40,10 @@ const getCollection = async (key) => {
 const STAFF_KEY = 'schoollee_offline_staff_clean_v1';
 const LEDGER_KEY = 'schoollee_ledger_transactions_clean_v1';
 
+const staffBeforeLoad = await getCollection(STAFF_KEY);
+check('fresh install is empty before dummy load (no auto-seed)', staffBeforeLoad.length === 0, `len=${staffBeforeLoad.length}`);
+const dummyLoad = await api('POST', '/api/system/load-dummy-data');
+check('dummy data loads on demand', dummyLoad.ok && dummyLoad.data?.loaded?.staff === 28, dummyLoad.data?.error || '');
 const staffSeed = await getCollection(STAFF_KEY);
 check('seed staff collection has 28 staff', staffSeed.length === 28, `len=${staffSeed.length}`);
 const salaryOf = (id) => (staffSeed.find(s => s.id === id) || {}).salary || 0;
@@ -300,6 +306,23 @@ await h.close();
   const mig2 = await api('POST', '/api/payroll/migrate', {});
   const mine2 = await api('GET', '/api/payroll/staff/LEG-001');
   check('MIG second run imports nothing new', mig2.ok && mine2.data.payments.length === 2);
+}
+
+// ------------------------------------------------------------- System reset
+{
+  const reset = await api('POST', '/api/system/reset');
+  check('RESET system reset succeeds', reset.ok);
+  const exp = await api('GET', '/api/payroll/export');
+  check('RESET payroll tables are empty after reset',
+    exp.data.periods.length === 0 && exp.data.records.length === 0 && exp.data.payments.length === 0,
+    `periods=${exp.data.periods.length} records=${exp.data.records.length} payments=${exp.data.payments.length}`);
+  const staffAfterReset = await getCollection(STAFF_KEY);
+  check('RESET staff collection is gone after reset', staffAfterReset.length === 0, `len=${staffAfterReset.length}`);
+  const healthRes = await (await fetch(`${base}/api/health`)).json();
+  check('RESET all entity counts are 0 after reset',
+    Object.values(healthRes.counts || {}).every(c => c === 0), JSON.stringify(healthRes.counts));
+  const reload = await api('POST', '/api/system/load-dummy-data');
+  check('RESET dummy data loads again after reset', reload.ok && reload.data?.loaded?.staff === 28, reload.data?.error || '');
 }
 
 await h.close();

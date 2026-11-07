@@ -298,12 +298,22 @@ export const PayStaffModal: React.FC<PayStaffModalProps> = ({
             <div className="text-center py-4">
               <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
               <h3 className="text-base font-bold text-white">Payment recorded</h3>
-              <p className="text-sm text-slate-300 mt-1">
-                Rs. {lastResult.payments.reduce((s, p) => s + p.amount, 0).toLocaleString()} paid to {activeStaff.name}
-                {record && record.outstanding > 0
-                  ? ` — Rs. ${record.outstanding.toLocaleString()} still outstanding for ${periodLabel}.`
-                  : ` — ${periodLabel} is fully paid.`}
-              </p>
+              <div className="mt-4 mx-auto max-w-sm bg-surface-32 border border-edge-14 rounded-xl px-4 py-3.5">
+                <div className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">Amount Paid</div>
+                <div className="text-2xl font-extrabold text-emerald-400 mt-0.5">
+                  Rs. {lastResult.payments.reduce((s, p) => s + p.amount, 0).toLocaleString()}
+                </div>
+                <div className="text-xs text-slate-400 mt-0.5">paid to {activeStaff.name}</div>
+              </div>
+              {record && (
+                <p className="text-xs text-slate-400 mt-3">
+                  For {periodLabel}: total paid <span className="text-slate-200 font-semibold">Rs. {record.paid.toLocaleString()}</span>
+                  {' '}of net payable <span className="text-slate-200 font-semibold">Rs. {record.due.toLocaleString()}</span>
+                  {record.outstanding > 0
+                    ? <> · <span className="text-amber-300 font-semibold">Rs. {record.outstanding.toLocaleString()} still outstanding</span>.</>
+                    : <> · <span className="text-emerald-400 font-semibold">fully paid</span>.</>}
+                </p>
+              )}
               <p className="text-xs text-slate-500 mt-1">
                 Reference: {lastResult.payments.map(p => p.id).join(', ')} · Ledger updated in the same transaction.
               </p>
