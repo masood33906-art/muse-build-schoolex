@@ -16,6 +16,7 @@ import {
 } from '../utils/settingsHelper';
 import { Exam, getStoredExams } from '../utils/examStore';
 import { generateSingleIdCard, DEFAULT_SCHOOL } from '../utils/pdfGenerator';
+import { rasterizeLogoForPdf } from '../utils/logoRaster';
 import { generateSingleStaffIdCard, generateMonthlyIndividualSlipsCombinedPdf, getSalarySlipTheme } from '../utils/staffPdfGenerator';
 import { generateSingleRollNumberSlipPDF, RollSlipData } from '../utils/rollSlipPdfGenerator';
 import { generateFeeCardPdf, buildStudentFeeCardData, formatOrBlank } from '../utils/feeCardHelper';
@@ -345,7 +346,7 @@ export const TemplatesSubmodule: React.FC<TemplatesSubmoduleProps> = ({
     folderName: sampleExam.name || 'Examination'
   });
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     try {
       switch (selectedDocId) {
         case 'roll-number-slip': {
@@ -355,14 +356,19 @@ export const TemplatesSubmodule: React.FC<TemplatesSubmoduleProps> = ({
           break;
         }
 
-        case 'student-id-card':
+        case 'student-id-card': {
+          // Preset logos are SVG, which jsPDF cannot embed — rasterize to
+          // PNG first so the printed card shows the real school logo.
+          const pdfLogo = await rasterizeLogoForPdf(school.schoolLogo || '');
           generateSingleIdCard(
             sampleStudent,
             school.studentIdCardTemplate || 'modern-tech',
-            DEFAULT_SCHOOL
+            DEFAULT_SCHOOL,
+            pdfLogo
           );
           onShowToast(`Student ID Card PDF downloaded for ${sampleStudent.name}!`, 'success');
           break;
+        }
 
         case 'staff-id-card':
           generateSingleStaffIdCard(

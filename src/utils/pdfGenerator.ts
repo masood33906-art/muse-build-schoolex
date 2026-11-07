@@ -33,10 +33,15 @@ export const DEFAULT_SCHOOL: SchoolInfo = {
 };
 
 // Generates a single vertical ID Card PDF (54mm x 85.6mm standard ID card CR80 size)
+// `pdfLogo` is an optional pre-rasterized (PNG/JPEG/WebP data URI) school
+// logo for the Vertical Badge template — settings store preset logos as
+// SVG, which jsPDF cannot embed, so callers rasterize them first via
+// rasterizeLogoForPdf(). Absent/empty = previous behavior (monogram).
 export function generateSingleIdCard(
   student: Student,
   template?: CardTemplateType,
-  school: SchoolInfo = getLiveSchoolInfo()
+  school: SchoolInfo = getLiveSchoolInfo(),
+  pdfLogo?: string
 ) {
   const activeTemplate = template || getSchoolSettings().studentIdCardTemplate || 'modern-tech';
   const doc = new jsPDF({
@@ -45,11 +50,11 @@ export function generateSingleIdCard(
     format: [54, 86] // standard vertical ID card
   });
 
-  renderCardOnPage(doc, student, activeTemplate, school);
+  renderCardOnPage(doc, student, activeTemplate, school, pdfLogo);
   if (activeTemplate === 'vertical-badge') {
     // Vertical Badge cards are two-sided: front, then back on page 2.
     doc.addPage([54, 86], 'portrait');
-    renderVerticalBadgeBack(doc, student, school);
+    renderVerticalBadgeBack(doc, student, school, pdfLogo);
   }
   doc.save(`${student.id}_${student.name.replace(/\s+/g, '_')}_IDCard.pdf`);
 }
@@ -58,7 +63,8 @@ export function generateSingleIdCard(
 export function generateAllIdCards(
   students: Student[],
   template?: CardTemplateType,
-  school: SchoolInfo = getLiveSchoolInfo()
+  school: SchoolInfo = getLiveSchoolInfo(),
+  pdfLogo?: string
 ) {
   if (students.length === 0) return;
   const activeTemplate = template || getSchoolSettings().studentIdCardTemplate || 'modern-tech';
@@ -73,11 +79,11 @@ export function generateAllIdCards(
     if (index > 0) {
       doc.addPage([54, 86], 'portrait');
     }
-    renderCardOnPage(doc, student, activeTemplate, school);
+    renderCardOnPage(doc, student, activeTemplate, school, pdfLogo);
     if (activeTemplate === 'vertical-badge') {
       // Back of this student's card immediately follows its front (duplex).
       doc.addPage([54, 86], 'portrait');
-      renderVerticalBadgeBack(doc, student, school);
+      renderVerticalBadgeBack(doc, student, school, pdfLogo);
     }
   });
 
@@ -85,7 +91,7 @@ export function generateAllIdCards(
 }
 
 // Render student card content into the current page of doc
-function renderCardOnPage(doc: jsPDF, student: Student, template: CardTemplateType, school: SchoolInfo) {
+function renderCardOnPage(doc: jsPDF, student: Student, template: CardTemplateType, school: SchoolInfo, pdfLogo?: string) {
   const width = 54;
   const height = 86;
 
@@ -375,8 +381,9 @@ function renderCardOnPage(doc: jsPDF, student: Student, template: CardTemplateTy
 
     // School logo: raster logo cover-clipped into a rounded square, else a
     // steel monogram disc with the school initials (SVG preset logos
-    // cannot be embedded by jsPDF, so they take the monogram path).
-    const logo = getSchoolSettings().schoolLogo || '';
+    // cannot be embedded by jsPDF, so they take the monogram path unless
+    // the caller passed a pre-rasterized copy as pdfLogo).
+    const logo = pdfLogo || getSchoolSettings().schoolLogo || '';
     let renderedLogo = false;
     if (/^data:image\/(png|jpe?g|webp)/i.test(logo)) {
       renderedLogo = drawImageCover(doc, logo, CX - 5, 4, 10, 10, 2);
@@ -627,7 +634,7 @@ function drawImageCover(doc: jsPDF, img: string, x: number, y: number, w: number
  * printed; the blocks flow so fuller records simply use more of the card,
  * and nothing is allowed to run into the signature or the bottom band.
  */
-function renderVerticalBadgeBack(doc: jsPDF, student: Student, school: SchoolInfo) {
+function renderVerticalBadgeBack(doc: jsPDF, student: Student, school: SchoolInfo, pdfLogo?: string) {
   const NAVY: [number, number, number] = [13, 39, 66];
   const STEEL: [number, number, number] = [141, 180, 200];
   const STEEL_LIGHT: [number, number, number] = [190, 215, 228];
@@ -638,8 +645,9 @@ function renderVerticalBadgeBack(doc: jsPDF, student: Student, school: SchoolInf
   doc.setFillColor(...NAVY);
   doc.rect(0, 0, 54, 86, 'F');
 
-  // Logo / monogram, Ø12mm
-  const logo = settings.schoolLogo || '';
+  // Logo / monogram, Ø12mm (pdfLogo = caller-rasterized copy of the
+  // settings logo, since jsPDF cannot embed the SVG presets directly)
+  const logo = pdfLogo || settings.schoolLogo || '';
   let renderedLogo = false;
   if (/^data:image\/(png|jpe?g|webp)/i.test(logo)) {
     renderedLogo = drawImageCover(doc, logo, CX - 6, 6, 12, 12, 2);

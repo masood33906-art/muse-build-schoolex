@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Student, CardTemplateType } from '../types';
 import { generateSingleIdCard, generateAllIdCards, SchoolInfo } from '../utils/pdfGenerator';
+import { rasterizeLogoForPdf } from '../utils/logoRaster';
 import { getSchoolSettings, saveSchoolSettings, SchoolSettings } from '../utils/settingsHelper';
 import { getAvatarColor, getInitials } from '../data/initialStudents';
 import { getStudentAvatar } from '../utils/studentAvatarHelper';
@@ -126,14 +127,18 @@ export const IdCardModal: React.FC<IdCardModalProps> = ({
     }
   };
 
-  const handleDownloadSingle = () => {
-    generateSingleIdCard(student, template, activeSchool);
+  const handleDownloadSingle = async () => {
+    // Preset logos are SVG, which jsPDF cannot embed — rasterize to PNG
+    // first so the printed card shows the real school logo.
+    const pdfLogo = await rasterizeLogoForPdf(schoolSettings.schoolLogo || '');
+    generateSingleIdCard(student, template, activeSchool, pdfLogo);
   };
 
-  const handleDownloadAll = () => {
+  const handleDownloadAll = async () => {
     setIsGeneratingAll(true);
+    const pdfLogo = await rasterizeLogoForPdf(schoolSettings.schoolLogo || '');
     setTimeout(() => {
-      generateAllIdCards(allStudents, template, activeSchool);
+      generateAllIdCards(allStudents, template, activeSchool, pdfLogo);
       setIsGeneratingAll(false);
     }, 150);
   };
