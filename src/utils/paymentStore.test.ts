@@ -17,7 +17,6 @@ import {
   StudentFeeItem
 } from './studentFeeLedgerHelper';
 import { LEDGER_TX_KEY, getLedgerTransactions } from './ledgerStore';
-import { disburseSalary, owedMonthsOf, migrateStaffPayStatusV1 } from './payrollService';
 import { migrateFeesV2 } from './migrations/migrateFeesV2';
 
 // Simple in-memory localStorage mock with optional quota throw on a specific key
@@ -283,52 +282,9 @@ function seedTwoMonthsForStudent(studentId: string): StudentFeeItem[] {
   console.log('✓ Test 5 passed: voidPayment restores dues & collectionInMonth ignores voided and migrated payments');
 }
 
-// 6. Staff payroll: disburseSalary & migrateStaffPayStatusV1
-{
-  mockStorage.clear();
-  const staffMember: StaffMember = {
-    id: 'EMP-001',
-    name: 'Tariq Mehmood',
-    role: 'Senior Teacher',
-    category: 'Teacher',
-    department: 'Mathematics',
-    qualification: 'M.Sc',
-    salary: 50000,
-    joiningDate: '2026-01-01',
-    status: 'Active',
-    payStatus: 'Paid', // bogus Paid with no paidMonths
-    phone: '03001112223',
-    email: 'tariq@example.com'
-  };
-
-  const { staff: migrated, flagged } = migrateStaffPayStatusV1([staffMember], new Date('2026-04-15T12:00:00Z'));
-  assert(flagged.length === 1 && flagged[0].id === 'EMP-001', 'Staff with payStatus=Paid and empty paidMonths should be flagged');
-  assert(migrated[0].payStatus === 'Pending', 'Migrated staff payStatus should be Pending');
-
-  const owedBefore = owedMonthsOf(migrated[0], new Date('2026-04-15T12:00:00Z'));
-  assert(owedBefore.length === 3, `Expected 3 owed months (Jan, Feb, Mar 2026), got ${owedBefore.length}`);
-
-  // Pay only 2 of the 3 owed months -> status should remain Pending
-  const afterPartial = disburseSalary(
-    migrated,
-    new Map([['EMP-001', owedBefore.slice(0, 2)]]),
-    { method: 'Bank Transfer', date: '2026-04-15', paidBy: 'Principal', now: new Date('2026-04-15T12:00:00Z') }
-  );
-  assert((afterPartial[0].paidMonths || []).length === 2, '2 paidMonths recorded');
-  assert(owedMonthsOf(afterPartial[0], new Date('2026-04-15T12:00:00Z')).length === 1, '1 month still owed');
-  assert(afterPartial[0].payStatus === 'Pending', 'payStatus stays Pending until all owed months are paid');
-
-  // Pay final owed month -> status becomes Paid
-  const remainingMonth = owedMonthsOf(afterPartial[0], new Date('2026-04-15T12:00:00Z'));
-  const afterFull = disburseSalary(
-    afterPartial,
-    new Map([['EMP-001', remainingMonth]]),
-    { method: 'Bank Transfer', date: '2026-04-15', paidBy: 'Principal', now: new Date('2026-04-15T12:00:00Z') }
-  );
-  assert(owedMonthsOf(afterFull[0], new Date('2026-04-15T12:00:00Z')).length === 0, '0 months owed');
-  assert(afterFull[0].payStatus === 'Paid', 'payStatus becomes Paid when owedMonths is empty');
-  assert(getLedgerTransactions().filter(t => t.category === 'Staff Salary').length === 2, '2 ledger transactions recorded');
-  console.log('✓ Test 6 passed: staff payroll disburseSalary & migrateStaffPayStatusV1');
-}
+// 6. RETIRED (PAYROLL_PLAN §5): staff payroll no longer lives in
+// localStorage (disburseSalary). Payroll is server-side now; its behaviour —
+// partial payments, derived status, one-transaction ledger writes, migration
+// — is covered by scripts/payroll-test.mjs (`npm run test:payroll`).
 
 console.log('ALL §7 MONEY RECORDS TESTS PASSED!');

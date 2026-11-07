@@ -20,6 +20,7 @@ import { getInitials, getAvatarColor } from '../data/initialStudents';
 import { STAFF_DEPARTMENTS, STAFF_CATEGORIES } from '../data/initialStaff';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
 import { getStaffSalaryAccrualInfo } from '../utils/salaryAccrualHelper';
+import { localISODate } from '../utils/dates';
 
 interface AddStaffPageProps {
   onBack: () => void;
@@ -48,7 +49,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
     status: 'Active',
     phone: '',
     email: '',
-    joiningDate: new Date().toISOString().slice(0, 10),
+    joiningDate: localISODate(),
     gender: 'Male',
     bloodGroup: 'B+',
     emergencyContact: '',
@@ -77,7 +78,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
         status: 'Active',
         phone: '',
         email: '',
-        joiningDate: new Date().toISOString().slice(0, 10),
+        joiningDate: localISODate(),
         gender: 'Male',
         bloodGroup: 'B+',
         emergencyContact: '',
@@ -174,7 +175,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
     status: (formData.status as StaffStatus) || 'Active',
     phone: formData.phone || '',
     email: formData.email || '',
-    joiningDate: formData.joiningDate || new Date().toISOString().slice(0, 10),
+    joiningDate: formData.joiningDate || localISODate(),
     paidMonths: editingStaff?.paidMonths || []
   });
 
@@ -205,7 +206,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
       cnic: formData.cnic?.trim() || editingStaff?.cnic || '',
       fatherName: formData.fatherName?.trim() || editingStaff?.fatherName || '',
       email: emailVal,
-      joiningDate: formData.joiningDate || new Date().toISOString().slice(0, 10),
+      joiningDate: formData.joiningDate || localISODate(),
       gender: formData.gender || 'Male',
       bloodGroup: formData.bloodGroup || 'B+',
       emergencyContact: formData.emergencyContact?.trim() || '',

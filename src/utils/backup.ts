@@ -1,6 +1,7 @@
 import { localISODate } from './dates';
 import { clearFault, getFaults } from './storage';
 import { listFileIds, getFile, putFile, blobToDataURL, dataURLToBlob } from './blobStore';
+import { exportPayroll, importPayroll } from './payrollApi';
 
 const PREFIXES = ['schoollee_', 'schooliee_'];
 const LAST_BACKUP_KEY = 'schoollee_last_backup_at';
@@ -26,7 +27,16 @@ export async function buildBackup() {
   } catch {
     // IndexedDB unavailable or empty
   }
-  return { app: 'schoolex', schemaVersion: 1, exportedAt: new Date().toISOString(), keys, files };
+  // Payroll (PAYROLL_PLAN §4): server-side tables are not in localStorage, so
+  // include the payroll export when the app server is reachable. Additive —
+  // schemaVersion stays 1 and older backups (without `payroll`) still restore.
+  let payroll: Awaited<ReturnType<typeof exportPayroll>> | undefined;
+  try {
+    payroll = await exportPayroll();
+  } catch {
+    payroll = undefined;
+  }
+  return { app: 'schoolex', schemaVersion: 1, exportedAt: new Date().toISOString(), keys, files, ...(payroll ? { payroll } : {}) };
 }
 
 export async function downloadBackup(tag = '') {
@@ -76,6 +86,15 @@ export async function restoreBackup(file: File) {
           // ignore if IndexedDB is unavailable
         }
       }
+    }
+  }
+  // Restore payroll tables (additive: only when the backup carries a payroll
+  // section and the app server is reachable).
+  if (data.payroll && typeof data.payroll === 'object') {
+    try {
+      await importPayroll(data.payroll);
+    } catch (e) {
+      console.warn('[backup] payroll import failed:', e);
     }
   }
   getFaults().forEach(k => clearFault(k));

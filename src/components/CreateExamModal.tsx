@@ -3,6 +3,7 @@ import { X, Plus, Trash2, Calendar, ChevronDown, Check } from 'lucide-react';
 import { Exam, ExamSubject, DEFAULT_GRADING_SCHEMA } from '../utils/examStore';
 import { ClassInfo } from '../types';
 import { DateTimePickerPopover } from './DateTimePickerPopover';
+import { nextSubjectStartDate } from '../utils/dates';
 
 interface CreateExamModalProps {
   isOpen: boolean;
@@ -131,7 +132,12 @@ export const CreateExamModal: React.FC<CreateExamModalProps> = ({
       return;
     }
 
-    const defaultDateTime = '09/18/2026 09:00 AM';
+    // Date rule: the first subject defaults to tomorrow; each next subject
+    // defaults to the previous subject's date + 1 day (same time). The date
+    // stays fully editable per subject afterwards.
+    const defaultDateTime = nextSubjectStartDate(
+      subjects.length > 0 ? subjects[subjects.length - 1].startDate : undefined
+    );
 
     const newSub: ExamSubject = {
       id: `SUB-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,

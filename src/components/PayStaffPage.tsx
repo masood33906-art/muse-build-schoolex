@@ -1,29 +1,46 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  Search, 
-  Calendar, 
-  ChevronDown, 
-  ArrowLeft, 
-  Check, 
-  CheckCircle2, 
-  FileText, 
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import {
+  ArrowLeft,
+  Search,
+  Users,
+  CheckCircle2,
   Clock,
   AlertCircle,
-  Layers,
-  X,
-  Banknote
+  Wallet,
+  Download,
+  Trash2,
+  ServerOff,
+  Loader2,
+  History,
+  LayoutGrid,
+  FileDown,
 } from 'lucide-react';
-import { StaffMember, normalizeMethod } from '../types';
+import { StaffMember, PaymentMethod } from '../types';
 import { PaymentSummaryData } from './PaymentSummaryPage';
-import { BreadcrumbTrail } from './BreadcrumbTrail';
-import { 
-  getStaffSalaryAccrualInfo, 
-  formatShortMonthYear, 
-  StaffSalaryAccrualInfo 
-} from '../utils/salaryAccrualHelper';
-import { disburseSalary, owedMonthsOf } from '../utils/payrollService';
+import { PayStaffModal } from './PayStaffModal';
 import { getSchoolSettings } from '../utils/settingsHelper';
-import { localISODate } from '../utils/dates';
+import { getInitials } from '../data/initialStudents';
+import { localISODate, MONTHS, monthLabelFromKey } from '../utils/dates';
+import { generateMonthlyIndividualSlipsCombinedPdf } from '../utils/staffPdfGenerator';
+import { DEFAULT_SCHOOL } from '../utils/pdfGenerator';
+import {
+  PayrollPeriodSummary,
+  PayrollRecord,
+  PayrollPayment,
+  PayrollPaymentResult,
+  PayrollMigrationReport,
+  PayrollUnavailableError,
+  applyPayrollSync,
+  buildSlipBreakdown,
+  createBulkPayrollPayments,
+  createPayrollPeriod,
+  deletePayrollRecord,
+  getStaffPayroll,
+  listPayrollPayments,
+  listPayrollPeriods,
+  listPayrollRecords,
+  runPayrollMigration,
+} from '../utils/payrollApi';
 
 interface PayStaffPageProps {
   staffList: StaffMember[];
@@ -38,1167 +55,604 @@ interface PayStaffPageProps {
   onClearInitialSelectedStaff?: () => void;
 }
 
-const MONTH_NUMBER_MAP: Record<string, string> = {
-  'January': '01',
-  'February': '02',
-  'March': '03',
-  'April': '04',
-  'May': '05',
-  'June': '06',
-  'July': '07',
-  'August': '08',
-  'September': '09',
-  'October': '10',
-  'November': '11',
-  'December': '12'
-};
+type StatusFilter = 'All' | 'Paid' | 'Unpaid' | 'Partial';
 
-interface StaffPayRowState {
-  staffId: string;
-  selectedMonths: string[];
-  payment: number;
-  reason: string;
-  loanDeduction: number;
-  paidBy: string;
-  paidDate: string;
-  status: 'Unpaid' | 'Paid' | 'Not Eligible';
-}
-
-const ATTENDANCE_MAP: Record<string, { presents: number; leaves: number }> = {
-  'T0018': { presents: 2, leaves: 0 },
-  'STF-0012': { presents: 0, leaves: 1 },
-  'STF-0005': { presents: 1, leaves: 0 },
-  'STF-0007': { presents: 1, leaves: 0 },
-};
+const BULK_METHODS: PaymentMethod[] = ['Bank Transfer', 'Cash', 'Online', 'JazzCash', 'EasyPaisa', 'Cheque'];
+const fmt = (n: number) => `Rs. ${Math.round(n).toLocaleString()}`;
 
 export const PayStaffPage: React.FC<PayStaffPageProps> = ({
   staffList,
   onUpdateStaff,
   onBackToStaff,
-  onNavigateOverview,
   month,
   year,
   onOpenSalarySlips,
   onNavigateToPaymentSummary,
   initialSelectedStaffId,
-  onClearInitialSelectedStaff
+  onClearInitialSelectedStaff,
 }) => {
-  const fullMonthYear = `${month} ${year}`;
+  const settings = getSchoolSettings();
+  const paidBy = settings.principalName || settings.schoolName || 'Accounts Office';
 
-  // Compute live salary accrual info for every staff member
-  const accrualMap = useMemo(() => {
-    const map: Record<string, StaffSalaryAccrualInfo> = {};
-    staffList.forEach(s => {
-      map[s.id] = getStaffSalaryAccrualInfo(s);
-    });
-    return map;
-  }, [staffList]);
+  const initMonth = Math.max(1, MONTHS.indexOf(month) + 1) || new Date().getMonth() + 1;
+  const initYear = Number(year) || new Date().getFullYear();
+  const [selYear, setSelYear] = useState(initYear);
+  const [selMonth, setSelMonth] = useState(initMonth);
+  const periodKey = `${selYear}-${String(selMonth).padStart(2, '0')}`;
+  const periodLabel = monthLabelFromKey(periodKey);
 
-  // Local state for each staff row's editable values & selected owed months
-  const [rowStates, setRowStates] = useState<Record<string, StaffPayRowState>>({});
+  const [apiState, setApiState] = useState<'loading' | 'ready' | 'unavailable'>('loading');
+  const [periods, setPeriods] = useState<PayrollPeriodSummary[]>([]);
+  const [records, setRecords] = useState<PayrollRecord[]>([]);
+  const [recordsLoading, setRecordsLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
-  // Selected staff checkboxes
-  const [selectedStaffIds, setSelectedStaffIds] = useState<Set<string>>(new Set());
+  const [tab, setTab] = useState<'payroll' | 'history'>('payroll');
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<StatusFilter>('All');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkMethod, setBulkMethod] = useState<PaymentMethod>('Bank Transfer');
+  const [payTarget, setPayTarget] = useState<PayrollRecord | null>(null);
 
-  // Modal state for per-employee multi-month salary disbursal popup
-  const [activeMonthModalStaffId, setActiveMonthModalStaffId] = useState<string | null>(null);
+  const [history, setHistory] = useState<PayrollPayment[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [histStaff, setHistStaff] = useState('');
+  const [histPeriod, setHistPeriod] = useState('');
 
-  // Sync rowStates whenever staffList or accrualMap updates
-  useEffect(() => {
-    setRowStates(prev => {
-      const next: Record<string, StaffPayRowState> = {};
-      staffList.forEach(s => {
-        const accrual = accrualMap[s.id];
-        const existing = prev[s.id];
-        const owedMonths = accrual?.owedMonths || [];
-        const hasCompletedMonth = accrual?.hasCompletedOneFullMonth ?? false;
-        const isAllPaid = hasCompletedMonth && accrual.accruedMonths.length > 0 && owedMonths.length === 0;
+  const [migrationReport, setMigrationReport] = useState<PayrollMigrationReport | null>(null);
 
-        // Keep existing selectedMonths if valid subset of current owedMonths, otherwise default to all owedMonths
-        let selectedMonths = owedMonths;
-        if (existing && existing.selectedMonths.length > 0) {
-          const validExisting = existing.selectedMonths.filter(m => owedMonths.includes(m));
-          if (validExisting.length > 0) {
-            selectedMonths = validExisting;
-          }
-        }
+  const periodExists = useMemo(() => periods.some(p => p.periodKey === periodKey), [periods, periodKey]);
 
-        const calculatedPayment = selectedMonths.length * (Number(s.salary) || 0);
+  const loadPeriods = async () => {
+    const ps = await listPayrollPeriods();
+    setPeriods(ps);
+    return ps;
+  };
 
-        const schoolSettings = getSchoolSettings();
-        const defaultPaidBy = schoolSettings.principalName || schoolSettings.schoolName || 'Accounts Office';
-
-        next[s.id] = {
-          staffId: s.id,
-          selectedMonths,
-          payment: calculatedPayment,
-          reason: existing?.reason || '',
-          loanDeduction: existing?.loanDeduction || 0,
-          paidBy: isAllPaid ? defaultPaidBy : (existing?.paidBy || '-'),
-          paidDate: isAllPaid && s.lastPaidDate ? s.lastPaidDate : (existing?.paidDate || '-'),
-          status: !hasCompletedMonth
-            ? 'Not Eligible'
-            : isAllPaid
-            ? 'Paid'
-            : 'Unpaid'
-        };
-      });
-      return next;
-    });
-
-    // Default select all staff who currently have owedMonths > 0 (or initialSelectedStaffId if provided)
-    setSelectedStaffIds(prev => {
-      if (initialSelectedStaffId) {
-        const targetAccrual = accrualMap[initialSelectedStaffId];
-        if (targetAccrual && targetAccrual.owedMonths.length > 0) {
-          return new Set([initialSelectedStaffId]);
-        }
-      }
-      const eligibleWithOwed = staffList
-        .filter(s => (accrualMap[s.id]?.owedMonths.length || 0) > 0)
-        .map(s => s.id);
-      if (prev.size === 0 && eligibleWithOwed.length > 0) {
-        return new Set(eligibleWithOwed);
-      }
-      // Remove any staff IDs that no longer owe salary
-      const filteredPrev = Array.from(prev).filter(id => (accrualMap[id]?.owedMonths.length || 0) > 0);
-      return new Set(filteredPrev);
-    });
-  }, [staffList, accrualMap, initialSelectedStaffId]);
-
-  useEffect(() => {
-    if (initialSelectedStaffId && onClearInitialSelectedStaff) {
-      onClearInitialSelectedStaff();
+  const loadRecords = async () => {
+    setRecordsLoading(true);
+    try {
+      const { records: recs } = await listPayrollRecords(periodKey);
+      setRecords(recs);
+    } catch (e) {
+      if (e instanceof PayrollUnavailableError) setApiState('unavailable');
+      else setRecords([]);
+    } finally {
+      setRecordsLoading(false);
     }
-  }, [initialSelectedStaffId, onClearInitialSelectedStaff]);
+  };
 
-  // Controls & Filters
-  const [showPaid, setShowPaid] = useState<boolean>(true);
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [sortAsc, setSortAsc] = useState<boolean>(true);
-
-  // Payment Summary Controls (Right sidebar)
-  const [paymentDate, setPaymentDate] = useState<string>(() => localISODate());
-  const [paymentMethod, setPaymentMethod] = useState<string>('Cash');
-  const [note, setNote] = useState<string>('');
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [paymentSuccessMessage, setPaymentSuccessMessage] = useState<string | null>(null);
-  const [validationWarning, setValidationWarning] = useState<string | null>(null);
-
-  // Filter staff according to Show Paid and Search Query
-  const filteredStaff = useMemo(() => {
-    return staffList.filter(staff => {
-      const rowState = rowStates[staff.id];
-      const isPaid = rowState ? rowState.status === 'Paid' : owedMonthsOf(staff).length === 0;
-
-      if (!showPaid && isPaid) {
-        return false;
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await loadPeriods();
+        if (!cancelled) setApiState('ready');
+      } catch {
+        if (!cancelled) setApiState('unavailable');
       }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-      if (searchQuery.trim() !== '') {
-        const q = searchQuery.toLowerCase();
-        const matchName = staff.name.toLowerCase().includes(q);
-        const matchId = staff.id.toLowerCase().includes(q);
-        const matchRole = staff.role.toLowerCase().includes(q);
-        return matchName || matchId || matchRole;
-      }
+  useEffect(() => {
+    if (apiState !== 'ready') return;
+    setSelected(new Set());
+    if (periodExists) void loadRecords();
+    else setRecords([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiState, periodKey, periodExists]);
 
+  // Opened from the directory with a specific employee → open their Pay form.
+  const initialHandled = useRef<string | null>(null);
+  useEffect(() => {
+    if (!initialSelectedStaffId || records.length === 0) return;
+    if (initialHandled.current === initialSelectedStaffId) return;
+    const rec = records.find(r => r.staffId === initialSelectedStaffId);
+    if (rec) {
+      initialHandled.current = initialSelectedStaffId;
+      setPayTarget(rec);
+    }
+    onClearInitialSelectedStaff?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSelectedStaffId, records]);
+
+  const loadHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const payments = await listPayrollPayments({
+        staffId: histStaff || undefined,
+        periodKey: histPeriod || undefined,
+      });
+      setHistory(payments);
+    } catch {
+      setHistory([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (tab === 'history' && apiState === 'ready') void loadHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, histStaff, histPeriod, apiState]);
+
+  const totals = useMemo(() => ({
+    staffCount: records.length,
+    paidCount: records.filter(r => r.status === 'Paid').length,
+    unpaidCount: records.filter(r => r.status === 'Unpaid').length,
+    partialCount: records.filter(r => r.status === 'Partial').length,
+    totalDue: records.reduce((s, r) => s + r.due, 0),
+    totalPaid: records.reduce((s, r) => s + r.paid, 0),
+    totalOutstanding: records.reduce((s, r) => s + r.outstanding, 0),
+  }), [records]);
+
+  const visibleRecords = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return records.filter(r => {
+      if (filter !== 'All' && r.status !== filter) return false;
+      if (q && !r.staffName.toLowerCase().includes(q) && !r.staffId.toLowerCase().includes(q)) return false;
       return true;
-    }).sort((a, b) => {
-      return sortAsc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
     });
-  }, [staffList, rowStates, showPaid, searchQuery, sortAsc]);
+  }, [records, search, filter]);
 
-  // Payable filtered staff (those who have at least 1 owed month)
-  const payableFilteredStaff = useMemo(() => {
-    return filteredStaff.filter(s => (accrualMap[s.id]?.owedMonths.length || 0) > 0);
-  }, [filteredStaff, accrualMap]);
+  const selectableVisible = visibleRecords.filter(r => r.outstanding > 0);
+  const allSelected = selectableVisible.length > 0 && selectableVisible.every(r => selected.has(r.id));
 
-  const allFilteredSelected = useMemo(() => {
-    if (payableFilteredStaff.length === 0) return false;
-    return payableFilteredStaff.every(s => selectedStaffIds.has(s.id));
-  }, [payableFilteredStaff, selectedStaffIds]);
-
-  const handleToggleSelectAll = () => {
-    setSelectedStaffIds(prev => {
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
       const next = new Set(prev);
-      if (allFilteredSelected) {
-        payableFilteredStaff.forEach(s => next.delete(s.id));
-      } else {
-        payableFilteredStaff.forEach(s => next.add(s.id));
-      }
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   };
 
-  const handleToggleStaffSelection = (id: string) => {
-    const accrual = accrualMap[id];
-    if (!accrual || !accrual.hasCompletedOneFullMonth || accrual.owedMonths.length === 0) {
-      return;
+  const handlePrepare = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await createPayrollPeriod(selYear, selMonth, paidBy);
+      await loadPeriods();
+      setMessage({ kind: 'ok', text: `Payroll prepared for ${periodLabel} — one record per eligible employee, salaries snapshotted. Nothing was paid.` });
+    } catch (e) {
+      setMessage({ kind: 'err', text: e instanceof Error ? e.message : 'Could not prepare payroll' });
+    } finally {
+      setBusy(false);
     }
-    setSelectedStaffIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-        // Ensure at least 1 owed month is selected when checking the staff member
-        setRowStates(rPrev => {
-          const row = rPrev[id];
-          if (row && row.selectedMonths.length === 0 && accrual.owedMonths.length > 0) {
-            const staffObj = staffList.find(st => st.id === id);
-            return {
-              ...rPrev,
-              [id]: {
-                ...row,
-                selectedMonths: [...accrual.owedMonths],
-                payment: accrual.owedMonths.length * (Number(staffObj?.salary) || 0)
-              }
-            };
-          }
-          return rPrev;
-        });
-      }
-      return next;
-    });
   };
 
-  // Toggle a single owed month for a specific staff member
-  const handleToggleOwedMonth = (staffId: string, targetMonth: string) => {
-    const staffObj = staffList.find(s => s.id === staffId);
-    const accrual = accrualMap[staffId];
-    if (!staffObj || !accrual) return;
+  const handlePaymentApplied = async (result: PayrollPaymentResult) => {
+    applyPayrollSync(result);
+    onUpdateStaff(result.staff);
+    await loadPeriods();
+    if (periodExists) await loadRecords();
+    if (tab === 'history') await loadHistory();
+  };
 
-    setRowStates(prev => {
-      const current = prev[staffId];
-      if (!current) return prev;
-
-      const exists = current.selectedMonths.includes(targetMonth);
-      const updatedMonths = exists
-        ? current.selectedMonths.filter(m => m !== targetMonth)
-        : accrual.owedMonths.filter(m => current.selectedMonths.includes(m) || m === targetMonth);
-
-      const newPayment = updatedMonths.length * (Number(staffObj.salary) || 0);
-
-      // Automatically select/deselect the row checkbox based on whether any month is selected
-      setSelectedStaffIds(selPrev => {
-        const nextSel = new Set(selPrev);
-        if (updatedMonths.length > 0) {
-          nextSel.add(staffId);
-        } else {
-          nextSel.delete(staffId);
-        }
-        return nextSel;
+  const handleBulkPay = async () => {
+    const chosen = records.filter(r => selected.has(r.id) && r.outstanding > 0);
+    if (chosen.length === 0) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await createBulkPayrollPayments({
+        items: chosen.map(r => ({ recordId: r.id })),
+        method: bulkMethod,
+        paidDate: localISODate(),
+        createdBy: paidBy,
       });
-
-      return {
-        ...prev,
-        [staffId]: {
-          ...current,
-          selectedMonths: updatedMonths,
-          payment: newPayment
-        }
-      };
-    });
-  };
-
-  // Select All or Clear All owed months for a specific staff member
-  const handleSelectAllOwedMonthsForStaff = (staffId: string, selectAll: boolean) => {
-    const staffObj = staffList.find(s => s.id === staffId);
-    const accrual = accrualMap[staffId];
-    if (!staffObj || !accrual) return;
-
-    const updatedMonths = selectAll ? [...accrual.owedMonths] : [];
-    const newPayment = updatedMonths.length * (Number(staffObj.salary) || 0);
-
-    setRowStates(prev => ({
-      ...prev,
-      [staffId]: {
-        ...prev[staffId],
-        selectedMonths: updatedMonths,
-        payment: newPayment
-      }
-    }));
-
-    setSelectedStaffIds(selPrev => {
-      const nextSel = new Set(selPrev);
-      if (selectAll && updatedMonths.length > 0) {
-        nextSel.add(staffId);
-      } else {
-        nextSel.delete(staffId);
-      }
-      return nextSel;
-    });
-  };
-
-  // Update a row's payment amount manually if needed
-  const handlePaymentChange = (id: string, value: number) => {
-    setRowStates(prev => ({
-      ...prev,
-      [id]: {
-        ...prev[id],
-        payment: Math.max(0, isNaN(value) ? 0 : value)
-      }
-    }));
-  };
-
-  // Update a row's optional reason
-  const handleReasonChange = (id: string, reason: string) => {
-    setRowStates(prev => ({
-      ...prev,
-      [id]: {
-        ...prev[id],
-        reason
-      }
-    }));
-  };
-
-  // Update loan deduction
-  const handleLoanDeductionChange = (id: string, value: number) => {
-    setRowStates(prev => ({
-      ...prev,
-      [id]: {
-        ...prev[id],
-        loanDeduction: Math.max(0, isNaN(value) ? 0 : value)
-      }
-    }));
-  };
-
-  // Calculations for the right Payment Summary card
-  const summary = useMemo(() => {
-    let selectedCount = 0;
-    let totalSelectedMonthsCount = 0;
-    let totalSalarySum = 0;
-    let totalLoanDeductions = 0;
-
-    selectedStaffIds.forEach(id => {
-      const row = rowStates[id];
-      const accrual = accrualMap[id];
-      if (row && accrual && row.selectedMonths.length > 0) {
-        selectedCount++;
-        totalSelectedMonthsCount += row.selectedMonths.length;
-        totalSalarySum += row.payment;
-        totalLoanDeductions += row.loanDeduction;
-      }
-    });
-
-    const netPayable = Math.max(0, totalSalarySum - totalLoanDeductions);
-
-    return {
-      selectedCount,
-      totalSelectedMonthsCount,
-      totalSalarySum,
-      totalLoanDeductions,
-      netPayable
-    };
-  }, [selectedStaffIds, rowStates, accrualMap]);
-
-  // Execute payment for given staff IDs (either from bulk "Proceed to Pay" or single staff modal "Proceed to Pay")
-  const executeSalaryDisbursal = (targetStaffIds: Set<string>) => {
-    setValidationWarning(null);
-
-    const validIds = Array.from(targetStaffIds).filter(id => {
-      const row = rowStates[id];
-      const accrual = accrualMap[id];
-      return row && accrual && accrual.hasCompletedOneFullMonth && row.selectedMonths.length > 0 && row.payment > 0;
-    });
-
-    if (validIds.length === 0) {
-      setValidationWarning('Please select at least one eligible staff member and at least one owed salary month to disburse.');
-      return;
-    }
-
-    setIsProcessing(true);
-
-    setTimeout(() => {
-      const schoolSettings = getSchoolSettings();
-      const paidByLabel = schoolSettings.principalName || schoolSettings.schoolName || 'Accounts Office';
-
-      const monthsByStaffId = new Map<string, string[]>();
-      const adjustments = new Map<string, { bonus?: number; deduction?: number; loanDeduction?: number; note?: string }>();
-      let totalDisbursedAmount = 0;
-
-      validIds.forEach(id => {
-        const staff = staffList.find(s => s.id === id);
-        const row = rowStates[id];
-        if (!staff || !row) return;
-        const paidMonthsToRecord = row.selectedMonths || [];
-        monthsByStaffId.set(id, paidMonthsToRecord);
-        const baseGross = paidMonthsToRecord.length * (Number(staff.salary) || 0);
-        const diff = (row.payment || 0) - baseGross;
-        const bonus = diff > 0 ? diff : 0;
-        const deduction = diff < 0 ? Math.abs(diff) : 0;
-        const loanDed = Math.min(staff.loanBalance || 0, row.loanDeduction || 0);
-        const netRowAmount = Math.max(0, baseGross + bonus - deduction - loanDed);
-        totalDisbursedAmount += netRowAmount;
-        adjustments.set(id, {
-          bonus,
-          deduction,
-          loanDeduction: row.loanDeduction || 0,
-          note: note || row.reason || undefined
-        });
-      });
-
-      const updatedStaffList = disburseSalary(staffList, monthsByStaffId, {
-        method: normalizeMethod(paymentMethod),
-        date: paymentDate,
-        paidBy: paidByLabel,
-        adjustments
-      });
-
-      const newlyPaidStaffMembers: StaffMember[] = updatedStaffList
-        .filter(s => validIds.includes(s.id))
-        .map(s => {
-          const row = rowStates[s.id];
-          const netRowAmount = Math.max(0, (row?.payment || 0) - Math.min(s.loanBalance || 0, row?.loanDeduction || 0));
-          return {
-            ...s,
-            salary: netRowAmount
-          };
-        });
-
-      onUpdateStaff(updatedStaffList);
-      setIsProcessing(false);
-      setActiveMonthModalStaffId(null);
-      setPaymentSuccessMessage(
-        `Successfully disbursed salary for ${validIds.length} staff member(s) totaling ${totalDisbursedAmount.toLocaleString()} PKR. System & Overview metrics updated.`
-      );
-
-      setSelectedStaffIds(new Set());
-
-      if (onNavigateToPaymentSummary && newlyPaidStaffMembers.length > 0) {
+      await handlePaymentApplied(result);
+      setSelected(new Set());
+      const totalPaidNow = result.payments.reduce((s, p) => s + p.amount, 0);
+      if (onNavigateToPaymentSummary) {
+        const paidIds = new Set(result.payments.map(p => p.staffId));
         onNavigateToPaymentSummary({
-          month,
-          year,
-          monthNumber: MONTH_NUMBER_MAP[month] || '09',
-          paymentDate,
-          paymentMethod,
-          note,
-          paidStaff: newlyPaidStaffMembers,
-          totalSalaryPaid: totalDisbursedAmount,
-          staffPaidCount: newlyPaidStaffMembers.length
+          month: MONTHS[selMonth - 1],
+          year: String(selYear),
+          monthNumber: String(selMonth).padStart(2, '0'),
+          paymentDate: localISODate(),
+          paymentMethod: bulkMethod,
+          paidStaff: staffList.filter(s => paidIds.has(s.id)),
+          totalSalaryPaid: totalPaidNow,
+          staffPaidCount: paidIds.size,
         });
+      } else {
+        setMessage({ kind: 'ok', text: `Paid ${fmt(totalPaidNow)} across ${result.payments.length} record(s). Ledger updated in the same transaction.` });
       }
-    }, 350);
+    } catch (e) {
+      setMessage({ kind: 'err', text: e instanceof Error ? e.message : 'Bulk payment failed — nothing was recorded' });
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const activeModalStaff = useMemo(() => {
-    if (!activeMonthModalStaffId) return null;
-    return staffList.find(s => s.id === activeMonthModalStaffId) || null;
-  }, [activeMonthModalStaffId, staffList]);
+  const handleDeleteRecord = async (rec: PayrollRecord) => {
+    if (!confirm(`Delete the ${periodLabel} payroll record for ${rec.staffName}? It has no payments, so nothing financial is lost. You can re-prepare the month to recreate it.`)) return;
+    setBusy(true);
+    try {
+      await deletePayrollRecord(rec.id);
+      await loadPeriods();
+      await loadRecords();
+    } catch (e) {
+      setMessage({ kind: 'err', text: e instanceof Error ? e.message : 'Could not delete the record' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRunMigration = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const report = await runPayrollMigration();
+      setMigrationReport(report);
+      await loadPeriods();
+      if (periodExists) await loadRecords();
+    } catch (e) {
+      setMessage({ kind: 'err', text: e instanceof Error ? e.message : 'Migration failed' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSlip = async (payment: PayrollPayment) => {
+    const member = staffList.find(s => s.id === payment.staffId);
+    if (!member) {
+      setMessage({ kind: 'err', text: 'Employee not found in the staff list' });
+      return;
+    }
+    try {
+      const data = await getStaffPayroll(payment.staffId);
+      const rec = data.records.find(r => r.periodKey === payment.periodKey);
+      if (!rec) return;
+      const label = payment.periodLabel || monthLabelFromKey(payment.periodKey);
+      const bd = buildSlipBreakdown(rec, label, data.payments);
+      generateMonthlyIndividualSlipsCombinedPdf([member], label, member.id, DEFAULT_SCHOOL, new Map([[member.id, bd]]));
+    } catch {
+      setMessage({ kind: 'err', text: 'Could not generate the salary slip' });
+    }
+  };
+
+  const payTargetStaff = payTarget ? staffList.find(s => s.id === payTarget.staffId) || null : null;
+
+  const statusChip = (status: PayrollRecord['status']) => {
+    if (status === 'Paid') return 'bg-[#0e2c20] text-[#4ade80] border-[#164e3b]';
+    if (status === 'Partial') return 'bg-amber-500/10 text-amber-300 border-amber-500/30';
+    return 'bg-rose-500/10 text-rose-300 border-rose-500/30';
+  };
 
   return (
-    <div className="w-full max-w-[1600px] mx-auto px-3 sm:px-6 py-5 text-slate-100 animate-in fade-in duration-200">
-      {/* ================= PAGE TOP HEADER & BREADCRUMBS ================= */}
-      <div className="mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="animate-in fade-in duration-200">
+      {/* Header */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-5">
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={onBackToStaff} className="p-2 rounded-lg bg-surface-32 border border-edge-18 text-slate-300 hover:text-white cursor-pointer" title="Back to staff directory">
+            <ArrowLeft className="w-4 h-4" />
+          </button>
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center gap-3">
-              <span>Pay Staff & Accrual Management</span>
-            </h1>
-
-            <BreadcrumbTrail
-              items={[
-                { label: 'Overview', onClick: onNavigateOverview },
-                { label: 'Staff', onClick: onBackToStaff },
-                { label: 'Pay Staff' }
-              ]}
-            />
+            <h1 className="text-2xl font-bold text-white tracking-tight">Pay Staff</h1>
+            <p className="text-xs text-slate-400">Monthly payroll, salary payments and payment history — recorded in the app database with the financial ledger.</p>
           </div>
-
-          <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={onBackToStaff}
-              className="px-3 py-1.5 rounded-lg bg-surface-21 hover:bg-surface-43 border border-edge-24 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Staff Directory</span>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex rounded-lg overflow-hidden border border-edge-18">
+            <button type="button" onClick={() => setTab('payroll')} className={`px-3.5 py-2 text-xs font-bold flex items-center gap-1.5 cursor-pointer ${tab === 'payroll' ? 'bg-emerald-600 text-white' : 'bg-surface-32 text-slate-300'}`}>
+              <LayoutGrid className="w-3.5 h-3.5" /> Monthly Payroll
             </button>
-
-            {onOpenSalarySlips && (
-              <button
-                type="button"
-                onClick={() => onOpenSalarySlips('overall')}
-                className="px-3.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span>Salary Slips</span>
-              </button>
-            )}
+            <button type="button" onClick={() => setTab('history')} className={`px-3.5 py-2 text-xs font-bold flex items-center gap-1.5 cursor-pointer ${tab === 'history' ? 'bg-emerald-600 text-white' : 'bg-surface-32 text-slate-300'}`}>
+              <History className="w-3.5 h-3.5" /> Payment History
+            </button>
           </div>
+          <select value={selMonth} onChange={e => setSelMonth(Number(e.target.value))} className="bg-surface-32 border border-edge-18 rounded-lg px-3 py-2 text-xs font-semibold text-slate-100 cursor-pointer" aria-label="Payroll month">
+            {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+          </select>
+          <select value={selYear} onChange={e => setSelYear(Number(e.target.value))} className="bg-surface-32 border border-edge-18 rounded-lg px-3 py-2 text-xs font-semibold text-slate-100 cursor-pointer" aria-label="Payroll year">
+            {[initYear - 2, initYear - 1, initYear, initYear + 1].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+          {onOpenSalarySlips && (
+            <button type="button" onClick={() => onOpenSalarySlips('overall')} className="px-3.5 py-2 rounded-lg bg-[#192436] hover:bg-[#202e46] border border-edge-39 text-xs font-semibold text-slate-200 cursor-pointer">
+              Salary Slips
+            </button>
+          )}
+          <button type="button" onClick={handleRunMigration} disabled={busy || apiState !== 'ready'} className="px-3.5 py-2 rounded-lg bg-[#192436] hover:bg-[#202e46] border border-edge-39 text-xs font-semibold text-slate-200 flex items-center gap-1.5 cursor-pointer disabled:opacity-50" title="Import pre-payroll salary history (paidMonths / salary transactions) into the payroll tables — safe to re-run">
+            <FileDown className="w-3.5 h-3.5" /> Import Legacy History
+          </button>
         </div>
       </div>
 
-      {/* Salary Accrual Policy Information Banner */}
-      <div className="mb-5 bg-[#101827] border border-edge-21 rounded-xl p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
-        <div className="flex items-start sm:items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-400 flex items-center justify-center shrink-0">
-            <Clock className="w-4 h-4" />
-          </div>
-          <div>
-            <span className="font-bold text-white">Salary Accrual & Payout Policy: </span>
-            <span className="text-slate-300">
-              Newly added staff members become eligible for salary accrual starting the <strong className="text-emerald-400">following month</strong> relative to their Joining Date, and monthly salary is credited only after completing <strong className="text-emerald-400">at least 1 full month of service</strong>.
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Validation Warning Banner */}
-      {validationWarning && (
-        <div className="mb-5 bg-amber-950/60 border border-amber-500/40 rounded-xl p-3.5 flex items-center justify-between gap-3 text-amber-200 text-xs animate-in fade-in">
-          <div className="flex items-center gap-2.5">
-            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
-            <span className="font-semibold">{validationWarning}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setValidationWarning(null)}
-            className="text-amber-400 hover:text-white text-xs font-bold underline cursor-pointer"
-          >
-            Dismiss
-          </button>
+      {message && (
+        <div className={`mb-4 flex items-start gap-2 text-xs rounded-lg px-3.5 py-2.5 border ${message.kind === 'ok' ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30' : 'text-rose-300 bg-rose-500/10 border-rose-500/30'}`}>
+          {message.kind === 'ok' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+          <span>{message.text}</span>
         </div>
       )}
 
-      {/* Success Notification Banner */}
-      {paymentSuccessMessage && (
-        <div className="mb-5 bg-emerald-950/60 border border-emerald-500/40 rounded-xl p-4 flex items-center justify-between gap-3 text-emerald-200 text-xs animate-in slide-in-from-top-2">
-          <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
-            <span className="font-semibold">{paymentSuccessMessage}</span>
+      {migrationReport && (
+        <div className="mb-4 border border-edge-18 bg-surface-32 rounded-xl p-4 text-xs text-slate-300">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white">Legacy payroll import — reconciliation report</h3>
+            <button type="button" onClick={() => setMigrationReport(null)} className="text-slate-400 hover:text-white cursor-pointer">Dismiss</button>
           </div>
-          <button
-            type="button"
-            onClick={() => setPaymentSuccessMessage(null)}
-            className="text-emerald-400 hover:text-white text-xs font-bold underline cursor-pointer"
-          >
-            Dismiss
-          </button>
+          <p className="mt-1 text-slate-400">
+            Imported {fmt(migrationReport.totals.imported)} across {migrationReport.totals.monthsMigrated} staff-month(s)
+            ({migrationReport.totals.paymentsCreated} payment(s) created). Salary transactions total {fmt(migrationReport.totals.salaryTransactions)};
+            matching ledger entries total {fmt(migrationReport.totals.ledger)}. Migrated payments do not write new ledger
+            entries (the expense is already there — no double-counting), and old records were not modified.
+          </p>
+          {migrationReport.staff.filter(s => s.difference !== 0).length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {migrationReport.staff.filter(s => s.difference !== 0).map(s => (
+                <li key={s.staffId} className="text-amber-300">
+                  {s.staffName} ({s.staffId}): difference {fmt(s.difference)} — see skipped items below.
+                </li>
+              ))}
+            </ul>
+          )}
+          {migrationReport.skipped.length > 0 && (
+            <ul className="mt-2 space-y-1 text-slate-400">
+              {migrationReport.skipped.slice(0, 12).map((sk, i) => (
+                <li key={i}>• {sk.staffName || sk.staffId}: {sk.reason}{sk.amount ? ` (${fmt(sk.amount)})` : ''}</li>
+              ))}
+              {migrationReport.skipped.length > 12 && <li>• …and {migrationReport.skipped.length - 12} more</li>}
+            </ul>
+          )}
         </div>
       )}
 
-      {/* ================= MAIN 2-COLUMN LAYOUT ================= */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* LEFT COLUMN: PAY STAFF TABLE CARD */}
-        <div className="lg:col-span-8 xl:col-span-9 bg-[#0b1019] border border-[#1b2536] rounded-2xl p-5 shadow-2xl">
-          {/* Card Header & "Show Paid" switch */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <div>
-              <h2 className="text-base font-bold text-white tracking-tight">
-                Staff Salary Roll & Owed Months Selection
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Select individual or all owed months per staff member to disburse their accrued salary
+      {apiState === 'loading' && (
+        <div className="flex items-center gap-2 text-sm text-slate-400 py-16 justify-center">
+          <Loader2 className="w-4 h-4 animate-spin" /> Loading payroll…
+        </div>
+      )}
+
+      {apiState === 'unavailable' && (
+        <div className="border border-amber-500/30 bg-amber-500/10 rounded-2xl p-8 text-center max-w-xl mx-auto mt-8">
+          <ServerOff className="w-10 h-10 text-amber-400 mx-auto mb-3" />
+          <h2 className="text-base font-bold text-amber-200">Payroll requires the SchoolEx app server</h2>
+          <p className="text-sm text-amber-100/70 mt-2">
+            Salary payments are recorded in the app database in the same transaction as the financial
+            ledger, so they can only be made from the desktop app (or the local server) — not from the
+            browser-only demo. Nothing here falls back to local storage, and no payment can be lost
+            between the two.
+          </p>
+        </div>
+      )}
+
+      {apiState === 'ready' && tab === 'payroll' && (
+        <>
+          {!periodExists ? (
+            <div className="border border-edge-18 bg-surface-32 rounded-2xl p-8 text-center max-w-xl mx-auto mt-4">
+              <Wallet className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
+              <h2 className="text-base font-bold text-white">Prepare {periodLabel} payroll</h2>
+              <p className="text-sm text-slate-400 mt-2">
+                Create one payroll record for every eligible employee (Active / On Leave, joined on or
+                before the end of {periodLabel}). Each record snapshots the employee's current salary —
+                later salary changes never rewrite this month. Preparing never pays anyone automatically.
               </p>
-            </div>
-
-            {/* "Show Paid" Toggle Switch */}
-            <div className="flex items-center gap-2.5">
-              <span className="text-xs text-slate-300 font-medium">Show Paid / Non-Accrued</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={showPaid}
-                onClick={() => setShowPaid(prev => !prev)}
-                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                  showPaid ? 'bg-emerald-600' : 'bg-edge-13'
-                }`}
-              >
-                <span
-                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-                    showPaid ? 'translate-x-4' : 'translate-x-0'
-                  }`}
-                />
+              <button type="button" onClick={handlePrepare} disabled={busy} className="mt-5 px-5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-bold cursor-pointer">
+                {busy ? 'Preparing…' : `Prepare ${periodLabel} payroll`}
               </button>
             </div>
-          </div>
-
-          {/* Search Bar */}
-          <div className="relative mb-5">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search staff by name, ID, or role..."
-              className="w-full bg-surface-11 border border-edge-17 text-slate-100 placeholder-slate-500 text-xs rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:border-slate-400 transition-colors"
-            />
-          </div>
-
-          {/* Table Container */}
-          <div className="overflow-x-auto border border-surface-34 rounded-xl">
-            <table className="w-full text-left border-collapse min-w-[1040px]">
-              <thead className="bg-surface-7 border-b border-[#1b2536] text-[11px] font-semibold text-slate-300">
-                <tr>
-                  {/* Select All Checkbox */}
-                  <th className="py-3 px-3.5 w-10 text-center">
-                    <input
-                      type="checkbox"
-                      checked={allFilteredSelected}
-                      onChange={handleToggleSelectAll}
-                      disabled={payableFilteredStaff.length === 0}
-                      className="w-4 h-4 rounded border-[#2c3b52] bg-surface-17 text-emerald-600 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-emerald-600 disabled:opacity-40"
-                    />
-                  </th>
-
-                  {/* Staff Name with Sort Arrow */}
-                  <th className="py-3 px-3">
-                    <button
-                      type="button"
-                      onClick={() => setSortAsc(prev => !prev)}
-                      className="flex items-center gap-1 text-slate-300 hover:text-white cursor-pointer font-bold"
-                    >
-                      <span>Staff Name & Joining</span>
-                      <span>{sortAsc ? '↑' : '↓'}</span>
-                    </button>
-                  </th>
-
-                  {/* Owed Month(s) Attribute (Select Each or All) */}
-                  <th className="py-3 px-3 min-w-[250px]">
-                    <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
-                      <Calendar className="w-3.5 h-3.5" />
-                      <span>Owed Month(s) (Each / All)</span>
+          ) : (
+            <>
+              {/* Summary cards */}
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-5">
+                {[
+                  { label: 'Total Staff', value: String(totals.staffCount), icon: Users, cls: 'text-white' },
+                  { label: 'Paid', value: String(totals.paidCount), icon: CheckCircle2, cls: 'text-emerald-400' },
+                  { label: 'Unpaid', value: String(totals.unpaidCount), icon: AlertCircle, cls: 'text-rose-300' },
+                  { label: 'Partially Paid', value: String(totals.partialCount), icon: Clock, cls: 'text-amber-300' },
+                  { label: 'Total Paid', value: fmt(totals.totalPaid), icon: CheckCircle2, cls: 'text-emerald-400' },
+                  { label: 'Outstanding', value: fmt(totals.totalOutstanding), icon: Wallet, cls: 'text-amber-300' },
+                ].map(card => (
+                  <div key={card.label} className="bg-surface-32 border border-edge-18 rounded-xl p-3.5">
+                    <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
+                      <card.icon className="w-3.5 h-3.5" /> {card.label}
                     </div>
-                  </th>
+                    <div className={`text-lg font-extrabold mt-1 ${card.cls}`}>{card.value}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="text-xs text-slate-500 mb-4 -mt-2">
+                Monthly payroll amount (total due for {periodLabel}): <span className="text-slate-300 font-semibold">{fmt(totals.totalDue)}</span>
+              </div>
 
-                  <th className="py-3 px-2.5">Attendance</th>
-                  <th className="py-3 px-3">Payment (PKR)</th>
-                  <th className="py-3 px-3">Reason</th>
-                  <th className="py-3 px-3">Loan</th>
-                  <th className="py-3 px-3">Role</th>
-                  <th className="py-3 px-3 text-center">Status</th>
+              {/* Search + filters + bulk bar */}
+              <div className="flex flex-col xl:flex-row xl:items-center gap-3 mb-4">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
+                  <input
+                    type="text" value={search} onChange={e => setSearch(e.target.value)}
+                    placeholder="Search by name or ID…"
+                    className="w-full bg-[#141b27] border border-edge-14 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div className="flex gap-1.5">
+                  {(['All', 'Paid', 'Unpaid', 'Partial'] as StatusFilter[]).map(f => (
+                    <button key={f} type="button" onClick={() => setFilter(f)} className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer border ${filter === f ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-surface-32 text-slate-300 border-edge-18 hover:text-white'}`}>
+                      {f}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2 xl:ml-auto">
+                  <select value={bulkMethod} onChange={e => setBulkMethod(e.target.value as PaymentMethod)} className="bg-[#141b27] border border-edge-14 rounded-lg px-2.5 py-2 text-xs text-slate-200 cursor-pointer" aria-label="Bulk payment method">
+                    {BULK_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <button
+                    type="button" onClick={handleBulkPay}
+                    disabled={busy || selected.size === 0}
+                    className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-xs font-bold cursor-pointer"
+                  >
+                    {busy ? 'Paying…' : `Pay Selected (${selected.size})`}
+                  </button>
+                </div>
+              </div>
+
+              {/* Records table */}
+              <div className="overflow-x-auto border border-edge-18 rounded-xl bg-surface-32">
+                <table className="w-full text-left border-collapse min-w-[820px]">
+                  <thead className="bg-surface-7 border-b border-edge-18 text-[11px] font-semibold text-slate-400">
+                    <tr>
+                      <th className="py-3 px-4 w-10">
+                        <input
+                          type="checkbox" checked={allSelected}
+                          onChange={e => setSelected(e.target.checked ? new Set(selectableVisible.map(r => r.id)) : new Set())}
+                          className="accent-emerald-500 cursor-pointer" aria-label="Select all payable"
+                        />
+                      </th>
+                      <th className="py-3 px-4">Employee</th>
+                      <th className="py-3 px-4">Salary (snapshot)</th>
+                      <th className="py-3 px-4">Paid</th>
+                      <th className="py-3 px-4">Outstanding</th>
+                      <th className="py-3 px-4">Prev. Outstanding</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-surface-32 text-xs">
+                    {recordsLoading ? (
+                      <tr><td colSpan={8} className="py-10 text-center text-slate-500">Loading records…</td></tr>
+                    ) : visibleRecords.length === 0 ? (
+                      <tr><td colSpan={8} className="py-10 text-center text-slate-500">No employees match this filter.</td></tr>
+                    ) : visibleRecords.map(rec => {
+                      const member = staffList.find(s => s.id === rec.staffId);
+                      return (
+                        <tr key={rec.id} className="hover:bg-surface-19">
+                          <td className="py-3 px-4">
+                            <input
+                              type="checkbox" checked={selected.has(rec.id)} disabled={rec.outstanding <= 0}
+                              onChange={() => toggleSelect(rec.id)}
+                              className="accent-emerald-500 cursor-pointer disabled:opacity-30" aria-label={`Select ${rec.staffName}`}
+                            />
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2.5">
+                              <div className={`w-8 h-8 rounded-full ${member?.avatarColor || 'bg-slate-600'} flex items-center justify-center text-white text-[10px] font-bold shrink-0`}>
+                                {getInitials(rec.staffName)}
+                              </div>
+                              <div>
+                                <div className="font-bold text-white">{rec.staffName}</div>
+                                <div className="text-slate-500 font-mono text-[10px]">{rec.staffId}{rec.origin === 'migrated' ? ' · migrated' : ''}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-slate-200 font-semibold">{fmt(rec.baseSalary)}</td>
+                          <td className="py-3 px-4 text-emerald-400 font-semibold">{fmt(rec.paid)}</td>
+                          <td className="py-3 px-4 text-amber-300 font-semibold">{fmt(rec.outstanding)}</td>
+                          <td className="py-3 px-4 text-slate-400">{rec.previousOutstanding ? fmt(rec.previousOutstanding) : '—'}</td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${statusChip(rec.status)}`}>{rec.status}</span>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {rec.outstanding > 0 && (
+                                <button type="button" onClick={() => setPayTarget(rec)} className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold cursor-pointer">
+                                  Pay Salary
+                                </button>
+                              )}
+                              {rec.paymentCount === 0 && (
+                                <button type="button" onClick={() => handleDeleteRecord(rec)} disabled={busy} className="p-1.5 rounded-lg text-slate-500 hover:text-rose-300 hover:bg-rose-500/10 cursor-pointer" title="Delete record (no payments yet)">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      {apiState === 'ready' && tab === 'history' && (
+        <>
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <select value={histStaff} onChange={e => setHistStaff(e.target.value)} className="bg-[#141b27] border border-edge-14 rounded-lg px-3 py-2 text-xs text-slate-200 cursor-pointer" aria-label="Filter by employee">
+              <option value="">All employees</option>
+              {staffList.map(s => <option key={s.id} value={s.id}>{s.name} ({s.id})</option>)}
+            </select>
+            <select value={histPeriod} onChange={e => setHistPeriod(e.target.value)} className="bg-[#141b27] border border-edge-14 rounded-lg px-3 py-2 text-xs text-slate-200 cursor-pointer" aria-label="Filter by month">
+              <option value="">All months</option>
+              {periods.map(p => <option key={p.periodKey} value={p.periodKey}>{p.label}</option>)}
+            </select>
+          </div>
+          <div className="overflow-x-auto border border-edge-18 rounded-xl bg-surface-32">
+            <table className="w-full text-left border-collapse min-w-[760px]">
+              <thead className="bg-surface-7 border-b border-edge-18 text-[11px] font-semibold text-slate-400">
+                <tr>
+                  <th className="py-3 px-4">Date</th>
+                  <th className="py-3 px-4">Employee</th>
+                  <th className="py-3 px-4">Month</th>
+                  <th className="py-3 px-4">Amount</th>
+                  <th className="py-3 px-4">Adjustments</th>
+                  <th className="py-3 px-4">Method</th>
+                  <th className="py-3 px-4">Reference</th>
+                  <th className="py-3 px-4 text-right">Slip</th>
                 </tr>
               </thead>
-
-              <tbody className="divide-y divide-[#151d2c] text-xs">
-                {filteredStaff.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="py-10 text-center text-slate-500 text-xs">
-                      No staff records found matching the current criteria.
+              <tbody className="divide-y divide-surface-32 text-xs">
+                {historyLoading ? (
+                  <tr><td colSpan={8} className="py-10 text-center text-slate-500">Loading payments…</td></tr>
+                ) : history.length === 0 ? (
+                  <tr><td colSpan={8} className="py-10 text-center text-slate-500">No salary payments recorded yet.</td></tr>
+                ) : history.map(p => (
+                  <tr key={p.id} className="hover:bg-surface-19">
+                    <td className="py-3 px-4 text-slate-300 font-mono text-[11px]">{p.paidDate}</td>
+                    <td className="py-3 px-4">
+                      <div className="font-bold text-white">{p.staffName || p.staffId}</div>
+                      <div className="text-slate-500 font-mono text-[10px]">{p.staffId}</div>
+                    </td>
+                    <td className="py-3 px-4 text-slate-300">{p.periodLabel || p.periodKey}</td>
+                    <td className="py-3 px-4 text-emerald-400 font-bold">{fmt(p.amount)}</td>
+                    <td className="py-3 px-4 text-slate-400">
+                      {p.allowances + p.bonus - p.deductions !== 0
+                        ? `+${fmt(p.allowances + p.bonus)} / −${fmt(p.deductions)}`
+                        : '—'}
+                    </td>
+                    <td className="py-3 px-4 text-slate-300">{p.method}</td>
+                    <td className="py-3 px-4 text-slate-500 font-mono text-[10px]">{p.id}{p.source === 'migration' ? ' · migrated' : ''}</td>
+                    <td className="py-3 px-4 text-right">
+                      <button type="button" onClick={() => handleSlip(p)} className="text-xs text-blue-400 hover:text-blue-300 underline font-medium cursor-pointer inline-flex items-center gap-1">
+                        <Download className="w-3 h-3" /> Slip
+                      </button>
                     </td>
                   </tr>
-                ) : (
-                  filteredStaff.map((staff) => {
-                    const accrual = accrualMap[staff.id] || getStaffSalaryAccrualInfo(staff);
-                    const rowState = rowStates[staff.id] || {
-                      staffId: staff.id,
-                      selectedMonths: accrual.owedMonths,
-                      payment: accrual.totalOwedAmount,
-                      reason: '',
-                      loanDeduction: 0,
-                      paidBy: staff.payStatus === 'Paid' ? 'Admin' : '-',
-                      paidDate: staff.lastPaidDate || '-',
-                      status: !accrual.hasCompletedOneFullMonth
-                        ? 'Not Eligible'
-                        : accrual.owedMonths.length === 0
-                        ? 'Paid'
-                        : 'Unpaid'
-                    };
-
-                    const isEligibleAndOwed = accrual.hasCompletedOneFullMonth && accrual.owedMonths.length > 0;
-                    const isChecked = selectedStaffIds.has(staff.id) && rowState.selectedMonths.length > 0;
-                    const isAllMonthsSelected =
-                      accrual.owedMonths.length > 0 &&
-                      rowState.selectedMonths.length === accrual.owedMonths.length;
-                    const hasLoanBalance = (staff.loanBalance || 0) > 0;
-                    const attendance = ATTENDANCE_MAP[staff.id];
-
-                    return (
-                      <tr 
-                        key={staff.id} 
-                        className={`transition-colors hover:bg-surface-11 ${
-                          isChecked ? 'bg-surface-10/60' : ''
-                        }`}
-                      >
-                        {/* Checkbox */}
-                        <td className="py-3 px-3.5 text-center">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            disabled={!isEligibleAndOwed}
-                            onChange={() => handleToggleStaffSelection(staff.id)}
-                            title={
-                              !accrual.hasCompletedOneFullMonth
-                                ? `Salary accrues starting ${accrual.commencementMonth} after 1 full month of service`
-                                : accrual.owedMonths.length === 0
-                                ? 'All accrued months are already paid'
-                                : 'Select staff member for salary payout'
-                            }
-                            className="w-4 h-4 rounded border-[#2c3b52] bg-surface-17 text-emerald-600 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-emerald-600 disabled:opacity-30 disabled:cursor-not-allowed"
-                          />
-                        </td>
-
-                        {/* Staff Name & Joining Info */}
-                        <td className="py-3 px-3">
-                          <div className="font-bold text-slate-100">
-                            {staff.name}
-                          </div>
-                          <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1.5">
-                            <span className="font-mono text-sky-400">{staff.id}</span>
-                            <span>•</span>
-                            <span>Joined: {staff.joiningDate}</span>
-                          </div>
-                          <div className="text-[10px] text-slate-500 mt-0.5">
-                            Base: {(staff.salary || 0).toLocaleString()} PKR/mo
-                          </div>
-                        </td>
-
-                        {/* Owed Month(s) Attribute Cell (Select Each or All Months) */}
-                        <td className="py-3 px-3">
-                          {!accrual.hasCompletedOneFullMonth ? (
-                            <div className="space-y-1">
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-950/60 text-blue-300 border border-blue-800/50">
-                                <Clock className="w-3 h-3" />
-                                <span>Starts {accrual.commencementMonth}</span>
-                              </span>
-                              <div className="text-[10px] text-slate-400">
-                                {accrual.daysOfService}/30 days service (&lt; 1 full month)
-                              </div>
-                            </div>
-                          ) : accrual.owedMonths.length === 0 ? (
-                            <div className="space-y-1">
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#0d261b] text-[#4ade80] border border-[#164e3b]">
-                                <CheckCircle2 className="w-3 h-3" />
-                                <span>All Accrued Paid ({accrual.paidMonths.length} Mo)</span>
-                              </span>
-                              {accrual.paidMonths.length > 0 && (
-                                <div className="text-[10px] text-slate-400">
-                                  Paid: {accrual.paidMonths.map(formatShortMonthYear).join(', ')}
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="space-y-1.5">
-                              {/* Top control bar: "All (N)" toggle + "Pay Salary / Select Popup" button */}
-                              <div className="flex items-center flex-wrap gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => handleSelectAllOwedMonthsForStaff(staff.id, !isAllMonthsSelected)}
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer flex items-center gap-1 ${
-                                    isAllMonthsSelected
-                                      ? 'bg-emerald-600 text-white border-emerald-500 shadow-xs'
-                                      : 'bg-[#141d2e] text-slate-300 border-[#263650] hover:border-emerald-500/50'
-                                  }`}
-                                  title="Select or deselect all owed months for this staff member"
-                                >
-                                  <Check className="w-2.5 h-2.5" />
-                                  <span>All ({accrual.owedMonths.length})</span>
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => setActiveMonthModalStaffId(staff.id)}
-                                  className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 transition-colors cursor-pointer flex items-center gap-1"
-                                  title="Open popup to select one or multiple owed months and disburse salary"
-                                >
-                                  <Layers className="w-2.5 h-2.5" />
-                                  <span>Pay Salary Popup</span>
-                                </button>
-                              </div>
-
-                              {/* Individual Owed Month Pills (Click each month to toggle) */}
-                              <div className="flex items-center flex-wrap gap-1">
-                                {accrual.owedMonths.map(m => {
-                                  const isMonthSelected = rowState.selectedMonths.includes(m);
-                                  return (
-                                    <button
-                                      key={m}
-                                      type="button"
-                                      onClick={() => handleToggleOwedMonth(staff.id, m)}
-                                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold border transition-all cursor-pointer ${
-                                        isMonthSelected
-                                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
-                                          : 'bg-[#111826] text-slate-500 border-[#1e2a3e] hover:text-slate-300'
-                                      }`}
-                                      title={`Toggle ${m} (${(staff.salary || 0).toLocaleString()} PKR)`}
-                                    >
-                                      {isMonthSelected ? '✓ ' : ''}{formatShortMonthYear(m)}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Attendance */}
-                        <td className="py-3 px-2.5">
-                          {attendance ? (
-                            <div className="inline-flex items-center gap-1">
-                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#0c261b] text-[#34d399] border border-[#144f38]">
-                                {attendance.presents}P
-                              </span>
-                              {attendance.leaves > 0 && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#291e0e] text-[#fbbf24] border border-[#523c1c]">
-                                  {attendance.leaves}L
-                                </span>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-slate-500 font-medium">-</span>
-                          )}
-                        </td>
-
-                        {/* Payment Input */}
-                        <td className="py-3 px-3">
-                          <input
-                            type="number"
-                            disabled={!isEligibleAndOwed}
-                            value={rowState.payment}
-                            onChange={(e) => handlePaymentChange(staff.id, parseInt(e.target.value, 10))}
-                            className="w-28 bg-surface-11 border border-edge-19 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-slate-400 disabled:opacity-40"
-                          />
-                          {isEligibleAndOwed && (
-                            <div className="text-[10px] text-slate-400 mt-0.5 font-mono">
-                              {rowState.selectedMonths.length} of {accrual.owedMonths.length} mo selected
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Reason (Optional) Input */}
-                        <td className="py-3 px-3">
-                          <input
-                            type="text"
-                            disabled={!isEligibleAndOwed}
-                            value={rowState.reason}
-                            onChange={(e) => handleReasonChange(staff.id, e.target.value)}
-                            placeholder="Reason (Optional)"
-                            className="w-28 sm:w-32 bg-surface-11 border border-edge-19 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-slate-400 disabled:opacity-40"
-                          />
-                        </td>
-
-                        {/* Loan */}
-                        <td className="py-3 px-3">
-                          {hasLoanBalance ? (
-                            <div>
-                              <input
-                                type="number"
-                                disabled={!isEligibleAndOwed}
-                                value={rowState.loanDeduction || ''}
-                                onChange={(e) => handleLoanDeductionChange(staff.id, parseInt(e.target.value, 10))}
-                                placeholder="0"
-                                className="w-24 bg-surface-11 border border-edge-19 rounded-lg px-2.5 py-1 text-xs text-slate-100 font-mono focus:outline-none focus:border-slate-400 disabled:opacity-40"
-                              />
-                              <div className="text-[10px] text-slate-400 mt-1 font-medium whitespace-nowrap">
-                                Balance: {staff.loanBalance?.toLocaleString()} PKR
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-slate-300 font-mono text-xs">
-                              0 PKR
-                            </span>
-                          )}
-                        </td>
-
-                        {/* Role */}
-                        <td className="py-3 px-3">
-                          <span className="text-slate-300 text-xs font-medium">
-                            {staff.role === 'OtherStaff' || staff.role === 'otherStaff' ? '-' : staff.role}
-                          </span>
-                        </td>
-
-                        {/* Status Badge */}
-                        <td className="py-3 px-3 text-center">
-                          {!accrual.hasCompletedOneFullMonth ? (
-                            <span className="inline-block px-2.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap bg-blue-950/60 text-blue-300 border border-blue-800/50">
-                              Not Accrued
-                            </span>
-                          ) : accrual.owedMonths.length === 0 ? (
-                            <span className="inline-block px-2.5 py-0.5 rounded text-[11px] font-semibold whitespace-nowrap bg-[#0d261b] text-[#4ade80] border border-[#164e3b]">
-                              Paid
-                            </span>
-                          ) : (
-                            <span className="inline-block px-2.5 py-0.5 rounded text-[11px] font-semibold whitespace-nowrap bg-[#291e0e] text-[#fbbf24] border border-[#523c1c]">
-                              Owed ({accrual.owedMonths.length} Mo)
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
+                ))}
               </tbody>
             </table>
           </div>
-        </div>
+          <p className="text-[11px] text-slate-500 mt-3">
+            Slips are generated from the month's payroll record and its actual payments — allowances, bonus,
+            deductions and amounts paid are the real recorded figures.
+          </p>
+        </>
+      )}
 
-        {/* RIGHT COLUMN: PAYMENT SUMMARY CARD */}
-        <div className="lg:col-span-4 xl:col-span-3">
-          <div className="bg-[#0b1019] border border-[#1b2536] rounded-2xl p-5 shadow-2xl space-y-4 sticky top-5">
-            <h3 className="text-base font-bold text-white tracking-tight">
-              Payment Summary
-            </h3>
-
-            {/* Selected Staff Count */}
-            <div className="flex items-center justify-between text-xs pt-1">
-              <span className="text-slate-400">Selected Staff</span>
-              <span className="font-semibold text-white font-mono text-sm">
-                {summary.selectedCount}
-              </span>
-            </div>
-
-            {/* Selected Owed Months Count */}
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-400">Selected Owed Months</span>
-              <span className="font-semibold text-emerald-400 font-mono text-sm">
-                {summary.totalSelectedMonthsCount} Month(s)
-              </span>
-            </div>
-
-            {/* Total Salary */}
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-400">Total Accrued Selected</span>
-              <span className="font-semibold text-white font-mono text-sm">
-                {summary.totalSalarySum.toLocaleString()} PKR
-              </span>
-            </div>
-
-            {/* Loan Deductions */}
-            {summary.totalLoanDeductions > 0 && (
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400">Loan Deductions</span>
-                <span className="font-semibold text-rose-400 font-mono text-sm">
-                  -{summary.totalLoanDeductions.toLocaleString()} PKR
-                </span>
-              </div>
-            )}
-
-            <div className="border-t border-[#1a2537]" />
-
-            {/* Net Payable */}
-            <div className="flex items-center justify-between text-sm font-bold">
-              <span className="text-white">Net Payable</span>
-              <span className="text-emerald-400 font-mono text-base">
-                {summary.netPayable.toLocaleString()} PKR
-              </span>
-            </div>
-
-            {/* Payment Date Input */}
-            <div className="pt-2">
-              <div className="relative">
-                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                  Payment Date
-                </label>
-                <div className="relative">
-                  <input
-                    type="date"
-                    value={paymentDate}
-                    onChange={(e) => setPaymentDate(e.target.value)}
-                    className="w-full bg-surface-11 border border-edge-17 text-slate-100 text-xs rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-slate-400 cursor-pointer"
-                  />
-                  <Calendar className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                </div>
-              </div>
-            </div>
-
-            {/* Payment Method Select Dropdown */}
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                Payment Method
-              </label>
-              <div className="relative">
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="w-full bg-surface-11 border border-edge-17 text-slate-100 text-xs rounded-xl px-3.5 py-2.5 pr-8 appearance-none focus:outline-none focus:border-slate-400 cursor-pointer"
-                >
-                  <option value="Cash" className="bg-surface-11">Cash</option>
-                  <option value="Bank Transfer" className="bg-surface-11">Bank Transfer</option>
-                  <option value="Cheque" className="bg-surface-11">Cheque</option>
-                  <option value="EasyPaisa" className="bg-surface-11">EasyPaisa</option>
-                  <option value="JazzCash" className="bg-surface-11">JazzCash</option>
-                </select>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
-            </div>
-
-            {/* Note (Optional) */}
-            <div>
-              <input
-                type="text"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="Note (Optional)"
-                className="w-full bg-surface-11 border border-edge-17 text-slate-100 placeholder-slate-500 text-xs rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-slate-400"
-              />
-            </div>
-
-            <div className="text-center text-[11px] text-[#fbbf24] font-medium pt-1">
-              Disbursing {summary.totalSelectedMonthsCount} selected month(s) for {summary.selectedCount} staff member(s)
-            </div>
-
-            {/* Proceed to Pay Button */}
-            <button
-              type="button"
-              disabled={isProcessing || summary.selectedCount === 0}
-              onClick={() => executeSalaryDisbursal(selectedStaffIds)}
-              className={`w-full py-3 rounded-xl font-bold text-xs tracking-wide transition-all shadow-md cursor-pointer ${
-                summary.selectedCount > 0 && !isProcessing
-                  ? 'bg-white hover:bg-slate-100 text-slate-950 active:scale-[0.99]'
-                  : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-              }`}
-              id="btn-execute-pay-staff"
-            >
-              {isProcessing
-                ? 'Processing Payroll...'
-                : `Proceed to Pay (${summary.netPayable.toLocaleString()} PKR)`}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ================= SINGLE STAFF MULTI-MONTH SALARY DISBURSAL POPUP ================= */}
-      {activeModalStaff && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
-          {(() => {
-            const modalAccrual = accrualMap[activeModalStaff.id] || getStaffSalaryAccrualInfo(activeModalStaff);
-            const modalRow = rowStates[activeModalStaff.id];
-            const selectedMonths = modalRow?.selectedMonths || [];
-            const isAllSelected =
-              modalAccrual.owedMonths.length > 0 &&
-              selectedMonths.length === modalAccrual.owedMonths.length;
-            const netSinglePayable = Math.max(0, (modalRow?.payment || 0) - (modalRow?.loanDeduction || 0));
-
-            return (
-              <div className="bg-[#111827] border border-edge-34 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl text-slate-100">
-                {/* Modal Header */}
-                <div className="px-5 py-4 border-b border-[#1f2d42] flex items-center justify-between bg-[#151f32]">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                      <Banknote className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-white">
-                        Salary Disbursal — {activeModalStaff.name}
-                      </h3>
-                      <p className="text-[11px] text-slate-400">
-                        {activeModalStaff.id} • Joined {activeModalStaff.joiningDate} • Base: {(activeModalStaff.salary || 0).toLocaleString()} PKR/mo
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setActiveMonthModalStaffId(null)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* Modal Body */}
-                <div className="p-5 space-y-4 text-xs">
-                  {/* Accrual Summary Info */}
-                  <div className="p-3.5 rounded-xl bg-[#0d1320] border border-[#1d2a40] space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-400">Salary Cycle Commencement:</span>
-                      <span className="font-bold text-emerald-400">{modalAccrual.commencementMonth}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-400">Service Completed:</span>
-                      <span className="font-semibold text-slate-200">
-                        {modalAccrual.daysOfService} days ({modalAccrual.hasCompletedOneFullMonth ? '≥ 1 Full Month Eligible' : '< 1 Month Service'})
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-400">Outstanding Owed Months:</span>
-                      <span className="font-bold text-amber-400">{modalAccrual.owedMonths.length} Month(s)</span>
-                    </div>
-                  </div>
-
-                  {/* Select One or Multiple Owed Months */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="font-bold text-slate-200">
-                        Select Outstanding Month(s) to Pay:
-                      </label>
-                      {modalAccrual.owedMonths.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => handleSelectAllOwedMonthsForStaff(activeModalStaff.id, !isAllSelected)}
-                          className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 cursor-pointer underline"
-                        >
-                          {isAllSelected ? 'Deselect All' : `Select All (${modalAccrual.owedMonths.length} Months)`}
-                        </button>
-                      )}
-                    </div>
-
-                    {modalAccrual.owedMonths.length === 0 ? (
-                      <div className="p-4 rounded-xl bg-[#0d1422] border border-[#1c293d] text-center text-slate-400">
-                        {modalAccrual.hasCompletedOneFullMonth
-                          ? 'All accrued salary months have already been paid for this employee.'
-                          : `Employee has not yet completed 1 full month of service. Salary accrual commences in ${modalAccrual.commencementMonth}.`}
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-                        {modalAccrual.owedMonths.map(m => {
-                          const checked = selectedMonths.includes(m);
-                          return (
-                            <button
-                              key={m}
-                              type="button"
-                              onClick={() => handleToggleOwedMonth(activeModalStaff.id, m)}
-                              className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
-                                checked
-                                  ? 'bg-emerald-500/15 border-emerald-500 text-white shadow-xs'
-                                  : 'bg-[#141d2e] border-[#22314a] text-slate-300 hover:border-slate-500'
-                              }`}
-                            >
-                              <div>
-                                <div className="font-bold text-xs">{m}</div>
-                                <div className="text-[10px] font-mono text-slate-400">
-                                  {(activeModalStaff.salary || 0).toLocaleString()} PKR
-                                </div>
-                              </div>
-                              <div className={`w-4 h-4 rounded flex items-center justify-center border ${
-                                checked ? 'bg-emerald-500 border-emerald-400 text-slate-950' : 'border-slate-600'
-                              }`}>
-                                {checked && <Check className="w-3 h-3 stroke-[3]" />}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Payout Calculation */}
-                  <div className="p-3.5 rounded-xl bg-[#141d2e] border border-[#23334d] flex items-center justify-between">
-                    <div>
-                      <span className="text-slate-400 block text-[11px]">
-                        Selected ({selectedMonths.length} Month{selectedMonths.length === 1 ? '' : 's'})
-                      </span>
-                      <span className="font-bold text-white text-xs">Total Salary to Disburse</span>
-                    </div>
-                    <span className="text-lg font-extrabold text-emerald-400 font-mono">
-                      Rs. {netSinglePayable.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Modal Footer */}
-                <div className="px-5 py-3.5 border-t border-[#1f2d42] bg-surface-23 flex items-center justify-end gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => setActiveMonthModalStaffId(null)}
-                    className="px-4 py-2 rounded-xl bg-[#1b263b] hover:bg-[#23314b] text-slate-300 text-xs font-semibold cursor-pointer"
-                  >
-                    Done Selecting
-                  </button>
-                  <button
-                    type="button"
-                    disabled={selectedMonths.length === 0 || isProcessing}
-                    onClick={() => executeSalaryDisbursal(new Set([activeModalStaff.id]))}
-                    className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold cursor-pointer shadow-md shadow-emerald-600/20"
-                  >
-                    Proceed to Pay ({netSinglePayable.toLocaleString()} PKR)
-                  </button>
-                </div>
-              </div>
-            );
-          })()}
-        </div>
+      {/* Pay Salary modal (record-driven) */}
+      {payTarget && payTargetStaff && (
+        <PayStaffModal
+          isOpen={true}
+          onClose={() => setPayTarget(null)}
+          staff={payTargetStaff}
+          allStaff={staffList}
+          onSelectStaff={(s) => {
+            const rec = records.find(r => r.staffId === s.id);
+            if (rec) setPayTarget(rec);
+          }}
+          record={payTarget}
+          paidBy={paidBy}
+          onPaid={async (result) => {
+            await handlePaymentApplied(result);
+            const updated = result.records.find(r => r.id === payTarget.id);
+            if (updated) setPayTarget(updated);
+          }}
+        />
       )}
     </div>
   );

@@ -23,6 +23,7 @@ import {
   getStudentAvatar,
   isLegacyDefaultAvatar
 } from '../utils/studentAvatarHelper';
+import { localISODate } from '../utils/dates';
 
 interface AddStudentPageProps {
   onBack: () => void;
@@ -92,7 +93,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
     bloodGroup: '',
     phone: '',
     emergencyContact: '',
-    admissionDate: new Date().toISOString().slice(0, 10),
+    admissionDate: localISODate(),
     isNewAdmission: true,
     photo: '',
     rollNo: '',
@@ -239,7 +240,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
         bloodGroup: '',
         phone: '',
         emergencyContact: '',
-        admissionDate: new Date().toISOString().slice(0, 10),
+        admissionDate: localISODate(),
         isNewAdmission: true,
         photo: '',
         rollNo: '',
@@ -465,7 +466,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
       bloodGroup: formData.bloodGroup || '',
       phone: emergencyNumber,
       emergencyContact: emergencyNumber,
-      admissionDate: formData.admissionDate || new Date().toISOString().slice(0, 10),
+      admissionDate: formData.admissionDate || localISODate(),
       isNewAdmission: formData.isNewAdmission !== undefined ? formData.isNewAdmission : (editingStudent ? editingStudent.isNewAdmission : true),
       photo: finalPhoto,
       rollNo: (formData.rollNo || '').trim(),

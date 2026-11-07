@@ -81,7 +81,15 @@ import { backfillStudentClassIds, withClassIdFromName } from './utils/classExpor
 import { ATTENDANCE_STORAGE_KEY, loadAttendance } from './utils/attendanceHelper';
 import { ensureAllLedgers } from './utils/studentFeeLedgerHelper';
 import { migrateFeesV2 } from './utils/migrations/migrateFeesV2';
-import { disburseSalary, owedMonthsOf, migrateStaffPayStatusV1 } from './utils/payrollService';
+import { migrateStaffPayStatusV1 } from './utils/payrollService';
+import { localISODate, monthKeyOf } from './utils/dates';
+import {
+  PayrollPaymentResult,
+  applyPayrollSync,
+  createBulkPayrollPayments,
+  listPayrollPeriods,
+  listPayrollRecords,
+} from './utils/payrollApi';
 import { DEMO, loadJSON, saveJSON, hydrationPromise, isHydrated } from './utils/storage';
 import { StorageFaultScreen } from './components/StorageFaultScreen';
 import { downloadBackup } from './utils/backup';
@@ -996,46 +1004,46 @@ export default function App() {
 
   const currentUserLabel = schoolSettings.principalName || schoolSettings.schoolName || 'Accounts Office';
 
-  const handleConfirmSinglePayment = (staffId: string, b: SalaryBreakdown) => {
-    setStaff(prev => disburseSalary(prev, new Map([[staffId, [b.month]]]), {
-      method: b.paymentMethod,
-      date: b.paidDate,
-      paidBy: currentUserLabel,
-      adjustments: new Map([[staffId, {
-        bonus: (b.allowances || 0) + (b.bonus || 0),
-        deduction: b.deductions,
-        note: b.notes
-      }]])
-    }));
-    showToast(`Salary paid (${b.month})`);
+  // Payroll (PAYROLL_PLAN §3.5): salary payments are recorded by the server
+  // in ONE transaction with the financial ledger; the client mirrors the
+  // returned staff + ledger collections. The legacy localStorage disbursement
+  // (disburseSalary) is no longer used by any entry point.
+  const handlePayrollApplied = (result: PayrollPaymentResult) => {
+    applyPayrollSync(result);
+    setStaff(result.staff);
   };
 
-  const handleBulkPayAllPending = () => {
-    const plan = new Map<string, string[]>();
-    staff.forEach(s => {
-      const owed = owedMonthsOf(s);
-      if (owed.length) plan.set(s.id, owed);
-    });
-    if (plan.size === 0) {
-      showToast('No pending salaries');
-      return;
+  const payOutstandingViaApi = async (onlyStaffIds?: Set<string>) => {
+    try {
+      const key = monthKeyOf();
+      const periods = await listPayrollPeriods();
+      if (!periods.some(p => p.periodKey === key)) {
+        showToast("Prepare this month's payroll in Pay Staff first");
+        return;
+      }
+      const { records } = await listPayrollRecords(key);
+      const payable = records.filter(r => r.outstanding > 0 && (!onlyStaffIds || onlyStaffIds.has(r.staffId)));
+      if (payable.length === 0) {
+        showToast(onlyStaffIds ? 'Selected staff have no outstanding salary this month' : 'No pending salaries this month');
+        return;
+      }
+      const result = await createBulkPayrollPayments({
+        items: payable.map(r => ({ recordId: r.id })),
+        method: 'Bank Transfer',
+        paidDate: localISODate(),
+        createdBy: currentUserLabel,
+      });
+      handlePayrollApplied(result);
+      showToast(`Paid ${new Set(result.payments.map(p => p.staffId)).size} staff member(s)`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Payroll server unavailable');
     }
-    setStaff(prev => disburseSalary(prev, plan, { method: 'Bank Transfer', paidBy: currentUserLabel }));
-    showToast(`Paid ${plan.size} staff member(s)`);
   };
+
+  const handleBulkPayAllPending = () => { void payOutstandingViaApi(); };
 
   const handleBulkPaySelectedStaff = (selected: StaffMember[]) => {
-    const plan = new Map<string, string[]>();
-    selected.forEach(s => {
-      const owed = owedMonthsOf(s);
-      if (owed.length) plan.set(s.id, owed);
-    });
-    if (plan.size === 0) {
-      showToast('Selected staff have no owed months');
-      return;
-    }
-    setStaff(prev => disburseSalary(prev, plan, { method: 'Bank Transfer', paidBy: currentUserLabel }));
-    showToast(`Paid ${plan.size} staff member(s)`);
+    void payOutstandingViaApi(new Set(selected.map(s => s.id)));
   };
 
   const handleBulkDownloadStaffCards = (selected: StaffMember[]) => {
@@ -1893,6 +1901,18 @@ export default function App() {
         classes={classes}
         existingStudents={students}
         onNavigateToClasses={() => setCurrentModule('classes')}
+        onApplyPrerequisites={(createdClasses, updatedClasses) => {
+          // CSV import "Add anyway": persist the auto-created classes (and
+          // existing classes that gained sections) through the same classes
+          // state every other module writes through, before students land.
+          setClasses(prev => {
+            const merged = prev.map(c => updatedClasses.find(u => u.id === c.id) ?? c);
+            const fresh = createdClasses.filter(
+              nc => !merged.some(c => c.name.trim().toLowerCase() === nc.name.trim().toLowerCase())
+            );
+            return [...merged, ...fresh];
+          });
+        }}
       />
 
       {/* Staff Modals */}
@@ -1910,8 +1930,8 @@ export default function App() {
         staff={selectedStaffForPay}
         allStaff={staff}
         onSelectStaff={(s) => setSelectedStaffForPay(s)}
-        onConfirmPayment={handleConfirmSinglePayment}
-        onBulkPayAllPending={handleBulkPayAllPending}
+        paidBy={currentUserLabel}
+        onPaid={(result) => { handlePayrollApplied(result); showToast('Salary recorded'); }}
       />
 
       <StaffBulkUploadModal

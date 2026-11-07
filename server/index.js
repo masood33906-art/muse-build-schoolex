@@ -6,6 +6,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { openDb, driverName } from './db.js';
+import { registerPayrollRoutes } from './payroll.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(__dirname, '..');
@@ -191,6 +192,10 @@ export function createApp({ dbPath, distDir = path.join(APP_ROOT, 'dist') } = {}
       res.status(500).json({ error: String(e.message || e) });
     }
   });
+
+  // Pay Staff payroll API (PAYROLL_PLAN §3.3). Handlers resolve the db via
+  // the closure so /api/restore swapping the handle keeps payroll working.
+  registerPayrollRoutes(app, () => db);
 
   app.use('/api', (_req, res) => res.status(404).json({ error: 'unknown API route' }));
 

@@ -37,6 +37,7 @@ import {
   exportAttendanceToCSV 
 } from '../utils/attendanceHelper';
 import { loadJSON, saveJSON } from '../utils/storage';
+import { localISODate } from '../utils/dates';
 import { AttendanceSheetModal } from './AttendanceSheetModal';
 
 export const HOLIDAYS_STORAGE_KEY = 'schooliee_attendance_holidays_v1';
@@ -73,8 +74,8 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
   // Tab state: 'students' | 'staff'
   const [activeTab, setActiveTab] = useState<'students' | 'staff'>('students');
 
-  // Selected date (Defaults to 2026-09-13 to match reference image)
-  const [selectedDate, setSelectedDate] = useState<string>('2026-09-13');
+  // Selected date — the day attendance is being marked; defaults to TODAY.
+  const [selectedDate, setSelectedDate] = useState<string>(() => localISODate());
 
   // Attendance Records State (persisted per date)
   const [internalAttendance, setInternalAttendance] = useState<Record<string, AttendanceRecord[]>>(() => loadAttendance());

@@ -41,10 +41,19 @@ import {
 import { getAvatarColor, getInitials } from '../data/initialStudents';
 import { MemberAttendanceSection } from './MemberAttendanceSection';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
-import { getStaffSalaryAccrualInfo } from '../utils/salaryAccrualHelper';
 import { addLedgerTransaction } from '../utils/ledgerStore';
-import { disburseSalary } from '../utils/payrollService';
 import { getSchoolSettings } from '../utils/settingsHelper';
+import {
+  PayrollRecord,
+  PayrollPayment,
+  applyPayrollSync,
+  buildSlipBreakdown,
+  createBulkPayrollPayments,
+  getStaffPayroll,
+} from '../utils/payrollApi';
+import { monthLabelFromKey, localISODate } from '../utils/dates';
+import { DEFAULT_SCHOOL } from '../utils/pdfGenerator';
+import { generateMonthlyIndividualSlipsCombinedPdf } from '../utils/staffPdfGenerator';
 import { putFile, getFile, deleteFile } from '../utils/blobStore';
 import { nextSequential } from '../utils/ids';
 import jsPDF from 'jspdf';
@@ -154,50 +163,82 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
   const transactions: StaffTransaction[] = staff.transactions || [];
   const loanBalance = staff.loanBalance || 0;
 
-  // Salary Accrual Calculation
-  const accrualInfo = getStaffSalaryAccrualInfo(staff);
+  // Payroll (PAYROLL_PLAN §3.5): salary history and disbursal now come from
+  // the server payroll tables — records carry their own snapshot salary and
+  // derived status; payments are written in one transaction with the ledger.
+  const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>([]);
+  const [payrollPayments, setPayrollPayments] = useState<PayrollPayment[]>([]);
+  const [payrollUnavailable, setPayrollUnavailable] = useState(false);
   const [isSalaryDisbursalPopupOpen, setIsSalaryDisbursalPopupOpen] = useState(false);
-  const [selectedPopupMonths, setSelectedPopupMonths] = useState<string[]>([]);
+  const [selectedPopupPeriods, setSelectedPopupPeriods] = useState<string[]>([]);
   const [popupPaymentMethod, setPopupPaymentMethod] = useState<'Bank Transfer' | 'Cash' | 'Cheque'>(
     staff.paymentMethod || 'Bank Transfer'
   );
   const [popupNotes, setPopupNotes] = useState('');
+  const [popupBusy, setPopupBusy] = useState(false);
+  const [popupError, setPopupError] = useState('');
+
+  const loadPayroll = async () => {
+    try {
+      const data = await getStaffPayroll(staff.id);
+      setPayrollRecords(data.records);
+      setPayrollPayments(data.payments);
+      setPayrollUnavailable(false);
+    } catch {
+      setPayrollUnavailable(true);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'salary') void loadPayroll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, staff.id]);
+
+  const outstandingRecords = payrollRecords.filter(r => r.outstanding > 0);
 
   const handleOpenSalaryDisbursalPopup = () => {
-    setSelectedPopupMonths([...accrualInfo.owedMonths]);
+    setPopupError('');
+    setSelectedPopupPeriods(outstandingRecords.map(r => r.periodKey));
     setIsSalaryDisbursalPopupOpen(true);
   };
 
-  const handleTogglePopupMonth = (monthLabel: string) => {
-    setSelectedPopupMonths(prev =>
-      prev.includes(monthLabel)
-        ? prev.filter(m => m !== monthLabel)
-        : accrualInfo.owedMonths.filter(m => prev.includes(m) || m === monthLabel)
+  const handleTogglePopupMonth = (periodKey: string) => {
+    setSelectedPopupPeriods(prev =>
+      prev.includes(periodKey) ? prev.filter(k => k !== periodKey) : [...prev, periodKey]
     );
   };
 
-  const handleProceedToPayPopup = () => {
-    if (selectedPopupMonths.length === 0) return;
-
-    const schoolSettings = getSchoolSettings();
-    const paidByLabel = schoolSettings.principalName || schoolSettings.schoolName || 'Accounts Office';
-
-    const nextStaff = disburseSalary(
-      [staff],
-      new Map([[staff.id, selectedPopupMonths]]),
-      {
+  const handleProceedToPayPopup = async () => {
+    const chosen = payrollRecords.filter(r => selectedPopupPeriods.includes(r.periodKey) && r.outstanding > 0);
+    if (chosen.length === 0) return;
+    setPopupBusy(true);
+    setPopupError('');
+    try {
+      const schoolSettings = getSchoolSettings();
+      const paidByLabel = schoolSettings.principalName || schoolSettings.schoolName || 'Accounts Office';
+      const result = await createBulkPayrollPayments({
+        items: chosen.map(r => ({ recordId: r.id, remarks: popupNotes.trim() || undefined })),
         method: popupPaymentMethod,
-        paidBy: paidByLabel,
-        adjustments: new Map([[staff.id, { note: popupNotes.trim() || undefined }]])
-      }
-    );
-
-    if (nextStaff[0]) {
-      onUpdateStaff(nextStaff[0]);
+        paidDate: localISODate(),
+        createdBy: paidByLabel,
+      });
+      applyPayrollSync(result);
+      const updated = result.staff.find(s => s.id === staff.id);
+      if (updated) onUpdateStaff(updated);
+      await loadPayroll();
+      setPopupNotes('');
+      setIsSalaryDisbursalPopupOpen(false);
+    } catch (e) {
+      setPopupError(e instanceof Error ? e.message : 'Payment failed — nothing was recorded');
+    } finally {
+      setPopupBusy(false);
     }
+  };
 
-    setPopupNotes('');
-    setIsSalaryDisbursalPopupOpen(false);
+  const handlePrintSlip = (record: PayrollRecord) => {
+    const label = monthLabelFromKey(record.periodKey);
+    const bd = buildSlipBreakdown(record, label, payrollPayments);
+    generateMonthlyIndividualSlipsCombinedPdf([staff], label, staff.id, DEFAULT_SCHOOL, new Map([[staff.id, bd]]));
   };
 
   // Add Document Handler
@@ -877,13 +918,24 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                 <h4 className="text-sm font-bold text-white">Monthly Payroll Disbursements</h4>
                 <p className="text-xs text-slate-400 mt-0.5">Historical salary records, allowances, and slips</p>
               </div>
-              <button
-                type="button"
-                onClick={() => onOpenPayModal(staff)}
-                className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
-              >
-                <span>Pay Salary</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {outstandingRecords.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleOpenSalaryDisbursalPopup}
+                    className="px-3.5 py-1.5 rounded-lg bg-[#192436] hover:bg-[#202e46] border border-edge-39 text-slate-200 text-xs font-bold cursor-pointer"
+                  >
+                    Pay Outstanding ({outstandingRecords.length})
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onOpenPayModal(staff)}
+                  className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  <span>Pay Salary</span>
+                </button>
+              </div>
             </div>
 
             <div className="overflow-x-auto border border-edge-4 rounded-xl">
@@ -900,49 +952,51 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-32 text-xs">
-                  <tr className="hover:bg-surface-19">
-                    <td className="py-3 px-4 font-bold text-white">September 2026</td>
-                    <td className="py-3 px-4 text-slate-300">{staff.salary?.toLocaleString()} PKR</td>
-                    <td className="py-3 px-4 font-extrabold text-emerald-400">{staff.salary?.toLocaleString()} PKR</td>
-                    <td className="py-3 px-4">
-                      <span className="px-2 py-0.5 rounded bg-[#0e2c20] text-[#4ade80] text-[10px] font-semibold border border-[#164e3b]">
-                        Paid
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-slate-400">{staff.paymentMethod || 'Bank Transfer'}</td>
-                    <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">{staff.lastPaidDate || '2026-09-01'}</td>
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => onOpenPayModal(staff)}
-                        className="text-xs text-blue-400 hover:text-blue-300 underline font-medium cursor-pointer"
-                      >
-                        Print Slip
-                      </button>
-                    </td>
-                  </tr>
-
-                  <tr className="hover:bg-surface-19">
-                    <td className="py-3 px-4 font-bold text-white">August 2026</td>
-                    <td className="py-3 px-4 text-slate-300">{staff.salary?.toLocaleString()} PKR</td>
-                    <td className="py-3 px-4 font-extrabold text-emerald-400">{staff.salary?.toLocaleString()} PKR</td>
-                    <td className="py-3 px-4">
-                      <span className="px-2 py-0.5 rounded bg-[#0e2c20] text-[#4ade80] text-[10px] font-semibold border border-[#164e3b]">
-                        Paid
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-slate-400">Bank Transfer</td>
-                    <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">2026-08-01</td>
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => onOpenPayModal(staff)}
-                        className="text-xs text-blue-400 hover:text-blue-300 underline font-medium cursor-pointer"
-                      >
-                        Print Slip
-                      </button>
-                    </td>
-                  </tr>
+                  {payrollUnavailable ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-amber-300">
+                        Payroll requires the SchoolEx app server — salary history is stored in the app database and is not available in the browser-only demo.
+                      </td>
+                    </tr>
+                  ) : payrollRecords.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-slate-500">
+                        No payroll records yet. Prepare a month's payroll in Pay Staff to start this employee's salary history (older history can be imported there via “Import Legacy History”).
+                      </td>
+                    </tr>
+                  ) : [...payrollRecords].reverse().map(record => {
+                    const monthPayments = payrollPayments.filter(p => p.recordId === record.id);
+                    const latest = monthPayments[0];
+                    return (
+                      <tr key={record.id} className="hover:bg-surface-19">
+                        <td className="py-3 px-4 font-bold text-white">{monthLabelFromKey(record.periodKey)}</td>
+                        <td className="py-3 px-4 text-slate-300">{record.baseSalary.toLocaleString()} PKR</td>
+                        <td className="py-3 px-4 font-extrabold text-emerald-400">{record.paid.toLocaleString()} PKR</td>
+                        <td className="py-3 px-4">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                            record.status === 'Paid'
+                              ? 'bg-[#0e2c20] text-[#4ade80] border-[#164e3b]'
+                              : record.status === 'Partial'
+                                ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                                : 'bg-rose-500/10 text-rose-300 border-rose-500/30'
+                          }`}>
+                            {record.status}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-slate-400">{latest ? latest.method : '—'}</td>
+                        <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">{latest ? latest.paidDate : '—'}</td>
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handlePrintSlip(record)}
+                            className="text-xs text-blue-400 hover:text-blue-300 underline font-medium cursor-pointer"
+                          >
+                            Print Slip
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1376,6 +1430,78 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Pay outstanding payroll months (API-backed, one transaction with the ledger) */}
+      {isSalaryDisbursalPopupOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-surface-17 border border-[#223048] rounded-2xl w-full max-w-md p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-edge-7 mb-4">
+              <h3 className="text-base font-bold text-white">Pay Outstanding Salary — {staff.name}</h3>
+              <button type="button" onClick={() => setIsSalaryDisbursalPopupOpen(false)} className="text-slate-400 hover:text-white p-1">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-3 text-xs">
+              <p className="text-slate-400">
+                Pays the full outstanding amount of each selected month. The payment and the ledger
+                expense are recorded together by the server — both or neither.
+              </p>
+              <div className="space-y-1.5 max-h-56 overflow-y-auto">
+                {outstandingRecords.map(r => (
+                  <label key={r.id} className="flex items-center justify-between gap-2 bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 cursor-pointer">
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedPopupPeriods.includes(r.periodKey)}
+                        onChange={() => handleTogglePopupMonth(r.periodKey)}
+                        className="accent-emerald-500"
+                      />
+                      <span className="font-semibold text-slate-100">{monthLabelFromKey(r.periodKey)}</span>
+                    </span>
+                    <span className="text-amber-300 font-bold">{r.outstanding.toLocaleString()} PKR outstanding</span>
+                  </label>
+                ))}
+                {outstandingRecords.length === 0 && (
+                  <p className="text-slate-500">Nothing outstanding — all prepared months are fully paid.</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Payment Method</label>
+                <select
+                  value={popupPaymentMethod}
+                  onChange={e => setPopupPaymentMethod(e.target.value as 'Bank Transfer' | 'Cash' | 'Cheque')}
+                  className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Cash">Cash</option>
+                  <option value="Cheque">Cheque</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Notes (optional)</label>
+                <input
+                  type="text" value={popupNotes} onChange={e => setPopupNotes(e.target.value)}
+                  placeholder="e.g. Salary disbursement"
+                  className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              {popupError && <p className="text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2">{popupError}</p>}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-edge-7">
+                <button type="button" onClick={() => setIsSalaryDisbursalPopupOpen(false)} className="px-3.5 py-2 rounded-lg bg-surface-41 text-slate-300 font-semibold hover:bg-surface-48">
+                  Cancel
+                </button>
+                <button
+                  type="button" onClick={handleProceedToPayPopup}
+                  disabled={popupBusy || selectedPopupPeriods.length === 0}
+                  className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-bold cursor-pointer"
+                >
+                  {popupBusy ? 'Paying…' : 'Pay Selected Months'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

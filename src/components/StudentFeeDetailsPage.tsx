@@ -43,13 +43,13 @@ import { getBankSettings } from '../utils/settingsHelper';
 import { localISODate } from '../utils/dates';
 import { recordPayment, addCharge, creditOwner, getCreditForStudents } from '../utils/paymentStore';
 import { FeeChallanModal } from './FeeChallanModal';
+import { challanHeadLabel, groupChallanRows } from './FeeChallanSheet';
 import { FeeCardModal } from './FeeCardModal';
 import { FeeInvoicePage } from './FeeInvoicePage';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
-import { 
-  FeeInvoiceData, 
-  FeeInvoiceItem, 
-  FeeInvoiceStudentGroup 
+import {
+  FeeInvoiceData,
+  buildFeeInvoiceData
 } from '../utils/feeInvoicePdfGenerator';
 
 export interface FeePaymentSuccessResult {
@@ -699,93 +699,18 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
       setPaymentNote('');
     }
 
-    // Build invoice record for redirection and printable slips
-    const paidStudentsList: FeeInvoiceStudentGroup[] = [];
-    let calculatedSubtotal = 0;
-    let calculatedPaid = 0;
-
-    familyStudents.forEach(st => {
-      const studentItems = newItemsByStudent[st.id] || [];
-      const paidItems: FeeInvoiceItem[] = [];
-      let stSubtotal = 0;
-      let stPaid = 0;
-
-      studentItems.forEach(item => {
-        const alloc = payment.allocations.find(a => a.itemId === item.id);
-        const paying = alloc ? alloc.amount : 0;
-        if (paying > 0) {
-          let purposeName = item.reason || item.type;
-          if (item.type === 'Fund') {
-            purposeName = item.reason.startsWith('Fund') ? item.reason : `Fund - (${item.reason})`;
-          } else if (item.type === 'Admission') {
-            purposeName = 'Admission Fee';
-          } else if (item.type === 'Security') {
-            purposeName = 'Security Fee';
-          } else if (item.type === 'Monthly Fee') {
-            purposeName = 'Monthly Fee';
-          } else if (item.type === 'Fine') {
-            purposeName = 'Fine';
-          }
-
-          const itemClass = (item.type === 'Admission' || item.type === 'Security') 
-            ? '-' 
-            : (st.class || 'Class 4');
-
-          paidItems.push({
-            id: item.id,
-            studentId: st.id,
-            studentName: st.name,
-            studentRollNo: st.rollNo || st.id,
-            purpose: purposeName,
-            month: item.month,
-            className: itemClass,
-            discount: 0,
-            discountDisplay: '-',
-            fee: item.total,
-            feeDisplay: `${item.total.toLocaleString()} PKR`,
-            paidAmount: paying
-          });
-
-          stSubtotal += item.total;
-          stPaid += paying;
-        }
-      });
-
-      if (paidItems.length > 0) {
-        paidStudentsList.push({
-          studentId: st.id,
-          studentName: st.name,
-          studentRollNo: st.rollNo || st.id,
-          className: st.class || 'Class 4',
-          items: paidItems,
-          studentSubtotal: stSubtotal,
-          studentPaid: stPaid
-        });
-        calculatedSubtotal += stSubtotal;
-        calculatedPaid += stPaid;
-      }
-    });
-
-    const now = new Date();
-    const pad = (n: number) => n.toString().padStart(2, '0');
-    const invoiceNumber = payment.receiptNo;
-
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const formattedDateOnly = `${pad(now.getDate())} ${monthNames[now.getMonth()]} ${now.getFullYear()}`;
-    
-    let hours = now.getHours();
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12;
-    hours = hours ? hours : 12;
-    const timeString = `${pad(hours)}:${pad(now.getMinutes())} ${ampm}`;
-    const formattedDateTime = `${formattedDateOnly} ${timeString}`;
-
-    const invoiceData: FeeInvoiceData = {
-      invoiceNumber,
-      paymentDate: formattedDateTime,
-      formattedDateOnly,
-      paymentMethod,
-      status: 'Paid',
+    // Build the invoice for redirection and printable slips from the
+    // LIVE ledger (fee invoice fix). The old code snapshotted only this
+    // payment's allocations: its "subtotal" covered just the items this
+    // one payment touched, its "paid" figure was just this payment's
+    // amount (never the paid-to-date), no balance existed, the real
+    // ledger discounts were dropped, and the slip was stamped PAID even
+    // for a partial payment — so after a partial payment the figures
+    // went stale and contradicted the next invoice. buildFeeInvoiceData
+    // scopes the invoice to this payment's items but reads every figure
+    // from the current ledger, keeping subtotal / total paid / balance
+    // mutually consistent.
+    const invoiceData = buildFeeInvoiceData(payment, familyStudents, {
       // Fix P0-4: the invoice carries the school's REAL identity from
       // settings — previously a hardcoded demo school name/address/phone/
       // email was printed on every invoice regardless of configuration.
@@ -796,16 +721,13 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
         email: getBankSettings().schoolEmail
       },
       invoiceTo: {
-        guardianName: family?.familyName || primaryStudent?.family || 'Shahid Abbasi',
-        familyId: family?.familyId || primaryStudent?.familyId || 'F-0094',
-        phone: family?.phone || primaryStudent?.phone || '+923987423088',
-        address: primaryStudent?.address || '305 Manor Drive, Karachi'
+        guardianName: family?.familyName || primaryStudent?.family || '',
+        familyId: family?.familyId || primaryStudent?.familyId || '',
+        phone: family?.phone || primaryStudent?.phone || '',
+        address: primaryStudent?.address || ''
       },
-      students: paidStudentsList,
-      subtotal: calculatedSubtotal > 0 ? calculatedSubtotal : finalFee,
-      paidAmount: calculatedPaid > 0 ? calculatedPaid : finalFee,
       note: paymentNote.trim() || undefined
-    };
+    });
 
     if (onPaymentSuccess) {
       onPaymentSuccess({
@@ -875,11 +797,33 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
 
   const displayedNotes = notes.filter(n => notesTab === 'active' ? !n.isArchived : n.isArchived);
 
+  // Challan breakdown from the SELECTED ledger items, priced with the
+  // exact per-item payable amounts that make up finalFee and grouped
+  // by fee head (fee challan convergence fix): the base Tuition Fee
+  // entry plus only the optional heads (Exam Fund, Fine, …) the
+  // student actually has among the selected charges. Passed to
+  // FeeChallanModal explicitly so the printed challan itemizes the
+  // real charges instead of an invented split of the total.
+  const challanBreakdownRows = (() => {
+    const pairs: { label: string; amount: number }[] = [];
+    (Object.values(itemsByStudent) as StudentFeeItem[][]).forEach(studentItems => {
+      studentItems.forEach(item => {
+        if (!selectedItemIds.has(item.id)) return;
+        const maxPayable = Math.max(0, item.total - item.paidAmount);
+        const val = payAmounts[item.id] !== undefined ? payAmounts[item.id] : maxPayable;
+        const payable = Math.min(Math.max(0, val), maxPayable);
+        if (payable > 0) pairs.push({ label: challanHeadLabel(item), amount: payable });
+      });
+    });
+    return groupChallanRows(pairs);
+  })();
+
   // If local invoice is active, render the dedicated FeeInvoicePage
   if (internalInvoice) {
     return (
       <FeeInvoicePage
         invoiceData={internalInvoice}
+        students={familyStudents}
         onBackToFamily={() => setInternalInvoice(null)}
         onBackToFees={onBack}
         onShowToast={onShowToast}
@@ -2011,6 +1955,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
         totalFee={finalFee > 0 ? finalFee : undefined}
         totalPaid={0}
         remainingDue={finalFee}
+        breakdown={challanBreakdownRows.length > 0 ? challanBreakdownRows : undefined}
       />
 
       {/* Fee Card Modal */}

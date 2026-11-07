@@ -1,18 +1,25 @@
-import React, { useState } from 'react';
-import { 
-  Printer, 
-  ArrowLeft, 
-  CloudDownload, 
+import React, { useState, useMemo } from 'react';
+import {
+  Printer,
+  ArrowLeft,
+  CloudDownload,
   Receipt,
   CheckCircle2,
   FileCheck,
   Scissors
 } from 'lucide-react';
-import { FeeInvoiceData, generateFeeInvoicePdf } from '../utils/feeInvoicePdfGenerator';
+import { Student } from '../types';
+import { FeeInvoiceData, generateFeeInvoicePdf, rebuildFeeInvoiceData } from '../utils/feeInvoicePdfGenerator';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
 
 interface FeeInvoicePageProps {
   invoiceData: FeeInvoiceData;
+  // When the caller passes the student records, the page rebuilds the
+  // invoice from the LIVE ledger before showing/downloading it, so a
+  // receipt re-opened after further payments shows the current
+  // charges / paid-to-date / balance instead of the frozen snapshot
+  // it was first issued with.
+  students?: Student[];
   onBackToFamily: () => void;
   onBackToFees: () => void;
   onBreadcrumbOverview?: () => void;
@@ -20,12 +27,19 @@ interface FeeInvoicePageProps {
 }
 
 export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
-  invoiceData,
+  invoiceData: snapshotData,
+  students,
   onBackToFamily,
   onBackToFees,
   onBreadcrumbOverview,
   onShowToast
 }) => {
+  const invoiceData = useMemo(
+    () => (students && students.length > 0
+      ? rebuildFeeInvoiceData(snapshotData, students) ?? snapshotData
+      : snapshotData),
+    [snapshotData, students]
+  );
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [selectedPreviewCopy, setSelectedPreviewCopy] = useState<'all' | 'family' | 'school'>('all');
 
@@ -144,9 +158,15 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
 
             {/* Right side: Paid Badge, Invoice Number, Timestamp */}
             <div className="sm:text-right flex flex-col sm:items-end">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#0e2e21] text-[#22c55e] border border-[#164e35]">
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
+                invoiceData.status === 'Paid'
+                  ? 'bg-[#0e2e21] text-[#22c55e] border-[#164e35]'
+                  : invoiceData.status === 'Partially Paid'
+                    ? 'bg-[#2e240e] text-[#fbbf24] border-[#4d3d10]'
+                    : 'bg-[#2e0e0e] text-[#f87171] border-[#4d1010]'
+              }`}>
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Paid</span>
+                <span>{invoiceData.status}</span>
               </span>
               <div className="text-sm font-bold font-mono text-white tracking-wider mt-2">
                 {invoiceData.invoiceNumber}
@@ -245,7 +265,9 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
             </div>
           ))}
 
-          {/* Subtotal & Paid Amount Summary */}
+          {/* Subtotal / Total Paid / Balance Due Summary — all three are
+              derived from the same live ledger items, so they always
+              agree: Subtotal − Total Paid = Balance Due. */}
           <div className="pt-4 border-t border-edge-3 flex flex-col items-end gap-1.5">
             <div className="flex items-center gap-8 text-xs text-slate-400">
               <span className="font-semibold">Subtotal</span>
@@ -254,9 +276,17 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
               </span>
             </div>
             <div className="flex items-center gap-8 text-sm">
-              <span className="font-bold text-white">Paid Amount</span>
+              <span className="font-bold text-white">Total Paid</span>
               <span className="font-bold text-[#22c55e] min-w-[100px] text-right text-base">
                 {invoiceData.paidAmount.toLocaleString()} PKR
+              </span>
+            </div>
+            <div className="flex items-center gap-8 text-sm">
+              <span className="font-bold text-white">Balance Due</span>
+              <span className={`font-bold min-w-[100px] text-right text-base ${
+                invoiceData.balanceDue > 0 ? 'text-[#f87171]' : 'text-slate-200'
+              }`}>
+                {invoiceData.balanceDue.toLocaleString()} PKR
               </span>
             </div>
           </div>
@@ -415,20 +445,26 @@ const PrintSlipContent: React.FC<{ invoiceData: FeeInvoiceData; copyLabel: strin
       </table>
 
       {/* Footer */}
-      <div className="pt-2 flex items-center justify-between border-t border-slate-200">
+      <div className="pt-2 flex items-start justify-between border-t border-slate-200">
         <div>
           <div className="font-bold text-xs tracking-wider text-slate-900">
-            {copyLabel} (PAID)
+            {copyLabel} ({invoiceData.status === 'Paid' ? 'PAID' : invoiceData.status === 'Partially Paid' ? 'PARTIALLY PAID' : 'UNPAID'})
           </div>
           <div className="text-[9px] text-slate-400">
             A product of devxcel.com | Get School Software at schooliee.com
           </div>
         </div>
 
-        <div className="text-right">
-          <span className="font-bold text-xs text-slate-900">
-            Total Paid: &nbsp; &nbsp; {invoiceData.paidAmount.toLocaleString()} PKR
-          </span>
+        <div className="text-right text-[11px] text-slate-700 space-y-0.5">
+          <div>
+            Subtotal: &nbsp; {invoiceData.subtotal.toLocaleString()} PKR
+          </div>
+          <div className="font-bold text-xs text-slate-900">
+            Total Paid: &nbsp; {invoiceData.paidAmount.toLocaleString()} PKR
+          </div>
+          <div className={`font-bold text-xs ${invoiceData.balanceDue > 0 ? 'text-red-700' : 'text-slate-900'}`}>
+            Balance Due: &nbsp; {invoiceData.balanceDue.toLocaleString()} PKR
+          </div>
         </div>
       </div>
     </div>

@@ -182,6 +182,7 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
     validityDate?: string;
     feeRange?: string;
     multipleChallans?: GeneratedChallan[];
+    studentIds?: string[];
   }>({
     isOpen: false,
     title: '',
@@ -633,7 +634,8 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
       dueDate: existing?.dueDate,
       validityDate: existing?.validityDate,
       feeRange: existing?.feeRange,
-      multipleChallans: undefined
+      multipleChallans: undefined,
+      studentIds: (fam.students || []).map(s => s.id)
     });
   };
 
@@ -657,7 +659,8 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
       dueDate: existing?.dueDate,
       validityDate: existing?.validityDate,
       feeRange: existing?.feeRange,
-      multipleChallans: undefined
+      multipleChallans: undefined,
+      studentIds: [studentFee.studentId]
     });
   };
 
@@ -666,6 +669,7 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
     return (
       <FeeInvoicePage
         invoiceData={activeInvoiceData}
+        students={students}
         onBackToFamily={() => setActiveInvoiceData(null)}
         onBackToFees={() => {
           setActiveInvoiceData(null);
@@ -1755,6 +1759,7 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
         validityDate={challanModalState.validityDate}
         feeRange={challanModalState.feeRange}
         multipleChallans={challanModalState.multipleChallans}
+        studentIds={challanModalState.studentIds}
       />
 
       {/* Generate Challan Configuration Wizard (Image 1 reference) */}

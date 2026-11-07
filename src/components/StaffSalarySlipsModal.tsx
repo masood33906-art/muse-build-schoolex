@@ -1,13 +1,21 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  X, 
-  Download, 
-  ChevronDown 
+import React, { useState, useMemo, useEffect } from 'react';
+import {
+  X,
+  Download,
+  ChevronDown
 } from 'lucide-react';
 import { StaffMember } from '../types';
-import { generateMonthlyIndividualSlipsCombinedPdf, getSalarySlipTheme } from '../utils/staffPdfGenerator';
+import { generateMonthlyIndividualSlipsCombinedPdf, getSalarySlipTheme, SalarySlipBreakdown } from '../utils/staffPdfGenerator';
 import { DEFAULT_SCHOOL } from '../utils/pdfGenerator';
 import { getSchoolSettings } from '../utils/settingsHelper';
+import {
+  listPayrollPeriods,
+  listPayrollRecords,
+  listPayrollPayments,
+  buildSlipBreakdown,
+  PayrollPeriodSummary,
+} from '../utils/payrollApi';
+import { monthKeyOf, monthLabelFromKey } from '../utils/dates';
 
 export type SalarySlipModalViewMode = 'overall' | 'individual';
 
@@ -19,28 +27,66 @@ interface StaffSalarySlipsModalProps {
   selectedStaffMember?: StaffMember | null;
 }
 
-const MONTHS_LIST = [
-  'September 2026',
-  'August 2026',
-  'July 2026',
-  'June 2026',
-  'May 2026',
-  'April 2026',
-  'March 2026',
-  'February 2026',
-  'January 2026',
-  'October 2026',
-  'November 2026',
-  'December 2026'
-];
-
 export const StaffSalarySlipsModal: React.FC<StaffSalarySlipsModalProps> = ({
   isOpen,
   onClose,
   staffList,
   selectedStaffMember = null
 }) => {
-  const [selectedMonth, setSelectedMonth] = useState<string>('September 2026');
+  // The month dropdown is populated from REAL payroll periods (Pay Staff
+  // rebuild). Months without a prepared period fall back to the honest
+  // legacy figures (base salary, zero adjustments) in preview and print.
+  const [periods, setPeriods] = useState<PayrollPeriodSummary[]>([]);
+  const [periodsLoaded, setPeriodsLoaded] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState<string>(monthLabelFromKey(monthKeyOf()));
+  const [breakdowns, setBreakdowns] = useState<Map<string, SalarySlipBreakdown>>(new Map());
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    listPayrollPeriods()
+      .then(ps => {
+        if (cancelled) return;
+        setPeriods(ps);
+        setPeriodsLoaded(true);
+        if (ps.length > 0) {
+          setSelectedMonth(prev =>
+            ps.some(p => p.label === prev) ? prev : ps[ps.length - 1].label
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) { setPeriods([]); setPeriodsLoaded(true); }
+      });
+    return () => { cancelled = true; };
+  }, [isOpen]);
+
+  const selectedPeriod = useMemo(
+    () => periods.find(p => p.label === selectedMonth) || null,
+    [periods, selectedMonth]
+  );
+
+  useEffect(() => {
+    if (!isOpen || !selectedPeriod) {
+      setBreakdowns(new Map());
+      return;
+    }
+    let cancelled = false;
+    Promise.all([
+      listPayrollRecords(selectedPeriod.periodKey),
+      listPayrollPayments({ periodKey: selectedPeriod.periodKey }),
+    ])
+      .then(([{ records }, payments]) => {
+        if (cancelled) return;
+        const map = new Map<string, SalarySlipBreakdown>();
+        for (const rec of records) {
+          map.set(rec.staffId, buildSlipBreakdown(rec, selectedPeriod.label, payments));
+        }
+        setBreakdowns(map);
+      })
+      .catch(() => { if (!cancelled) setBreakdowns(new Map()); });
+    return () => { cancelled = true; };
+  }, [isOpen, selectedPeriod]);
   // Design comes from the shared salary-slip theme (Fix P1-2) — the same
   // mapping the PDF generators use — so this preview cannot drift from the
   // printed payslip's template interpretation.
@@ -63,11 +109,17 @@ export const StaffSalarySlipsModal: React.FC<StaffSalarySlipsModalProps> = ({
 
   if (!isOpen) return null;
 
-  // "Print and Save pdf" button handler
+  // "Print and Save pdf" button handler — real payroll figures for
+  // payroll-covered months via the breakdown map.
   const handlePrintAndSavePdf = () => {
     const targetId = selectedStaffMember ? selectedStaffMember.id : undefined;
-    generateMonthlyIndividualSlipsCombinedPdf(staffList, selectedMonth, targetId, DEFAULT_SCHOOL);
+    generateMonthlyIndividualSlipsCombinedPdf(staffList, selectedMonth, targetId, DEFAULT_SCHOOL, breakdowns);
   };
+
+  const monthOptions = useMemo(() => {
+    const labels = periods.map(p => p.label).reverse();
+    return labels.length > 0 ? labels : [monthLabelFromKey(monthKeyOf())];
+  }, [periods]);
 
   return (
     <div 
@@ -88,7 +140,7 @@ export const StaffSalarySlipsModal: React.FC<StaffSalarySlipsModalProps> = ({
               className="bg-surface-34 border border-edge-31 text-slate-100 text-xs font-semibold rounded-lg px-3.5 py-2 pr-8 appearance-none cursor-pointer hover:border-slate-500 focus:outline-none focus:border-emerald-500 shadow-sm transition-colors"
               id="salary-slip-month-dropdown"
             >
-              {MONTHS_LIST.map(m => (
+              {monthOptions.map(m => (
                 <option key={m} value={m} className="bg-surface-12 text-white">
                   {m}
                 </option>
@@ -125,15 +177,28 @@ export const StaffSalarySlipsModal: React.FC<StaffSalarySlipsModalProps> = ({
 
         {/* ================= MODAL BODY: PDF PREVIEWS OF THE DOC ================= */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-[#090d15] space-y-8">
+          {periodsLoaded && !selectedPeriod && (
+            <div className="max-w-4xl mx-auto text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-2.5">
+              No payroll has been prepared for {selectedMonth} yet — this preview shows base salary with no
+              adjustments. Prepare the month in Pay Staff to see real payment figures.
+            </div>
+          )}
           {previewStaffList.map(staff => {
-            const base = staff.salary || 0;
-            const allowances = Math.round(base * 0.10);
-            const bonus = 0;
-            const deductions = Math.round(base * 0.05);
+            // Real payroll figures for payroll-covered months; honest
+            // legacy fallback (base salary, zero adjustments) otherwise.
+            const bd = breakdowns.get(staff.id);
+            const base = bd ? bd.baseSalary : (staff.salary || 0);
+            const allowances = bd ? bd.allowances : 0;
+            const bonus = bd ? bd.bonus : 0;
+            const deductions = bd ? bd.deductions : 0;
             const gross = base + allowances + bonus;
             const net = gross - deductions;
             const monthShort = selectedMonth.substring(0, 3).toUpperCase();
-            const yearPart = selectedMonth.split(' ')[1] || '2026';
+            const yearPart = selectedMonth.split(' ')[1] || String(new Date().getFullYear());
+            const isPaidSlip = bd ? bd.isPaid : staff.payStatus === 'Paid';
+            const slipMethod = bd?.paymentMethod || staff.paymentMethod || 'Bank Transfer';
+            const slipDate = bd?.lastPaidDate || staff.lastPaidDate || '—';
+            const slipRef = bd?.referenceNo || `SLP-${staff.id}-${monthShort}-${yearPart}`;
 
             return (
               <div 
@@ -148,7 +213,7 @@ export const StaffSalarySlipsModal: React.FC<StaffSalarySlipsModalProps> = ({
                     <div className="text-left">
                       <span className="text-[11px] uppercase tracking-wider font-bold text-slate-500">Official Payslip</span>
                       <div className="text-xs font-mono font-semibold text-slate-700">
-                        REF: SLP-{staff.id}-{monthShort}-{yearPart}
+                        REF: {slipRef}
                       </div>
                     </div>
                     <div className="text-right">
@@ -159,7 +224,7 @@ export const StaffSalarySlipsModal: React.FC<StaffSalarySlipsModalProps> = ({
                             ? 'bg-neutral-100 text-black border-black'
                             : 'bg-emerald-100 text-emerald-800 border-emerald-300'
                       }`}>
-                        {staff.payStatus === 'Paid' ? '✓ DISBURSED / PAID' : '⚠ PENDING PAYMENT'}
+                        {isPaidSlip ? '✓ DISBURSED / PAID' : bd && bd.totalPaid > 0 ? '◐ PARTIALLY PAID' : '⚠ PENDING PAYMENT'}
                       </span>
                     </div>
                   </div>
@@ -208,11 +273,11 @@ export const StaffSalarySlipsModal: React.FC<StaffSalarySlipsModalProps> = ({
                   </div>
                   <div>
                     <span className="text-slate-500 block font-medium">Payment Mode</span>
-                    <span className="text-slate-800">{staff.paymentMethod || 'Bank Transfer'}</span>
+                    <span className="text-slate-800">{slipMethod}</span>
                   </div>
                   <div>
                     <span className="text-slate-500 block font-medium">Disbursement Date</span>
-                    <span className="text-slate-800">{staff.lastPaidDate || `01 ${selectedMonth}`}</span>
+                    <span className="text-slate-800">{slipDate}</span>
                   </div>
                 </div>
 
@@ -235,7 +300,7 @@ export const StaffSalarySlipsModal: React.FC<StaffSalarySlipsModalProps> = ({
                         <td className="py-2 px-4 text-right font-mono font-medium text-slate-900">
                           Rs. {base.toLocaleString()}
                         </td>
-                        <td className="py-2 px-4 text-slate-700 border-l border-slate-200">Income Tax Withholding</td>
+                        <td className="py-2 px-4 text-slate-700 border-l border-slate-200">Deductions</td>
                         <td className={`py-2 px-4 text-right font-mono font-medium ${isMinimalProfessional ? 'text-black' : 'text-rose-700'}`}>
                           Rs. {deductions.toLocaleString()}
                         </td>
@@ -293,10 +358,10 @@ export const StaffSalarySlipsModal: React.FC<StaffSalarySlipsModalProps> = ({
                 {/* Bank & Payment Notes */}
                 <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-200 mb-8">
                   <p>
-                    <strong>Disbursement Information:</strong> Disbursed via {staff.paymentMethod || 'Bank Transfer'}. Account: {staff.bankAccount || 'Verified on Payroll File'}.
+                    <strong>Disbursement Information:</strong> Disbursed via {slipMethod}. Account: {staff.bankAccount || 'Verified on Payroll File'}.
                   </p>
                   <p className="mt-0.5 text-slate-500">
-                    Remarks: Regular monthly salary disbursement for the billing cycle of {selectedMonth}.
+                    Remarks: Salary for {selectedMonth}.{bd ? ` Paid: Rs. ${bd.totalPaid.toLocaleString()} · Outstanding: Rs. ${bd.outstanding.toLocaleString()}.` : ''}
                   </p>
                 </div>
 

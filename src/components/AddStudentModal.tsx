@@ -3,6 +3,7 @@ import { X, UserPlus, Save, AlertCircle, AlertTriangle, Link as LinkIcon, PlusCi
 import { Student, ClassInfo } from '../types';
 import { withClassIdFromName } from '../utils/classExportHelper';
 import { BOY_AVATAR_URL, GIRL_AVATAR_URL, getStudentAvatar, isLegacyDefaultAvatar } from '../utils/studentAvatarHelper';
+import { localISODate } from '../utils/dates';
 
 interface AddStudentModalProps {
   isOpen: boolean;
@@ -66,7 +67,7 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
     bloodGroup: '',
     phone: '',
     emergencyContact: '',
-    admissionDate: new Date().toISOString().slice(0, 10),
+    admissionDate: localISODate(),
     isNewAdmission: true,
     photo: '',
     rollNo: '',
@@ -203,7 +204,7 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
         bloodGroup: '',
         phone: '',
         emergencyContact: '',
-        admissionDate: new Date().toISOString().slice(0, 10),
+        admissionDate: localISODate(),
         isNewAdmission: true,
         photo: '',
         rollNo: '',
@@ -345,7 +346,7 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
       bloodGroup: formData.bloodGroup || '',
       phone: emergencyNumber,
       emergencyContact: emergencyNumber,
-      admissionDate: formData.admissionDate || new Date().toISOString().slice(0, 10),
+      admissionDate: formData.admissionDate || localISODate(),
       isNewAdmission: formData.isNewAdmission !== undefined ? formData.isNewAdmission : (editingStudent ? editingStudent.isNewAdmission : true),
       photo: finalPhoto,
       rollNo: (formData.rollNo || '').trim(),

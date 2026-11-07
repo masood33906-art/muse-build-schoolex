@@ -23,9 +23,11 @@ export const DateTimePickerPopover: React.FC<DateTimePickerPopoverProps> = ({
   onSelect,
   onClose
 }) => {
-  const [currentYear, setCurrentYear] = useState(2026);
-  const [currentMonth, setCurrentMonth] = useState(8); // September (0-indexed)
-  const [selectedDay, setSelectedDay] = useState(18);
+  // Fallback selection (when no initial value is supplied) is the CURRENT
+  // date — never a fixed calendar constant.
+  const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear());
+  const [currentMonth, setCurrentMonth] = useState(() => new Date().getMonth()); // 0-indexed
+  const [selectedDay, setSelectedDay] = useState(() => new Date().getDate());
   const [selectedHour, setSelectedHour] = useState('09');
   const [selectedMinute, setSelectedMinute] = useState('00');
   const [selectedPeriod, setSelectedPeriod] = useState<'AM' | 'PM'>('AM');
@@ -56,6 +58,12 @@ export const DateTimePickerPopover: React.FC<DateTimePickerPopoverProps> = ({
         setCurrentMonth(parseInt(dateMatch[2], 10) - 1);
         setSelectedDay(parseInt(dateMatch[3], 10));
       }
+    } else if (isOpen) {
+      // No value to open on: re-anchor the picker to today at open time.
+      const today = new Date();
+      setCurrentYear(today.getFullYear());
+      setCurrentMonth(today.getMonth());
+      setSelectedDay(today.getDate());
     }
   }, [initialValue, isOpen]);
 

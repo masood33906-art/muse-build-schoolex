@@ -76,7 +76,8 @@ import {
 import { RecordTransactionModal } from './RecordTransactionModal';
 import { AppModule } from './VerticalNavBar';
 import { getAvatarColor, getInitials } from '../data/initialStudents';
-import { getStaffSalaryAccrualInfo } from '../utils/salaryAccrualHelper';
+import { listPayrollPeriods, listPayrollRecords } from '../utils/payrollApi';
+import { monthKeyOf } from '../utils/dates';
 
 export type DashboardDateRange = 'this-month' | 'last-30' | 'this-week' | 'today' | 'academic-year';
 
@@ -138,6 +139,42 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
       window.removeEventListener('backupCompleted', refreshBackupAge);
       window.removeEventListener('storage', refreshBackupAge);
     };
+  }, []);
+
+  // Salary-due aggregate from the payroll tables (PAYROLL_PLAN §3.5): the sum
+  // of outstanding over all prepared periods up to the current month. Zeros
+  // until the first period is prepared, and when the app server is
+  // unreachable (browser-only demo) — never an accrual estimate.
+  const [payrollDue, setPayrollDue] = useState<{ total: number; unpaidIds: Set<string>; owedRecords: number }>({
+    total: 0, unpaidIds: new Set(), owedRecords: 0,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const key = monthKeyOf();
+        const periods = await listPayrollPeriods();
+        const due = periods.filter(p => p.periodKey <= key);
+        let total = 0;
+        let owedRecords = 0;
+        const unpaidIds = new Set<string>();
+        for (const p of due) {
+          const { records } = await listPayrollRecords(p.periodKey);
+          for (const r of records) {
+            if (r.outstanding > 0) {
+              total += r.outstanding;
+              owedRecords += 1;
+              unpaidIds.add(r.staffId);
+            }
+          }
+        }
+        if (!cancelled) setPayrollDue({ total, unpaidIds, owedRecords });
+      } catch {
+        /* server unreachable → keep zeros */
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   // Shared Ledger Graph states (Two-way synced with LedgerModule)
@@ -297,25 +334,14 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
     };
   }, [students]);
 
-  // Staff breakdown using real salary accrual rules
+  // Staff breakdown; salary-due figures come from the payroll aggregate
+  // fetched above (prepared periods only, derived from actual payments).
   const staffMetrics = useMemo(() => {
     const total = staff.length;
     const teachers = staff.filter(s => s.category === 'Teacher' || s.role.toLowerCase().includes('teacher')).length;
     const support = total - teachers;
     const onLeave = staff.filter(s => s.status === 'On Leave');
-
-    let totalSalaryDue = 0;
-    let totalOwedMonthsCount = 0;
-    const unpaidStaff: StaffMember[] = [];
-
-    staff.forEach(member => {
-      const accrual = getStaffSalaryAccrualInfo(member);
-      if (accrual.hasCompletedOneFullMonth && accrual.totalOwedAmount > 0) {
-        unpaidStaff.push(member);
-        totalSalaryDue += accrual.totalOwedAmount;
-        totalOwedMonthsCount += accrual.owedMonths.length;
-      }
-    });
+    const unpaidStaff = staff.filter(member => payrollDue.unpaidIds.has(member.id));
 
     return {
       total,
@@ -323,10 +349,10 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
       support,
       onLeave,
       unpaidStaff,
-      totalSalaryDue,
-      totalOwedMonthsCount
+      totalSalaryDue: payrollDue.total,
+      totalOwedMonthsCount: payrollDue.owedRecords
     };
-  }, [staff]);
+  }, [staff, payrollDue]);
 
   // Unified real-time Ledger Graph & Summary Calculations (matches LedgerModule)
   const ledgerGraphData = useMemo(() => {

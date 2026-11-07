@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Upload, FileText, Check, Plus, Trash2, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { LedgerTransaction, LedgerDocument } from '../utils/ledgerStore';
+import { localISODate } from '../utils/dates';
 
 interface RecordTransactionModalProps {
   isOpen: boolean;
@@ -58,10 +59,15 @@ export const RecordTransactionModal: React.FC<RecordTransactionModalProps> = ({
   const [amount, setAmount] = useState<string>('');
   const [category, setCategory] = useState<string>('');
   const [description, setDescription] = useState<string>('');
-  const [date, setDate] = useState<string>(() => {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
-  });
+  const [date, setDate] = useState<string>(() => localISODate());
+
+  // Re-anchor the transaction date to today each time the modal opens (the
+  // modal stays mounted, so the mount-time initializer alone would go stale).
+  useEffect(() => {
+    if (isOpen) {
+      setDate(localISODate());
+    }
+  }, [isOpen]);
   const [paymentType, setPaymentType] = useState<LedgerTransaction['paymentType']>('Cash');
   const [note, setNote] = useState<string>('');
   const [uploadedDoc, setUploadedDoc] = useState<LedgerDocument | null>(null);

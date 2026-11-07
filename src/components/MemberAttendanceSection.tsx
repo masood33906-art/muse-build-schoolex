@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Calendar, 
   ChevronLeft, 
@@ -15,7 +15,8 @@ import {
   Save
 } from 'lucide-react';
 import { AttendanceRecord, AttendanceStatus, HolidayRecord } from '../types';
-import { LAST_ATTENDANCE_DATE_KEY, loadAttendance } from '../utils/attendanceHelper';
+import { loadAttendance } from '../utils/attendanceHelper';
+import { localISODate } from '../utils/dates';
 
 interface MemberAttendanceSectionProps {
   memberId: string;
@@ -50,26 +51,18 @@ export const MemberAttendanceSection: React.FC<MemberAttendanceSectionProps> = (
   memberClass,
   memberSection
 }) => {
-  const initialDateStr = useMemo(() => {
-    try {
-      const savedDate = localStorage.getItem(LAST_ATTENDANCE_DATE_KEY);
-      if (savedDate && /^\d{4}-\d{2}-\d{2}$/.test(savedDate)) {
-        return savedDate;
-      }
-    } catch {
-      // ignore
-    }
-    return '2026-09-13';
-  }, []);
+  // The section opens on TODAY — the day attendance is being marked — not
+  // on a previously stored date and not on a fixed calendar constant.
+  const initialDateStr = localISODate();
 
-  // Navigation month & year (Defaults to saved date's month & year, or September 2026)
+  // Navigation month & year (Defaults to the current month & year)
   const [selectedYear, setSelectedYear] = useState<number>(() => {
     const y = parseInt(initialDateStr.split('-')[0], 10);
-    return !isNaN(y) ? y : 2026;
+    return !isNaN(y) ? y : new Date().getFullYear();
   });
   const [selectedMonth, setSelectedMonth] = useState<number>(() => {
     const m = parseInt(initialDateStr.split('-')[1], 10);
-    return !isNaN(m) ? m - 1 : 8; // 0-indexed
+    return !isNaN(m) ? m - 1 : new Date().getMonth(); // 0-indexed
   });
 
   // Selected date for functional inspection & editing
@@ -81,22 +74,6 @@ export const MemberAttendanceSection: React.FC<MemberAttendanceSectionProps> = (
   const effectiveAttendance = useMemo<Record<string, AttendanceRecord[]>>(() => {
     const stored = loadAttendance();
     return { ...stored, ...allAttendance };
-  }, [allAttendance]);
-
-  useEffect(() => {
-    try {
-      const savedDate = localStorage.getItem(LAST_ATTENDANCE_DATE_KEY);
-      if (savedDate && /^\d{4}-\d{2}-\d{2}$/.test(savedDate)) {
-        const parts = savedDate.split('-').map(Number);
-        if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-          setSelectedDate(savedDate);
-          setSelectedYear(parts[0]);
-          setSelectedMonth(parts[1] - 1);
-        }
-      }
-    } catch {
-      // ignore
-    }
   }, [allAttendance]);
 
   const triggerToast = (msg: string) => {
@@ -124,9 +101,10 @@ export const MemberAttendanceSection: React.FC<MemberAttendanceSectionProps> = (
   };
 
   const handleJumpToCurrent = () => {
-    setSelectedYear(2026);
-    setSelectedMonth(8);
-    setSelectedDate('2026-09-13');
+    const today = new Date();
+    setSelectedYear(today.getFullYear());
+    setSelectedMonth(today.getMonth());
+    setSelectedDate(localISODate(today));
   };
 
   // Generate calendar days for selected year & month
@@ -333,7 +311,7 @@ export const MemberAttendanceSection: React.FC<MemberAttendanceSectionProps> = (
             className="h-7 px-2.5 rounded-lg bg-edge-3 hover:bg-[#202e45] border border-edge-34 text-slate-300 hover:text-white text-[11px] font-semibold cursor-pointer transition-colors box-border"
             id="btn-attendance-current-month"
           >
-            Sep 2026
+            {`${MONTH_NAMES[new Date().getMonth()].slice(0, 3)} ${new Date().getFullYear()}`}
           </button>
 
           {/* Prev Month */}

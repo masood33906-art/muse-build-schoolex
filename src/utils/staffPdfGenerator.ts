@@ -423,6 +423,51 @@ export function getSalarySlipTheme(
     : SALARY_SLIP_THEMES['executive-emerald'];
 }
 
+/**
+ * Real salary-slip figures for one employee + month, built from the actual
+ * payroll record and its payments (see payrollApi.buildSlipBreakdown).
+ * When a month has no payroll record (pre-payroll legacy months), slips
+ * fall back to base salary with ZERO adjustments — honest figures instead
+ * of the previously invented 10% allowances / 5% deductions.
+ */
+export interface SalarySlipBreakdown {
+  staffId: string;
+  monthLabel: string;
+  baseSalary: number;
+  allowances: number;
+  bonus: number;
+  deductions: number;
+  gross: number;
+  netPayable: number;
+  totalPaid: number;
+  outstanding: number;
+  isPaid: boolean;
+  lastPaidDate?: string;
+  paymentMethod?: string;
+  referenceNo?: string;
+}
+
+/** Honest legacy fallback: the staff member's own base salary, no invented adjustments. */
+export function legacySlipBreakdown(staff: StaffMember, monthLabel: string): SalarySlipBreakdown {
+  const base = staff.salary || 0;
+  const isPaid = staff.payStatus === 'Paid';
+  return {
+    staffId: staff.id,
+    monthLabel,
+    baseSalary: base,
+    allowances: 0,
+    bonus: 0,
+    deductions: 0,
+    gross: base,
+    netPayable: base,
+    totalPaid: isPaid ? base : 0,
+    outstanding: isPaid ? 0 : base,
+    isPaid,
+    lastPaidDate: staff.lastPaidDate,
+    paymentMethod: staff.paymentMethod,
+  };
+}
+
 // Generates an Official Printable / Downloadable Salary Pay Slip PDF
 export function generateSalarySlipPdf(
   staff: StaffMember,
@@ -634,7 +679,8 @@ export function generateSalarySlipPdf(
 export function generateOverallStaffPayrollReportPdf(
   staffList: StaffMember[],
   month: string,
-  school: SchoolInfo = DEFAULT_SCHOOL
+  school: SchoolInfo = DEFAULT_SCHOOL,
+  breakdowns?: Map<string, SalarySlipBreakdown>
 ) {
   const doc = new jsPDF({
     orientation: 'landscape',
@@ -679,26 +725,16 @@ export function generateOverallStaffPayrollReportPdf(
   let sumDue = 0;
 
   const tableRows = staffList.map((staff, index) => {
-    const base = staff.salary || 0;
-    const allowances = Math.round(base * 0.10); // standard 10%
-    const deductions = Math.round(base * 0.05); // standard 5% tax/deductions
-    const net = base + allowances - deductions;
-
-    let paid = 0;
-    let due = net;
-    const status = staff.payStatus || 'Paid';
-
-    if (status === 'Paid') {
-      paid = net;
-      due = 0;
-    } else if (status === 'Pending') {
-      paid = 0;
-      due = net;
-    } else {
-      // Overdue or partial
-      paid = 0;
-      due = net;
-    }
+    // Real payroll figures when a breakdown is supplied; otherwise the
+    // honest legacy fallback (base salary, zero adjustments).
+    const b = breakdowns?.get(staff.id) || legacySlipBreakdown(staff, month);
+    const base = b.baseSalary;
+    const allowances = b.allowances + b.bonus;
+    const deductions = b.deductions;
+    const net = b.netPayable;
+    const paid = b.totalPaid;
+    const due = b.outstanding;
+    const status = b.isPaid ? 'Paid' : paid > 0 ? 'Partial' : 'Pending';
 
     sumBase += base;
     sumAllowances += allowances;
@@ -720,7 +756,7 @@ export function generateOverallStaffPayrollReportPdf(
       status.toUpperCase(),
       `Rs. ${paid.toLocaleString()}`,
       `Rs. ${due.toLocaleString()}`,
-      staff.paymentMethod || 'Bank Transfer'
+      b.paymentMethod || staff.paymentMethod || '—'
     ];
   });
 
@@ -882,7 +918,8 @@ export function generateMonthlyIndividualSlipsCombinedPdf(
   staffList: StaffMember[],
   month: string,
   selectedStaffId?: string,
-  school: SchoolInfo = DEFAULT_SCHOOL
+  school: SchoolInfo = DEFAULT_SCHOOL,
+  breakdowns?: Map<string, SalarySlipBreakdown>
 ) {
   const targetList = selectedStaffId 
     ? staffList.filter(s => s.id === selectedStaffId)
@@ -955,13 +992,16 @@ export function generateMonthlyIndividualSlipsCombinedPdf(
     let totalDue = 0;
 
     const rows = staffList.map((s, idx) => {
-      const base = s.salary || 0;
-      const allow = Math.round(base * 0.1);
-      const ded = Math.round(base * 0.05);
-      const net = base + allow - ded;
-      const status = s.payStatus || 'Paid';
-      const paid = status === 'Paid' ? net : (status === 'Pending' ? 0 : Math.round(net * 0.5));
-      const due = Math.max(0, net - paid);
+      // Real payroll figures when supplied; honest legacy fallback otherwise
+      // (base salary, zero adjustments — no invented 10% / 5% / half-paid).
+      const b = breakdowns?.get(s.id) || legacySlipBreakdown(s, month);
+      const base = b.baseSalary;
+      const allow = b.allowances + b.bonus;
+      const ded = b.deductions;
+      const net = b.netPayable;
+      const paid = b.totalPaid;
+      const due = b.outstanding;
+      const status = b.isPaid ? 'Paid' : paid > 0 ? 'Partial' : 'Pending';
 
       totalGross += (base + allow);
       totalDeductions += ded;
@@ -1075,7 +1115,7 @@ export function generateMonthlyIndividualSlipsCombinedPdf(
     // Add subsequent pages for individual slips
     targetList.forEach((staff) => {
       doc.addPage('a4', 'portrait');
-      renderSinglePayslipSheet(doc, staff, month, school, pageWidth, margin);
+      renderSinglePayslipSheet(doc, staff, month, school, pageWidth, margin, breakdowns?.get(staff.id));
     });
   } else {
     // Single or individual selected
@@ -1083,7 +1123,7 @@ export function generateMonthlyIndividualSlipsCombinedPdf(
       if (index > 0) {
         doc.addPage('a4', 'portrait');
       }
-      renderSinglePayslipSheet(doc, staff, month, school, pageWidth, margin);
+      renderSinglePayslipSheet(doc, staff, month, school, pageWidth, margin, breakdowns?.get(staff.id));
     });
   }
 
@@ -1095,14 +1135,18 @@ export function generateMonthlyIndividualSlipsCombinedPdf(
   return doc;
 }
 
-// Helper to render an individual payslip on the current page of doc
+// Helper to render an individual payslip on the current page of doc.
+// `breakdown` carries the REAL figures from the payroll record + payments
+// for payroll-covered months; without it the honest legacy fallback applies
+// (base salary, zero adjustments).
 function renderSinglePayslipSheet(
   doc: jsPDF,
   staff: StaffMember,
   month: string,
   school: SchoolInfo,
   pageWidth: number,
-  margin: number
+  margin: number,
+  breakdown?: SalarySlipBreakdown
 ) {
   const settings = getSchoolSettings();
   // Shared salary-slip theme (Fix P1-2) — this renderer is where the
@@ -1119,12 +1163,15 @@ function renderSinglePayslipSheet(
   const valueColor: RgbColor = isMP ? [0, 0, 0] : [15, 23, 42];
   const mutedColor: RgbColor = isMP ? [110, 110, 110] : [100, 116, 139];
   const faintColor: RgbColor = isMP ? [160, 160, 160] : [148, 163, 184];
-  const base = staff.salary || 0;
-  const allowances = Math.round(base * 0.1);
-  const deductions = Math.round(base * 0.05);
-  const net = base + allowances - deductions;
-  const isPaid = staff.payStatus === 'Paid';
-  const refNo = `SLP-${staff.id}-${month.substring(0, 3).toUpperCase()}-2026`;
+  const b = breakdown || legacySlipBreakdown(staff, month);
+  const base = b.baseSalary;
+  const allowances = b.allowances;
+  const bonus = b.bonus;
+  const deductions = b.deductions;
+  const net = b.netPayable;
+  const isPaid = b.isPaid;
+  const monthYear = (month.split(' ')[1] || String(new Date().getFullYear()));
+  const refNo = b.referenceNo || `SLP-${staff.id}-${month.substring(0, 3).toUpperCase()}-${monthYear}`;
 
   if (isMinimalClassic) {
     doc.setDrawColor(...theme.headerTitleColor);
@@ -1209,30 +1256,31 @@ function renderSinglePayslipSheet(
   doc.setTextColor(...valueColor);
   doc.text(staff.department, col2X + 36, 43);
   doc.text(refNo, col2X + 36, 49);
-  doc.text(staff.lastPaidDate || '2026-09-01', col2X + 36, 55);
+  doc.text(b.lastPaidDate || '—', col2X + 36, 55);
 
+  const statusText = isPaid ? 'PAID (CONFIRMED)' : b.totalPaid > 0 ? 'PARTIALLY PAID' : 'PENDING / DUE';
   doc.setFont('helvetica', 'bold');
   if (isPaid) {
     doc.setTextColor(...theme.statusPaidColor);
-    doc.text('PAID (CONFIRMED)', col2X + 36, 61);
+    doc.text(statusText, col2X + 36, 61);
   } else if (theme.template === 'minimal-professional') {
     // Strict black & white: no red pending status for this template. The
     // other two templates keep the red below, unchanged.
     doc.setTextColor(0, 0, 0);
-    doc.text('PENDING / DUE', col2X + 36, 61);
+    doc.text(statusText, col2X + 36, 61);
   } else {
     doc.setTextColor(220, 38, 38);
-    doc.text('PENDING / DUE', col2X + 36, 61);
+    doc.text(statusText, col2X + 36, 61);
   }
 
   // Earnings & Deductions Table
   const tableData = [
-    ['Basic Monthly Salary', `Rs. ${base.toLocaleString()}`, 'Income Tax / Withholding', `Rs. ${deductions.toLocaleString()}`],
-    ['Allowances (Medical & Transport)', `Rs. ${allowances.toLocaleString()}`, 'Absence / Leave Deductions', 'Rs. 0'],
-    ['Special Performance Bonus', 'Rs. 0', 'Provident Fund (PF)', 'Rs. 0'],
+    ['Basic Monthly Salary', `Rs. ${base.toLocaleString()}`, 'Deductions', `Rs. ${deductions.toLocaleString()}`],
+    ['Allowances (Medical & Transport)', `Rs. ${allowances.toLocaleString()}`, '', ''],
+    ['Special Performance Bonus', `Rs. ${bonus.toLocaleString()}`, '', ''],
     [
       { content: 'Gross Monthly Earnings', styles: { fontStyle: 'bold' } },
-      { content: `Rs. ${(base + allowances).toLocaleString()}`, styles: { fontStyle: 'bold' } },
+      { content: `Rs. ${(base + allowances + bonus).toLocaleString()}`, styles: { fontStyle: 'bold' } },
       { content: 'Total Deductions', styles: { fontStyle: 'bold' } },
       { content: `Rs. ${deductions.toLocaleString()}`, styles: { fontStyle: 'bold' } }
     ]
@@ -1287,8 +1335,8 @@ function renderSinglePayslipSheet(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(...mutedColor);
-  doc.text(`Disbursed to Employee via ${staff.paymentMethod || 'Bank Transfer'}. Account: ${staff.bankAccount || 'Verified On File'}`, margin, finalY + 27);
-  doc.text(`Remarks: Regular monthly salary disbursement for ${month}.`, margin, finalY + 32);
+  doc.text(`Disbursed to Employee via ${b.paymentMethod || staff.paymentMethod || '—'}. Account: ${staff.bankAccount || 'Verified On File'}`, margin, finalY + 27);
+  doc.text(`Remarks: Salary for ${month}. Paid: Rs. ${b.totalPaid.toLocaleString()} · Outstanding: Rs. ${b.outstanding.toLocaleString()}.`, margin, finalY + 32);
 
   // Signatures
   const signY = finalY + 52;

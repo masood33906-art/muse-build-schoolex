@@ -23,6 +23,7 @@ import {
   WeekDayInfo 
 } from '../utils/attendanceHelper';
 import { countStudentsInClass, findClassByName, studentBelongsToClass } from '../utils/classExportHelper';
+import { localISODate } from '../utils/dates';
 
 export type AttendanceSheetScope = 'single_section' | 'class_sections' | 'all_entities';
 
@@ -48,7 +49,7 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
   allStudents,
   allStaff,
   initialEntityType = 'student',
-  initialDate = '2026-09-13',
+  initialDate = localISODate(),
   allAttendance,
   schoolInfo = DEFAULT_SCHOOL
 }) => {
@@ -75,6 +76,15 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
   // thin black borders, white background, no fills and no colour-coded
   // status badges. It is deliberately NOT routed through the compact layout.
   const isMinimalProfessional = liveSettings.attendanceRegisterTemplate === 'minimal-professional';
+
+  // Re-anchor the sheet date to the module's current date each time the
+  // modal opens (the modal stays mounted, so the mount-time initializer
+  // alone would go stale).
+  React.useEffect(() => {
+    if (isOpen) {
+      setSelectedDate(initialDate);
+    }
+  }, [isOpen, initialDate]);
 
   // Sync entity type when initialEntityType changes
   React.useEffect(() => {

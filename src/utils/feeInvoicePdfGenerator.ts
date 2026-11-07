@@ -1,5 +1,8 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { Student } from '../types';
+import { loadAllLedgerItems, StudentFeeItem } from './studentFeeLedgerHelper';
+import { listPayments, FeePayment } from './paymentStore';
 
 export interface FeeInvoiceItem {
   id: string;
@@ -26,12 +29,15 @@ export interface FeeInvoiceStudentGroup {
   studentPaid: number;
 }
 
+export type FeeInvoiceStatus = 'Paid' | 'Partially Paid' | 'Unpaid';
+
 export interface FeeInvoiceData {
-  invoiceNumber: string; // e.g. "20260916160306"
+  invoiceNumber: string; // the payment's receipt number, e.g. "REC-2026-0001"
+  paymentId?: string; // the FeePayment.id this invoice was issued for
   paymentDate: string; // e.g. "16 Sep 2026 04:03 PM"
   formattedDateOnly: string; // e.g. "16 Sep 2026"
   paymentMethod: string; // e.g. "Cash", "Bank Transfer"
-  status: 'Paid';
+  status: FeeInvoiceStatus;
   school: {
     name: string;
     address: string;
@@ -45,9 +51,161 @@ export interface FeeInvoiceData {
     address: string;
   };
   students: FeeInvoiceStudentGroup[];
-  subtotal: number;
-  paidAmount: number;
+  subtotal: number; // sum of the CURRENT charges of the invoiced items
+  paidAmount: number; // total paid toward those items TO DATE (all payments)
+  balanceDue: number; // subtotal - paidAmount, never negative
   note?: string;
+}
+
+export interface FeeInvoiceContext {
+  school: FeeInvoiceData['school'];
+  invoiceTo: FeeInvoiceData['invoiceTo'];
+  note?: string;
+}
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const pad2 = (n: number) => n.toString().padStart(2, '0');
+
+function purposeNameOf(item: StudentFeeItem): string {
+  if (item.type === 'Fund') return item.reason.startsWith('Fund') ? item.reason : `Fund - (${item.reason})`;
+  if (item.type === 'Admission') return 'Admission Fee';
+  if (item.type === 'Security') return 'Security Fee';
+  if (item.type === 'Monthly Fee') return 'Monthly Fee';
+  if (item.type === 'Fine') return 'Fine';
+  return item.reason || item.type;
+}
+
+/**
+ * Build an invoice for a recorded payment from the LIVE fee ledger.
+ *
+ * The invoice's scope is the set of ledger items that payment was
+ * allocated to, but every figure is read from the CURRENT ledger:
+ * each item's charge is its current `total`, its paid figure is its
+ * current `paidAmount` (i.e. paid to date across ALL payments, not
+ * just this receipt), and the summary is derived from those:
+ * subtotal = Σ charges, total paid = Σ paid-to-date, balance =
+ * subtotal − paid. The three can therefore never disagree, and
+ * rebuilding the same receipt's invoice after further payments
+ * shows the new reality instead of the frozen moment of issue.
+ */
+export function buildFeeInvoiceData(
+  payment: FeePayment,
+  students: Student[],
+  context: FeeInvoiceContext
+): FeeInvoiceData {
+  const ledgers = loadAllLedgerItems();
+  const allocatedKeys = new Set(payment.allocations.map(a => `${a.studentId}|${a.itemId}`));
+
+  const groups: FeeInvoiceStudentGroup[] = [];
+  let subtotal = 0;
+  let paidTotal = 0;
+
+  students.forEach(st => {
+    const scoped = (ledgers[st.id] ?? [])
+      .filter(item => allocatedKeys.has(`${st.id}|${item.id}`))
+      .sort((a, b) =>
+        a.monthKey.localeCompare(b.monthKey) ||
+        (a.type === 'Admission' ? -1 : b.type === 'Admission' ? 1 : 0)
+      );
+    if (scoped.length === 0) return;
+
+    let stSubtotal = 0;
+    let stPaid = 0;
+    const items: FeeInvoiceItem[] = scoped.map(item => {
+      const discount = (item.discount || 0) + (item.additionalDiscount || 0);
+      stSubtotal += item.total;
+      stPaid += item.paidAmount;
+      return {
+        id: item.id,
+        studentId: st.id,
+        studentName: st.name,
+        studentRollNo: st.rollNo || st.id,
+        purpose: purposeNameOf(item),
+        month: item.month,
+        className: (item.type === 'Admission' || item.type === 'Security') ? '-' : (st.class || '-'),
+        discount,
+        discountDisplay: discount > 0 ? `${discount.toLocaleString()} PKR` : '-',
+        fee: item.total,
+        // The format this interface always documented: "paid / total"
+        // while anything is still owed, plain total once settled.
+        feeDisplay: item.paidAmount >= item.total
+          ? `${item.total.toLocaleString()} PKR`
+          : `${item.paidAmount.toLocaleString()} / ${item.total.toLocaleString()} PKR`,
+        paidAmount: item.paidAmount
+      };
+    });
+
+    groups.push({
+      studentId: st.id,
+      studentName: st.name,
+      studentRollNo: st.rollNo || st.id,
+      className: st.class || '-',
+      items,
+      studentSubtotal: stSubtotal,
+      studentPaid: stPaid
+    });
+    subtotal += stSubtotal;
+    paidTotal += stPaid;
+  });
+
+  const balanceDue = Math.max(0, subtotal - paidTotal);
+  const status: FeeInvoiceStatus =
+    subtotal > 0 && balanceDue === 0 ? 'Paid' : paidTotal > 0 ? 'Partially Paid' : 'Unpaid';
+
+  const created = new Date(payment.createdAt || payment.date);
+  const validDate = !Number.isNaN(created.getTime());
+  const formattedDateOnly = validDate
+    ? `${pad2(created.getDate())} ${MONTH_NAMES[created.getMonth()]} ${created.getFullYear()}`
+    : payment.date;
+  let paymentDate = formattedDateOnly;
+  if (validDate) {
+    let hours = created.getHours();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    paymentDate = `${formattedDateOnly} ${pad2(hours)}:${pad2(created.getMinutes())} ${ampm}`;
+  }
+
+  return {
+    invoiceNumber: payment.receiptNo,
+    paymentId: payment.id,
+    paymentDate,
+    formattedDateOnly,
+    paymentMethod: payment.method,
+    status,
+    school: context.school,
+    invoiceTo: context.invoiceTo,
+    students: groups,
+    subtotal,
+    paidAmount: paidTotal,
+    balanceDue,
+    note: context.note ?? payment.note
+  };
+}
+
+/**
+ * Rebuild a previously issued invoice from live data. Finds the
+ * payment the snapshot was issued for (by payment id, else by
+ * receipt number) and rebuilds it with buildFeeInvoiceData, keeping
+ * the snapshot's school / invoice-to identity. Returns null when the
+ * payment no longer exists or was voided — the caller then keeps
+ * showing the snapshot it already has.
+ */
+export function rebuildFeeInvoiceData(
+  snapshot: FeeInvoiceData,
+  students: Student[]
+): FeeInvoiceData | null {
+  const payments = listPayments();
+  const payment = (snapshot.paymentId
+    ? payments.find(p => p.id === snapshot.paymentId)
+    : undefined) ?? payments.find(p => p.receiptNo === snapshot.invoiceNumber);
+  if (!payment || payment.voidedAt) return null;
+  const rebuilt = buildFeeInvoiceData(payment, students, {
+    school: snapshot.school,
+    invoiceTo: snapshot.invoiceTo,
+    note: snapshot.note
+  });
+  return rebuilt.students.length > 0 ? rebuilt : null;
 }
 
 // Draw modern green/black circular leaf logo
@@ -211,26 +369,44 @@ function renderInvoiceSlip(
 
   // 4. Slip Footer
   const footerY = finalTableY + 4;
-  
-  // Left: COPY BADGE + Attribution
+
+  // Left: COPY BADGE + Attribution. The badge carries the invoice's
+  // REAL status — a partially paid invoice is no longer stamped PAID.
+  const statusLabel = invoice.status === 'Paid'
+    ? 'PAID'
+    : invoice.status === 'Partially Paid'
+      ? 'PARTIALLY PAID'
+      : 'UNPAID';
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(15, 23, 42);
-  doc.text(`${copyLabel.toUpperCase()} (PAID)`, marginX + 3, footerY + 2.5);
+  doc.text(`${copyLabel.toUpperCase()} (${statusLabel})`, marginX + 3, footerY + 2.5);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6);
   doc.setTextColor(148, 163, 184);
   doc.text('A product of devxcel.com | Get School Software at schooliee.com', marginX + 3, footerY + 6.5);
 
-  // Right: Total Paid
+  // Right: the three summary figures, always mutually consistent
+  // (Subtotal − Total Paid = Balance Due) because all three are
+  // derived from the same live ledger items.
+  const totalsX = pageWidth - marginX - 3;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(71, 85, 105);
+  doc.text(`Subtotal:    ${invoice.subtotal.toLocaleString()} PKR`, totalsX, footerY + 1, { align: 'right' });
+
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
   doc.setTextColor(15, 23, 42);
-  const totalPaidText = `Total Paid:    ${invoice.paidAmount.toLocaleString()} PKR`;
-  doc.text(totalPaidText, pageWidth - marginX - 3, footerY + 3.5, { align: 'right' });
+  doc.text(`Total Paid:    ${invoice.paidAmount.toLocaleString()} PKR`, totalsX, footerY + 5, { align: 'right' });
 
-  return footerY + 11;
+  doc.setFontSize(8.5);
+  if (invoice.balanceDue > 0) doc.setTextColor(185, 28, 28);
+  doc.text(`Balance Due:    ${invoice.balanceDue.toLocaleString()} PKR`, totalsX, footerY + 9, { align: 'right' });
+  doc.setTextColor(15, 23, 42);
+
+  return footerY + 12;
 }
 
 /**

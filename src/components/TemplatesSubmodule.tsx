@@ -65,6 +65,7 @@ import { IdCardModal } from './IdCardModal';
 import { StaffIdCardModal } from './StaffIdCardModal';
 import { RollNumberSlipsModal, MinimalStreamSlipCard } from './RollNumberSlipsModal';
 import { FeeChallanModal } from './FeeChallanModal';
+import { FeeChallanSheet } from './FeeChallanSheet';
 import { FeeCardModal } from './FeeCardModal';
 import { StaffSalarySlipsModal } from './StaffSalarySlipsModal';
 import { ExamDetailExportModal } from './ExamDetailExportModal';
@@ -662,8 +663,14 @@ export const TemplatesSubmodule: React.FC<TemplatesSubmoduleProps> = ({
         // Fix P1-8: explicit SAMPLE amount for this template preview
         // (matches the static preview breakdown: 4,500 tuition + 300
         // exam fund). Demo data only — FeeChallanModal no longer invents
-        // an amount when a caller provides none.
+        // an amount when a caller provides none. The breakdown is passed
+        // explicitly so the modal prints the very sheet the preview
+        // above shows (fee challan convergence fix).
         totalFee={4800}
+        breakdown={[
+          { label: 'Tuition Fee', amount: 4500 },
+          { label: 'Exam Fund', amount: 300 }
+        ]}
       />
 
       <FeeCardModal
@@ -1272,7 +1279,10 @@ function StaffIdCardPreview({
 }
 
 /**
- * 4. Fee Challan — Respects school.feeChallanTemplate ('standard-3copy' vs 'compact-2copy')
+ * 4. Fee Challan — the preview renders the SHARED FeeChallanSheet
+ * (fee challan convergence fix): the exact component every download
+ * path prints, fed here with the sample figures. What the owner
+ * picks in this screen is what a downloaded challan looks like.
  */
 function FeeChallanPreview({
   school,
@@ -1281,100 +1291,20 @@ function FeeChallanPreview({
   school: SchoolSettings;
   student: Student;
 }) {
-  const isMinimalProfessional = school.feeChallanTemplate === 'minimal-professional';
-  const isCompact2Copy = !isMinimalProfessional && school.feeChallanTemplate === 'compact-2copy';
-  // Minimal Professional always uses the full 3-copy structure, in B&W.
-  const copies = isCompact2Copy
-    ? ['School Copy', 'Student / Parent Copy']
-    : ['Bank Copy', 'School Copy', 'Student / Parent Copy'];
-
   return (
-    <div className={`w-full max-w-4xl bg-white text-black font-sans shadow-2xl border-2 border-black rounded-sm space-y-3 ${isMinimalProfessional ? 'p-3' : 'p-4'}`}>
-      <div className={`grid grid-cols-1 ${isCompact2Copy ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-3`}>
-        {copies.map((copyName, idx) => (
-          <div 
-            key={copyName}
-            className={`p-3 flex flex-col justify-between border border-black space-y-2 text-xs ${
-              idx < copies.length - 1 ? 'md:border-r-2 md:border-dashed md:border-black' : ''
-            }`}
-          >
-            {/* Header */}
-            <div className="text-center border-b border-black pb-2 space-y-0.5">
-              <span className={`font-bold text-[10px] uppercase block truncate ${isMinimalProfessional ? 'text-black' : 'text-blue-900'}`}>
-                {school.bankName || 'Faysal Bank Limited'}
-              </span>
-              <span className={`font-mono text-[9px] block ${isMinimalProfessional ? 'text-[#666]' : 'text-neutral-600'}`}>
-                A/C: {school.accountNumber || '301829300000192'}
-              </span>
-              <h4 className="font-black text-xs uppercase truncate">
-                {school.schoolName || 'Demo School'}
-              </h4>
-              <span className={`inline-block px-2 py-0.5 text-[9px] font-black uppercase mt-1 ${isMinimalProfessional ? 'bg-white text-black border border-black' : 'bg-neutral-200 text-black'}`}>
-                {copyName}
-              </span>
-            </div>
-
-            {/* Meta */}
-            <div className="space-y-1 text-[10px] border-b border-black pb-2">
-              <div className="flex justify-between">
-                <span>Challan No:</span>
-                <span className="font-mono font-bold">CH-2026-0891</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Due Date:</span>
-                <span className={`font-bold ${isMinimalProfessional ? 'text-black' : 'text-red-600'}`}>10 Sep 2026</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Student:</span>
-                <span className="font-bold truncate max-w-[110px]">{student.name}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Class:</span>
-                <span className="font-bold">{student.class} ({student.section || 'A'})</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Roll No:</span>
-                <span className="font-mono font-bold">{student.rollNo || '01'}</span>
-              </div>
-            </div>
-
-            {/* Breakdown */}
-            <table className="w-full text-[10px] border border-black border-collapse">
-              <thead>
-                <tr className={`${isMinimalProfessional ? 'bg-white text-black' : 'bg-neutral-100'} border-b border-black font-bold`}>
-                  <th className="p-1 text-left">Description</th>
-                  <th className="p-1 text-right">PKR</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className={`border-b ${isMinimalProfessional ? 'border-[#999]' : 'border-neutral-300'}`}>
-                  <td className="p-1">Tuition Fee</td>
-                  <td className="p-1 text-right font-mono">4,500</td>
-                </tr>
-                <tr className={`border-b ${isMinimalProfessional ? 'border-[#999]' : 'border-neutral-300'}`}>
-                  <td className="p-1">Exam Fund</td>
-                  <td className="p-1 text-right font-mono">300</td>
-                </tr>
-                <tr className={`${isMinimalProfessional ? 'bg-white text-black' : 'bg-neutral-200'} font-black border-t border-black`}>
-                  <td className="p-1">Payable Within Due Date</td>
-                  <td className="p-1 text-right font-mono">4,800</td>
-                </tr>
-                <tr className={`text-[9px] ${isMinimalProfessional ? 'text-[#333]' : 'text-neutral-700'}`}>
-                  <td className="p-1">After Due Date (+{school.lateFineAmount || 300})</td>
-                  <td className="p-1 text-right font-mono">{(4800 + (school.lateFineAmount || 300)).toLocaleString()}</td>
-                </tr>
-              </tbody>
-            </table>
-
-            {/* Signatures */}
-            <div className={`pt-3 flex justify-between text-[8px] border-t border-black ${isMinimalProfessional ? 'text-[#666]' : 'text-neutral-600'}`}>
-              <span>Cashier Sign</span>
-              <span>Bank Stamp</span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+    <FeeChallanSheet
+      school={school}
+      challanNo="CH-2026-0891"
+      dueDate="10 Sep 2026"
+      studentName={student.name}
+      classLabel={`${student.class} (${student.section || 'A'})`}
+      rollNo={student.rollNo || '01'}
+      rows={[
+        { label: 'Tuition Fee', amount: 4500 },
+        { label: 'Exam Fund', amount: 300 }
+      ]}
+      framed
+    />
   );
 }
 

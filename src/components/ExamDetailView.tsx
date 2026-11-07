@@ -31,6 +31,7 @@ import { Student, ClassInfo } from '../types';
 import { SchoolSettings } from '../utils/settingsHelper';
 import { findClassByName, studentsInClassSection } from '../utils/classExportHelper';
 import { ExamDetailExportModal, ExamExportType } from './ExamDetailExportModal';
+import { localISODate, parseSubjectStartDate } from '../utils/dates';
 import { RollNumberSlipsModal } from './RollNumberSlipsModal';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
 
@@ -1487,6 +1488,14 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
                   onClick={() => {
                     const trimmed = newSubName.trim();
                     if (!trimmed) return;
+                    // Same add-time date rule as exam creation, in this
+                    // editor's ISO format: first subject -> tomorrow, each
+                    // next subject -> previous subject's date + 1 day.
+                    const prevSub = editExamSubjects.length > 0
+                      ? parseSubjectStartDate(editExamSubjects[editExamSubjects.length - 1].startDate)
+                      : null;
+                    const baseDate = prevSub ? prevSub.date : new Date();
+                    baseDate.setDate(baseDate.getDate() + 1);
                     setEditExamSubjects([
                       ...editExamSubjects,
                       {
@@ -1494,7 +1503,7 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
                         name: trimmed.toUpperCase(),
                         totalMarks: 100,
                         passingMarks: 33,
-                        startDate: new Date().toISOString().split('T')[0]
+                        startDate: localISODate(baseDate)
                       }
                     ]);
                     setNewSubName('');
