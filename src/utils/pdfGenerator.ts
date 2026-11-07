@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import { Student, CardTemplateType, FamilyData } from '../types';
 import { getSchoolSettings } from './settingsHelper';
 import { getStudentAvatar } from './studentAvatarHelper';
+import { code39Spans } from './barcode';
 
 export interface SchoolInfo {
   name: string;
@@ -45,6 +46,11 @@ export function generateSingleIdCard(
   });
 
   renderCardOnPage(doc, student, activeTemplate, school);
+  if (activeTemplate === 'vertical-badge') {
+    // Vertical Badge cards are two-sided: front, then back on page 2.
+    doc.addPage([54, 86], 'portrait');
+    renderVerticalBadgeBack(doc, student, school);
+  }
   doc.save(`${student.id}_${student.name.replace(/\s+/g, '_')}_IDCard.pdf`);
 }
 
@@ -68,6 +74,11 @@ export function generateAllIdCards(
       doc.addPage([54, 86], 'portrait');
     }
     renderCardOnPage(doc, student, activeTemplate, school);
+    if (activeTemplate === 'vertical-badge') {
+      // Back of this student's card immediately follows its front (duplex).
+      doc.addPage([54, 86], 'portrait');
+      renderVerticalBadgeBack(doc, student, school);
+    }
   });
 
   doc.save(`All_Students_ID_Cards_${activeTemplate}_(${students.length}).pdf`);
@@ -322,20 +333,29 @@ function renderCardOnPage(doc: jsPDF, student: Student, template: CardTemplateTy
     doc.setTextColor(180, 140, 60);
     doc.text('VERIFIED', 13, sigY + 1.2, { align: 'center' });
   } else if (template === 'vertical-badge') {
-    // Template 3: Vertical Badge (inspired by a vertical navy badge design).
+    // Template 3: Vertical Badge — REDESIGNED 2026-11-07 after the owner
+    // downloaded a card and reported: (1) the card looked distorted,
+    // (2) the barcode was scattered, (3) the back side was missing,
+    // (4) text was too small with lots of empty space.
+    // This front now: cover-fits the photo via clipping (never stretches
+    // it), prints a REAL Code 39 barcode of the student id
+    // (src/utils/barcode.ts), and uses larger type with the detail rows
+    // spread evenly to fill the card. The matching back page is
+    // renderVerticalBadgeBack() below; the generate functions add it as
+    // page 2 for this template only.
     // Deep navy card, steel-blue "STUDENT ID" strip down the left edge,
-    // steel-blue barcode band at the bottom. NO punch hole / lanyard slot.
-    // Only fields that exist in the system are printed; optional student
-    // fields (DOB, Roll No, Blood Group) appear only when the record has
-    // them. There is deliberately no "Teacher" line — the system has no
-    // class-teacher field. Front content is centered on the zone right of
-    // the strip (x 9..54), not on the full card width.
+    // steel-blue band across the bottom. NO punch hole / lanyard slot.
+    // Only fields that exist in the system are printed; there is
+    // deliberately no "Teacher" line — the system has no class-teacher
+    // field. Content is centered on the zone right of the strip (x 8..54).
     const NAVY: [number, number, number] = [13, 39, 66]; // #0D2742
     const STEEL: [number, number, number] = [141, 180, 200]; // #8DB4C8
-    const LIGHT: [number, number, number] = [203, 225, 238]; // pale steel (values / name)
+    const STEEL_LIGHT: [number, number, number] = [190, 215, 228];
+    const PALE: [number, number, number] = [226, 240, 248];
     const INNER: [number, number, number] = [27, 54, 84]; // lighter navy (photo fallback)
-    const cx = 31.5; // center of the content zone (9..54)
-    const BAND_Y = 75;
+    const CX = 31; // center of the content zone (x 8..54)
+    const ZONE_W = 42; // usable text width inside the zone (x 10..52)
+    const BAND_Y = 74;
 
     // Card background
     doc.setFillColor(...NAVY);
@@ -343,148 +363,426 @@ function renderCardOnPage(doc: jsPDF, student: Student, template: CardTemplateTy
 
     // Left strip (stops at the bottom band) + bottom band (full width)
     doc.setFillColor(...STEEL);
-    doc.rect(0, 0, 9, BAND_Y, 'F');
+    doc.rect(0, 0, 8, BAND_Y, 'F');
     doc.rect(0, BAND_Y, width, height - BAND_Y, 'F');
 
     // "STUDENT ID" written vertically, bottom-to-top, inside the strip
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
+    doc.setFontSize(8);
     doc.setTextColor(...NAVY);
     const stripText = 'STUDENT ID';
-    const stripTextWidth = doc.getTextWidth(stripText);
-    doc.text(stripText, 6.3, BAND_Y / 2 + stripTextWidth / 2, { angle: 90 });
+    doc.text(stripText, 5, BAND_Y / 2 + doc.getTextWidth(stripText) / 2, { angle: 90 });
 
-    // School logo: raster data URL if the school has one, else a steel
-    // monogram disc with the school initials (same try/catch fallback
-    // pattern as the student photo below; SVG preset logos cannot be
-    // embedded by jsPDF, so they take the monogram path).
-    const logoSize = 9;
-    const logoX = cx - logoSize / 2;
-    const logoY = 3;
+    // School logo: raster logo cover-clipped into a rounded square, else a
+    // steel monogram disc with the school initials (SVG preset logos
+    // cannot be embedded by jsPDF, so they take the monogram path).
     const logo = getSchoolSettings().schoolLogo || '';
     let renderedLogo = false;
-    if (/^data:image\/(png|jpe?g)/i.test(logo)) {
-      try {
-        doc.addImage(logo, logoX, logoY, logoSize, logoSize);
-        renderedLogo = true;
-      } catch (e) {
-        console.warn('Could not render school logo in PDF, falling back to monogram:', e);
-      }
+    if (/^data:image\/(png|jpe?g|webp)/i.test(logo)) {
+      renderedLogo = drawImageCover(doc, logo, CX - 5, 4, 10, 10, 2);
     }
     if (!renderedLogo) {
-      const initials = school.name
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map(w => w.charAt(0).toUpperCase())
-        .join('');
       doc.setFillColor(...STEEL);
-      doc.circle(cx, logoY + logoSize / 2, logoSize / 2, 'F');
+      doc.circle(CX, 9, 5, 'F');
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(6.5);
+      doc.setFontSize(6);
       doc.setTextColor(...NAVY);
-      doc.text(initials || 'S', cx, logoY + logoSize / 2 + 1.2, { align: 'center' });
+      doc.text(schoolInitials(school.name), CX, 10.1, { align: 'center' });
     }
 
-    // School name (shrinks to fit the content zone) + campus line
-    let nameSize = 8;
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(nameSize);
-    const upperName = school.name.toUpperCase();
-    while (doc.getTextWidth(upperName) > 43 && nameSize > 5.5) {
-      nameSize -= 0.5;
-      doc.setFontSize(nameSize);
-    }
+    // School name (shrink-to-fit) + campus • session line
     doc.setTextColor(255, 255, 255);
-    doc.text(upperName, cx, 15.8, { align: 'center' });
+    const schoolNameFit = fitText(doc, school.name, ZONE_W, 'helvetica', 'bold', 9.5, 7);
+    doc.text(schoolNameFit, CX, 17.5, { align: 'center' });
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(5.5);
-    doc.setTextColor(...STEEL);
-    doc.text(school.campus.toUpperCase(), cx, 18.8, { align: 'center' });
+    doc.setTextColor(...STEEL_LIGHT);
+    const campusLine = fitText(doc, `${school.campus} • ${school.session}`, ZONE_W, 'helvetica', 'normal', 6.5, 5.5);
+    doc.text(campusLine, CX, 21, { align: 'center' });
 
-    // Photo with steel-blue frame / initials fallback
-    const photoSize = 19;
-    const photoX = cx - photoSize / 2;
-    const photoY = 21;
+    // Photo: steel frame; the image is COVER-fitted (fills the square,
+    // center-cropped via a clip path) so it is never stretched. Initials
+    // remain as the safety net if there is no usable image at all.
+    const frameX = CX - 11.5;
+    const frameY = 24;
+    const frameS = 23;
     doc.setFillColor(...STEEL);
-    doc.rect(photoX - 0.8, photoY - 0.8, photoSize + 1.6, photoSize + 1.6, 'F');
+    doc.roundedRect(frameX, frameY, frameS, frameS, 2, 2, 'F');
+    const imgX = frameX + 0.75;
+    const imgY = frameY + 0.75;
+    const imgS = frameS - 1.5; // 21.5
     doc.setFillColor(...INNER);
-    doc.rect(photoX, photoY, photoSize, photoSize, 'F');
-
-    let renderedPhoto = false;
-    if (cardPhoto) {
-      try {
-        doc.addImage(cardPhoto, photoX, photoY, photoSize, photoSize);
-        renderedPhoto = true;
-      } catch (e) {
-        console.warn('Could not render photo in PDF, falling back to initials:', e);
-      }
-    }
-    if (!renderedPhoto) {
-      const initials = student.name.substring(0, 2).toUpperCase();
+    doc.roundedRect(imgX, imgY, imgS, imgS, 1.5, 1.5, 'F');
+    const drewPhoto = cardPhoto ? drawImageCover(doc, cardPhoto, imgX, imgY, imgS, imgS, 1.5) : false;
+    if (!drewPhoto) {
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
-      doc.setTextColor(255, 255, 255);
-      doc.text(initials, photoX + photoSize / 2, photoY + photoSize / 2 + 3.5, { align: 'center' });
+      doc.setFontSize(13);
+      doc.setTextColor(...PALE);
+      doc.text(student.name.substring(0, 2).toUpperCase(), CX, imgY + imgS / 2 + 2.3, { align: 'center' });
     }
 
-    // Student name
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10.5);
-    doc.setTextColor(...LIGHT);
-    const displayName = student.name.length > 22 ? student.name.substring(0, 20) + '...' : student.name;
-    doc.text(displayName, cx, 46.5, { align: 'center' });
+    // Student name (large, shrink-to-fit)
+    doc.setTextColor(...PALE);
+    const studentNameFit = fitText(doc, student.name, ZONE_W, 'helvetica', 'bold', 12, 8.5);
+    doc.text(studentNameFit, CX, 52, { align: 'center' });
 
-    // Detail lines: bold label + regular value on the same baseline.
-    // Session and Class always exist; the rest render ONLY when present.
+    // Detail rows: at most 4, picked by priority from fields that exist
+    // (Session already appears in the header line, so it is not repeated).
+    // Rows spread evenly across y55..73, so 2 rows spread out and 4 rows
+    // pack in — the block always fills its space.
     const detailRows: { label: string; val: string }[] = [
-      { label: 'Session:', val: school.session },
-      { label: 'Class:', val: `${student.class} - ${student.section}` }
+      { label: 'CLASS', val: `${student.class} - ${student.section}` }
     ];
-    if (student.dob) detailRows.push({ label: 'DOB:', val: student.dob });
-    if (student.rollNo) detailRows.push({ label: 'Roll No:', val: student.rollNo });
-    if (student.bloodGroup) detailRows.push({ label: 'Blood Group:', val: student.bloodGroup });
-
-    const detailX = 13;
-    const detailStartY = 51;
-    const detailRowH = 4.4;
-    detailRows.forEach((row, idx) => {
-      const y = detailStartY + idx * detailRowH;
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(6.5);
-      doc.setTextColor(...STEEL);
-      doc.text(row.label, detailX, y);
-      const valX = detailX + doc.getTextWidth(row.label) + 1.2;
-
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(...LIGHT);
-      let val = row.val;
-      const maxValWidth = width - valX - 2;
-      if (doc.getTextWidth(val) > maxValWidth) {
-        while (val.length > 3 && doc.getTextWidth(val + '..') > maxValWidth) {
-          val = val.substring(0, val.length - 1);
-        }
-        val += '..';
-      }
-      doc.text(val, valX, y);
+    if (student.family && student.family.trim()) detailRows.push({ label: 'GUARDIAN', val: student.family });
+    if (student.dob) detailRows.push({ label: 'DOB', val: student.dob });
+    if (student.rollNo) detailRows.push({ label: 'ROLL NO', val: String(student.rollNo) });
+    if (student.phone) detailRows.push({ label: 'PHONE', val: student.phone });
+    if (student.bloodGroup) detailRows.push({ label: 'BLOOD GROUP', val: student.bloodGroup });
+    const shownRows = detailRows.slice(0, 4);
+    const blockTop = 55;
+    const rowH = (73 - blockTop) / shownRows.length;
+    shownRows.forEach((row, idx) => {
+      const y = blockTop + rowH * idx + rowH * 0.7;
+      doc.setTextColor(...STEEL_LIGHT);
+      const labelFit = fitText(doc, row.label, 14.3, 'helvetica', 'bold', 6.8, 5.2);
+      doc.text(labelFit, 11, y);
+      doc.setTextColor(255, 255, 255);
+      const valFit = fitText(doc, row.val, 25.7, 'helvetica', 'normal', 7.5, 6.3);
+      doc.text(valFit, 26.3, y);
     });
 
-    // Bottom band: white barcode strip simulated from the student id
-    // (same bar simulation as the modern-tech template) + ID line
+    // Bottom band: white strip with a REAL Code 39 barcode of the student
+    // id (crisp uniform modules, quiet zones both sides) + ID line below.
     doc.setFillColor(255, 255, 255);
-    doc.rect(3, BAND_Y + 1.2, 48, 5.4, 'F');
-    doc.setFillColor(0, 0, 0);
-    for (let x = 4.5; x < 49.5; x += 1.2) {
-      if (Math.sin(x * 17) > -0.2) {
-        doc.rect(x, BAND_Y + 1.8, 0.6, 4.2, 'F');
-      }
-    }
+    doc.rect(6, 76.5, 42, 5.5, 'F');
+    const idValue = (student.id || '').trim();
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.5);
     doc.setTextColor(...NAVY);
-    doc.text(`ID: ${student.id}`, width / 2, 84.7, { align: 'center' });
+    if (idValue) {
+      const { bars, totalUnits } = code39Spans(idValue);
+      if (bars.length > 0 && totalUnits > 0) {
+        const moduleW = 42 / (totalUnits + 10); // 10 units of quiet zone, split 5/5
+        const originX = 6 + 5 * moduleW;
+        doc.setFillColor(0, 0, 0);
+        bars.forEach(b => {
+          doc.rect(originX + b.start * moduleW, 77, b.width * moduleW, 4.5, 'F');
+        });
+      }
+      doc.text(`ID: ${idValue}`, width / 2, 84.8, { align: 'center' });
+    } else {
+      doc.text('ID: ', width / 2, 81.5, { align: 'center' });
+    }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Shared helpers for the Vertical Badge card (front + back)
+// ---------------------------------------------------------------------------
+
+/** First letters of the first two words of the school name, e.g. "DS". */
+function schoolInitials(name: string): string {
+  const initials = (name || '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(w => w.charAt(0).toUpperCase())
+    .join('');
+  return initials || 'S';
+}
+
+/**
+ * Sets the doc font and shrinks the size (base → min in 0.5 steps) until
+ * `text` fits `maxWidth` mm; truncates with '…' if it still does not fit
+ * at the minimum size. Returns the text to draw; the doc is left at the
+ * final font/size, ready for doc.text.
+ */
+function fitText(doc: jsPDF, text: string, maxWidth: number, font: string, style: string, base: number, min: number): string {
+  doc.setFont(font, style);
+  let size = base;
+  doc.setFontSize(size);
+  while (size > min && doc.getTextWidth(text) > maxWidth) {
+    size = Math.max(min, size - 0.5);
+    doc.setFontSize(size);
+  }
+  let t = text;
+  if (doc.getTextWidth(t) > maxWidth) {
+    while (t.length > 1 && doc.getTextWidth(t + '…') > maxWidth) t = t.slice(0, -1);
+    t = t.trimEnd() + '…';
+  }
+  return t;
+}
+
+/** Decodes just the head of a base64 data URI (enough for image headers). */
+function dataUriHeadBytes(dataUri: string, maxBytes = 65536): Uint8Array | null {
+  const comma = dataUri.indexOf(',');
+  if (comma < 0) return null;
+  const b64 = dataUri.slice(comma + 1, comma + 1 + Math.ceil(maxBytes / 3) * 4);
+  const usable = b64.slice(0, b64.length - (b64.length % 4));
+  try {
+    const bin = atob(usable.replace(/\s/g, ''));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Natural pixel size of a PNG / JPEG / WebP data URI, read from the file
+ * header (no DOM Image needed, so it also works in the node harness).
+ * PNG: big-endian uint32 at bytes 16..23. JPEG: scan for SOF0/SOF1/SOF2.
+ * WebP: VP8X / VP8L / lossy VP8 chunk headers. Null when unrecognised.
+ */
+function imageNaturalSize(dataUri: string): { w: number; h: number } | null {
+  if (!dataUri || !dataUri.startsWith('data:image/')) return null;
+  const b = dataUriHeadBytes(dataUri);
+  if (!b || b.length < 30) return null;
+  const u16be = (o: number) => (b[o] << 8) | b[o + 1];
+  const u32be = (o: number) => ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]) >>> 0;
+  const u16le = (o: number) => b[o] | (b[o + 1] << 8);
+  const u24le = (o: number) => b[o] | (b[o + 1] << 8) | (b[o + 2] << 16);
+
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+    const w = u32be(16);
+    const h = u32be(20);
+    return w > 0 && h > 0 ? { w, h } : null;
+  }
+  if (b[0] === 0xff && b[1] === 0xd8) {
+    let o = 2;
+    while (o + 9 < b.length) {
+      if (b[o] !== 0xff) { o++; continue; }
+      const marker = b[o + 1];
+      if (marker === 0xc0 || marker === 0xc1 || marker === 0xc2) {
+        const w = u16be(o + 7);
+        const h = u16be(o + 5);
+        return w > 0 && h > 0 ? { w, h } : null;
+      }
+      if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) { o += 2; continue; }
+      const len = u16be(o + 2);
+      if (len < 2) return null;
+      o += 2 + len;
+    }
+    return null;
+  }
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+      b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) {
+    const chunk = String.fromCharCode(b[12], b[13], b[14], b[15]);
+    if (chunk === 'VP8X') return { w: u24le(24) + 1, h: u24le(27) + 1 };
+    if (chunk === 'VP8L') {
+      return {
+        w: (b[21] | ((b[22] & 0x3f) << 8)) + 1,
+        h: ((b[22] >> 6) | (b[23] << 2) | ((b[24] & 0x0f) << 10)) + 1
+      };
+    }
+    if (chunk === 'VP8 ') return { w: u16le(26) & 0x3fff, h: u16le(28) & 0x3fff };
+  }
+  return null;
+}
+
+/**
+ * Draws an image COVER-fitted into the (x, y, w, h) box: scaled so it
+ * fills the box completely, overflow center-cropped with a rounded-rect
+ * clip. The image is NEVER stretched, so circles stay circles. Returns
+ * false if the image could not be drawn at all (caller falls back to
+ * initials). An unknown natural size is treated as square.
+ */
+function drawImageCover(doc: jsPDF, img: string, x: number, y: number, w: number, h: number, radius: number): boolean {
+  if (!img) return false;
+  const size = imageNaturalSize(img);
+  const iw = size && size.w > 0 ? size.w : 1;
+  const ih = size && size.h > 0 ? size.h : 1;
+  const scale = Math.max(w / iw, h / ih);
+  const dw = iw * scale;
+  const dh = ih * scale;
+  const dx = x + (w - dw) / 2;
+  const dy = y + (h - dh) / 2;
+  let pushed = false;
+  try {
+    doc.saveGraphicsState();
+    pushed = true;
+    // The path style MUST be null: a painted fill/stroke would consume the
+    // path and turn clip() into a no-op (verified against jsPDF 4.x).
+    doc.roundedRect(x, y, w, h, radius, radius, null);
+    doc.clip();
+    doc.discardPath();
+    doc.addImage(img, dx, dy, dw, dh);
+    doc.restoreGraphicsState();
+    pushed = false;
+    return true;
+  } catch (e) {
+    if (pushed) {
+      try { doc.restoreGraphicsState(); } catch { /* already balanced */ }
+    }
+    console.warn('Could not draw cover image in PDF:', e);
+    return false;
+  }
+}
+
+/**
+ * Back page of the Vertical Badge card (page 2 of the card PDF, so a
+ * duplex print lines up front/back). Navy, no strip: school identity,
+ * student identity, family contact rows, school contact block, principal
+ * signature, and the return-to-school band. Only fields that exist are
+ * printed; the blocks flow so fuller records simply use more of the card,
+ * and nothing is allowed to run into the signature or the bottom band.
+ */
+function renderVerticalBadgeBack(doc: jsPDF, student: Student, school: SchoolInfo) {
+  const NAVY: [number, number, number] = [13, 39, 66];
+  const STEEL: [number, number, number] = [141, 180, 200];
+  const STEEL_LIGHT: [number, number, number] = [190, 215, 228];
+  const PALE: [number, number, number] = [203, 225, 238];
+  const CX = 27;
+  const settings = getSchoolSettings();
+
+  doc.setFillColor(...NAVY);
+  doc.rect(0, 0, 54, 86, 'F');
+
+  // Logo / monogram, Ø12mm
+  const logo = settings.schoolLogo || '';
+  let renderedLogo = false;
+  if (/^data:image\/(png|jpe?g|webp)/i.test(logo)) {
+    renderedLogo = drawImageCover(doc, logo, CX - 6, 6, 12, 12, 2);
+  }
+  if (!renderedLogo) {
+    doc.setFillColor(...STEEL);
+    doc.circle(CX, 12, 6, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(...NAVY);
+    doc.text(schoolInitials(school.name), CX, 13.3, { align: 'center' });
+  }
+
+  // School name + campus
+  doc.setTextColor(255, 255, 255);
+  const schoolNameFit = fitText(doc, school.name, 46, 'helvetica', 'bold', 9.5, 7);
+  doc.text(schoolNameFit, CX, 22.5, { align: 'center' });
+  doc.setTextColor(...STEEL_LIGHT);
+  const campusFit = fitText(doc, school.campus, 46, 'helvetica', 'normal', 6.5, 5.5);
+  doc.text(campusFit, CX, 26, { align: 'center' });
+
+  // Divider
+  doc.setDrawColor(...STEEL);
+  doc.setLineWidth(0.4);
+  doc.line(8, 29, 46, 29);
+
+  // Student identity
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.5);
+  doc.setTextColor(...STEEL);
+  doc.text('STUDENT', CX, 33.5, { align: 'center' });
+
+  doc.setTextColor(255, 255, 255);
+  const studentNameFit = fitText(doc, student.name, 46, 'helvetica', 'bold', 10.5, 8);
+  doc.text(studentNameFit, CX, 38, { align: 'center' });
+
+  doc.setTextColor(...PALE);
+  const idLine = fitText(doc, `${student.id} • ${student.class} – ${student.section}`, 46, 'helvetica', 'normal', 7, 6);
+  doc.text(idLine, CX, 42.5, { align: 'center' });
+
+  // School contact lines are computed first: their count decides how many
+  // lines the student address may wrap to, so the two blocks never meet.
+  // Address and phone come from SchoolInfo; email/website exist only in
+  // the school settings, so they are read from there directly.
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  const schoolLines: string[] = [];
+  if (school.address && school.address.trim()) {
+    const wrapped = doc.splitTextToSize(school.address, 44) as string[];
+    const kept = wrapped.slice(0, 2);
+    if (wrapped.length > 2 && kept.length === 2) {
+      let last = kept[1];
+      while (last.length > 1 && doc.getTextWidth(last + '…') > 44) last = last.slice(0, -1);
+      kept[1] = last.trimEnd() + '…';
+    }
+    schoolLines.push(...kept);
+  }
+  if (school.phone && school.phone.trim()) schoolLines.push(school.phone);
+  if (settings.schoolEmail && settings.schoolEmail.trim()) schoolLines.push(settings.schoolEmail);
+  if (settings.schoolWebsite && settings.schoolWebsite.trim()) schoolLines.push(settings.schoolWebsite);
+
+  // Contact rows (left-aligned): Guardian, Phone, Emergency, Address
+  interface ContactRow { label: string; lines: string[]; size: number }
+  const rows: ContactRow[] = [];
+  if (student.family && student.family.trim()) rows.push({ label: 'GUARDIAN', lines: [student.family], size: 7.5 });
+  if (student.phone && student.phone.trim()) rows.push({ label: 'PHONE', lines: [student.phone], size: 7.5 });
+  if (student.emergencyContact && student.emergencyContact.trim() && student.emergencyContact !== student.phone) {
+    rows.push({ label: 'EMERGENCY', lines: [student.emergencyContact], size: 7.5 });
+  }
+  if (student.address && student.address.trim()) {
+    const addrMax = schoolLines.length >= 5 ? 2 : 3;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    let lines = doc.splitTextToSize(student.address, 26) as string[];
+    if (lines.length > addrMax) {
+      lines = lines.slice(0, addrMax);
+      let last = lines[addrMax - 1];
+      while (last.length > 1 && doc.getTextWidth(last + '…') > 26) last = last.slice(0, -1);
+      lines[addrMax - 1] = last.trimEnd() + '…';
+    }
+    rows.push({ label: 'ADDRESS', lines, size: 7 });
+  }
+
+  let cy = 48.5;
+  let lastBaseline = 45;
+  rows.forEach(row => {
+    doc.setTextColor(...STEEL_LIGHT);
+    const labelFit = fitText(doc, row.label, 16, 'helvetica', 'bold', 6.5, 5.5);
+    doc.text(labelFit, 7, cy);
+    doc.setTextColor(255, 255, 255);
+    row.lines.forEach((ln, li) => {
+      const t = fitText(doc, ln, 26, 'helvetica', 'normal', row.size, 6.5);
+      const ly = cy + li * 3.3;
+      doc.text(t, 24, ly);
+      lastBaseline = ly;
+    });
+    cy += 4.7 + (row.lines.length - 1) * 3.3;
+  });
+
+  // School contact block (centered, pale), flowing under the contact rows
+  // with an adaptive line step so it always ends above the signature.
+  // The guard reserves room for a SCHOOL caption above the block (same
+  // style as the STUDENT caption), so the school's address can never be
+  // mistaken for the student's own address row above it.
+  if (schoolLines.length > 0) {
+    const sy = Math.max(64.0, lastBaseline + 4.5);
+    const n = schoolLines.length;
+    const step = n > 1 ? Math.min(3.35, Math.max(2.55, (75.2 - sy) / (n - 1))) : 3.35;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(...STEEL);
+    doc.text('SCHOOL', CX, sy - 2.15, { align: 'center' });
+    doc.setTextColor(...PALE);
+    schoolLines.forEach((ln, i) => {
+      const t = fitText(doc, ln, 46, 'helvetica', 'normal', 7, 6.2);
+      doc.text(t, CX, sy + i * step, { align: 'center' });
+    });
+  }
+
+  // Verified seal (left, subtle — same idea as the classic template)
+  doc.setDrawColor(...STEEL);
+  doc.setLineWidth(0.3);
+  doc.circle(10.5, 76.6, 2.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(2.6);
+  doc.setTextColor(...STEEL);
+  doc.text('VERIFIED', 10.5, 77.05, { align: 'center' });
+
+  // Principal signature (right)
+  doc.setDrawColor(...STEEL_LIGHT);
+  doc.setLineWidth(0.3);
+  doc.line(33, 77.4, 50, 77.4);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(5);
+  doc.setTextColor(...STEEL_LIGHT);
+  doc.text('Principal Signature', 41.5, 79.6, { align: 'center' });
+
+  // Bottom band
+  doc.setFillColor(...STEEL);
+  doc.rect(0, 80, 54, 6, 'F');
+  doc.setTextColor(...NAVY);
+  const bandText = fitText(doc, 'If found, please return to the school office.', 50, 'helvetica', 'bold', 6.5, 5.5);
+  doc.text(bandText, CX, 84.3, { align: 'center' });
 }
 
 // Creates Student Registry jsPDF document (can be used for preview, printing, or direct save)

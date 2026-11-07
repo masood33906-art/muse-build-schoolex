@@ -21,6 +21,43 @@ import { generateSingleRollNumberSlipPDF, RollSlipData } from '../utils/rollSlip
 import { generateFeeCardPdf, buildStudentFeeCardData, formatOrBlank } from '../utils/feeCardHelper';
 import { generateWeeklyAttendancePdf, getWeekDays, calculateWeeklyAttendance, loadAttendance } from '../utils/attendanceHelper';
 import { localISODate } from '../utils/dates';
+import { code39Spans } from '../utils/barcode';
+import { getStudentAvatar } from '../utils/studentAvatarHelper';
+
+/** Renders a REAL Code 39 barcode (same encoder as the PDF) as flex bars. */
+function Code39Bars({ value, className }: { value: string; className?: string }) {
+  const { bars, totalUnits } = code39Spans(value || '');
+  const total = totalUnits + 10; // quiet zones: 5 units on each side
+  const segments: { bar: boolean; units: number }[] = [{ bar: false, units: 5 }];
+  let cursor = 0;
+  bars.forEach(b => {
+    if (b.start > cursor) segments.push({ bar: false, units: b.start - cursor });
+    segments.push({ bar: true, units: b.width });
+    cursor = b.start + b.width;
+  });
+  if (totalUnits > cursor) segments.push({ bar: false, units: totalUnits - cursor });
+  segments.push({ bar: false, units: 5 });
+  return (
+    <div className={`flex items-stretch ${className || ''}`} aria-label={`Barcode ${value}`}>
+      {segments.map((s, i) => (
+        <div key={i} style={{ width: `${(s.units / total) * 100}%` }} className={s.bar ? 'bg-black' : undefined} />
+      ))}
+    </div>
+  );
+}
+
+/** Front detail rows for the Vertical Badge: same priority + 4-row cap as the PDF. */
+function vbFrontRows(student: Student): { label: string; val: string }[] {
+  const rows: { label: string; val: string }[] = [
+    { label: 'CLASS', val: `${student.class} - ${student.section}` }
+  ];
+  if (student.family && student.family.trim()) rows.push({ label: 'GUARDIAN', val: student.family });
+  if (student.dob) rows.push({ label: 'DOB', val: student.dob });
+  if (student.rollNo) rows.push({ label: 'ROLL NO', val: String(student.rollNo) });
+  if (student.phone) rows.push({ label: 'PHONE', val: student.phone });
+  if (student.bloodGroup) rows.push({ label: 'BLOOD GROUP', val: student.bloodGroup });
+  return rows.slice(0, 4);
+}
 
 // Modals for functional use
 import { IdCardModal } from './IdCardModal';
@@ -804,121 +841,159 @@ function StudentIdCardPreview({
   if (isVerticalBadge) {
     return (
       <div className="flex flex-col sm:flex-row items-center gap-6 justify-center">
-        {/* Vertical Badge Front — navy badge, steel side strip & bottom band, NO punch hole */}
+        {/* Vertical Badge Front — redesigned 2026-11-07 to mirror the PDF: 8mm strip
+            stopping at a full-width 12mm band, Ø10mm logo, 23mm cover photo, larger
+            type, priority detail rows, REAL Code39 barcode. NO punch hole. */}
         <div className="w-72 h-[420px] rounded-2xl text-white shadow-2xl relative overflow-hidden font-sans" style={{ backgroundColor: '#0D2742' }}>
-          {/* Left steel-blue strip with vertical STUDENT ID text (bottom-to-top) */}
-          <div className="absolute left-0 top-0 bottom-[52px] w-[46px] flex items-center justify-center" style={{ backgroundColor: '#8DB4C8' }}>
-            <span className="text-[#0D2742] font-black tracking-[0.18em] text-[15px] whitespace-nowrap [writing-mode:vertical-rl] rotate-180">
+          {/* Left steel-blue strip (8mm) with vertical STUDENT ID text (bottom-to-top) */}
+          <div className="absolute left-0 top-0 bottom-[59px] w-[43px] flex items-center justify-center" style={{ backgroundColor: '#8DB4C8' }}>
+            <span className="text-[#0D2742] font-black tracking-[0.18em] text-[14px] whitespace-nowrap [writing-mode:vertical-rl] rotate-180">
               STUDENT ID
             </span>
           </div>
 
-          {/* Bottom steel-blue band: white barcode strip + ID line */}
-          <div className="absolute left-0 right-0 bottom-0 h-[52px] flex flex-col items-center justify-center gap-1 px-3" style={{ backgroundColor: '#8DB4C8' }}>
-            <div className="bg-white rounded-[3px] px-2 py-1 w-full flex items-center justify-center overflow-hidden">
-              <Barcode className="w-24 h-5 text-black" />
+          {/* Bottom steel-blue band (12mm, full width): white Code39 strip + ID line */}
+          <div className="absolute left-0 right-0 bottom-0 h-[59px] flex flex-col items-center justify-center" style={{ backgroundColor: '#8DB4C8' }}>
+            <div className="bg-white rounded-[3px] w-[224px] h-[27px] px-[6px] py-[4px] overflow-hidden">
+              <Code39Bars value={student.id} className="w-full h-full" />
             </div>
-            <span className="text-[10px] font-black text-[#0D2742] tracking-wide leading-none">
+            <span className="text-[12px] font-black text-[#0D2742] tracking-wide leading-none mt-[5px]">
               ID: {student.id}
             </span>
           </div>
 
           {/* Content zone: right of the strip, above the band */}
-          <div className="absolute left-[46px] right-0 top-0 bottom-[52px] flex flex-col items-center px-3 pt-4 text-center">
+          <div className="absolute left-[43px] right-0 top-0 bottom-[59px] flex flex-col items-center px-2 text-center">
             {school.schoolLogo ? (
               <img
                 src={school.schoolLogo}
                 alt={school.schoolName}
-                className="w-10 h-10 rounded-full object-contain shrink-0"
+                className="w-[52px] h-[52px] mt-[20px] rounded-[10px] object-cover shrink-0"
+                style={{ backgroundColor: '#8DB4C8' }}
               />
             ) : (
-              <div className="w-10 h-10 rounded-full flex items-center justify-center text-[11px] font-black text-[#0D2742] shrink-0" style={{ backgroundColor: '#8DB4C8' }}>
+              <div className="w-[52px] h-[52px] mt-[20px] rounded-full flex items-center justify-center text-[13px] font-black text-[#0D2742] shrink-0" style={{ backgroundColor: '#8DB4C8' }}>
                 {(school.schoolName || 'S').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w.charAt(0).toUpperCase()).join('')}
               </div>
             )}
-            <h2 className="text-[11px] font-black uppercase tracking-wider text-white mt-1.5 leading-tight">
+            <h2 className="text-[15px] font-extrabold text-white mt-[3px] leading-[18px]">
               {school.schoolName || 'DEMO SCHOOL'}
             </h2>
-            <span className="text-[8px] font-semibold tracking-[0.25em] uppercase mt-0.5" style={{ color: '#8DB4C8' }}>
-              {school.campusName || 'Main Campus'}
+            <span className="text-[11px] font-semibold mt-[1px]" style={{ color: '#BED7E4' }}>
+              {school.campusName || 'Main Campus'} • {school.session || '2025 - 2026'}
             </span>
 
-            {/* Photo frame (initial fallback, like the other previews) */}
-            <div className="w-24 h-24 mt-3 p-[3px] shrink-0" style={{ backgroundColor: '#8DB4C8' }}>
-              <div className="w-full h-full flex items-center justify-center text-white text-3xl font-black" style={{ backgroundColor: '#1B3654' }}>
-                {student.name.charAt(0)}
-              </div>
+            {/* Photo frame (23mm, cover-fit like the PDF) */}
+            <div className="w-[122px] h-[112px] mt-[11px] p-[4px] shrink-0 rounded-[10px]" style={{ backgroundColor: '#8DB4C8' }}>
+              <img
+                src={getStudentAvatar(student)}
+                alt={student.name}
+                className="w-full h-full object-cover rounded-[7px]"
+                style={{ backgroundColor: '#1B3654' }}
+              />
             </div>
 
-            <h3 className="text-base font-black mt-2.5 text-center leading-tight" style={{ color: '#CBE1EE' }}>{student.name}</h3>
+            <h3 className="text-[20px] font-bold leading-[24px] mt-[9px] text-center" style={{ color: '#E2F0F8' }}>{student.name}</h3>
 
-            {/* Detail lines — optional fields only when the record has them */}
-            <div className="w-full mt-3 space-y-1.5 text-left text-[11px] px-1">
-              <div className="flex gap-1.5">
-                <span className="font-bold shrink-0" style={{ color: '#8DB4C8' }}>Session:</span>
-                <span className="truncate" style={{ color: '#CBE1EE' }}>{school.session || '2025 - 2026'}</span>
-              </div>
-              <div className="flex gap-1.5">
-                <span className="font-bold shrink-0" style={{ color: '#8DB4C8' }}>Class:</span>
-                <span className="truncate" style={{ color: '#CBE1EE' }}>{student.class} — {student.section || 'A'}</span>
-              </div>
-              {student.dob && (
-                <div className="flex gap-1.5">
-                  <span className="font-bold shrink-0" style={{ color: '#8DB4C8' }}>DOB:</span>
-                  <span className="truncate" style={{ color: '#CBE1EE' }}>{student.dob}</span>
+            {/* Detail rows — same priority set + 4-row cap as the PDF, spread to fill */}
+            <div className="w-full flex-1 flex flex-col justify-around text-left pl-[16px] pr-[8px] py-1">
+              {vbFrontRows(student).map(row => (
+                <div key={row.label} className="flex items-baseline">
+                  <span className="font-bold text-[11px] w-[78px] shrink-0" style={{ color: '#BED7E4' }}>{row.label}</span>
+                  <span className="text-[12px] text-white truncate">{row.val}</span>
                 </div>
-              )}
-              {student.rollNo && (
-                <div className="flex gap-1.5">
-                  <span className="font-bold shrink-0" style={{ color: '#8DB4C8' }}>Roll No:</span>
-                  <span className="truncate" style={{ color: '#CBE1EE' }}>{student.rollNo}</span>
-                </div>
-              )}
-              {student.bloodGroup && (
-                <div className="flex gap-1.5">
-                  <span className="font-bold shrink-0" style={{ color: '#8DB4C8' }}>Blood Group:</span>
-                  <span className="truncate" style={{ color: '#CBE1EE' }}>{student.bloodGroup}</span>
-                </div>
-              )}
+              ))}
             </div>
           </div>
         </div>
 
-        {/* Vertical Badge Back — school + holder contact block (preview only; PDFs stay front-only) */}
-        <div className="w-72 h-[420px] rounded-2xl text-white p-5 shadow-2xl flex flex-col font-sans" style={{ backgroundColor: '#0D2742' }}>
-          <div className="text-center">
+        {/* Vertical Badge Back — mirrors the PDF back page (page 2 of the download):
+            school identity, student identity, contact rows, school contact block,
+            signature + seal, and the return-to-school band. Same field order as
+            renderVerticalBadgeBack in pdfGenerator.ts. */}
+        <div className="w-72 h-[420px] rounded-2xl text-white shadow-2xl relative overflow-hidden font-sans" style={{ backgroundColor: '#0D2742' }}>
+          {/* School identity */}
+          <div className="flex flex-col items-center text-center px-4 pt-[24px]">
             {school.schoolLogo ? (
               <img
                 src={school.schoolLogo}
                 alt={school.schoolName}
-                className="w-12 h-12 rounded-full object-contain mx-auto"
+                className="w-[60px] h-[56px] rounded-[10px] object-cover"
+                style={{ backgroundColor: '#8DB4C8' }}
               />
             ) : (
-              <div className="w-12 h-12 rounded-full flex items-center justify-center text-xs font-black text-[#0D2742] mx-auto" style={{ backgroundColor: '#8DB4C8' }}>
+              <div className="w-[60px] h-[56px] rounded-full flex items-center justify-center text-sm font-black text-[#0D2742]" style={{ backgroundColor: '#8DB4C8' }}>
                 {(school.schoolName || 'S').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w.charAt(0).toUpperCase()).join('')}
               </div>
             )}
-            <h2 className="text-xs font-black uppercase tracking-wider mt-2 leading-tight">
+            <h2 className="text-[15px] font-extrabold mt-[8px] leading-[18px]">
               {school.schoolName || 'DEMO SCHOOL'}
             </h2>
-            <span className="text-[9px] font-semibold tracking-[0.25em] uppercase block mt-0.5" style={{ color: '#8DB4C8' }}>
+            <span className="text-[11px] font-semibold mt-[1px]" style={{ color: '#BED7E4' }}>
               {school.campusName || 'Main Campus'}
             </span>
+            <div className="w-[202px] border-t-2 mt-[10px]" style={{ borderColor: '#8DB4C8' }} />
           </div>
 
-          <div className="text-center mt-5 space-y-1">
-            <p className="text-sm font-black" style={{ color: '#CBE1EE' }}>{student.name}</p>
-            <p className="text-[11px] text-slate-200">Guardian: {student.family}</p>
-            {student.phone && <p className="text-[11px] font-mono text-slate-200">{student.phone}</p>}
-            {student.address && <p className="text-[10px] text-slate-300 leading-snug px-2">{student.address}</p>}
+          {/* Student identity */}
+          <div className="text-center mt-[12px] px-4">
+            <span className="text-[11px] font-bold tracking-[0.2em]" style={{ color: '#8DB4C8' }}>STUDENT</span>
+            <p className="text-[18px] font-bold leading-[22px] mt-[3px] text-white">{student.name}</p>
+            <p className="text-[12px] mt-[2px]" style={{ color: '#CBE1EE' }}>
+              {student.id} • {student.class} – {student.section || 'A'}
+            </p>
           </div>
 
-          <div className="border-t border-white/15 pt-4 text-center space-y-1 mt-auto">
-            <p className="text-[11px] font-black uppercase tracking-wide">{school.schoolName || 'DEMO SCHOOL'}</p>
-            {school.schoolAddress && <p className="text-[10px] leading-snug px-2" style={{ color: '#8DB4C8' }}>{school.schoolAddress}</p>}
-            {school.schoolPhone && <p className="text-[10px] font-mono" style={{ color: '#8DB4C8' }}>{school.schoolPhone}</p>}
-            {school.schoolEmail && <p className="text-[10px]" style={{ color: '#8DB4C8' }}>{school.schoolEmail}</p>}
-            {school.schoolWebsite && <p className="text-[10px]" style={{ color: '#8DB4C8' }}>{school.schoolWebsite}</p>}
+          {/* Contact rows — same fields/order as the PDF back */}
+          <div className="px-[30px] mt-[20px] space-y-[9px] text-left">
+            {student.family && (
+              <div className="flex items-baseline">
+                <span className="font-bold text-[11px] w-[86px] shrink-0" style={{ color: '#BED7E4' }}>GUARDIAN</span>
+                <span className="text-[12px] text-white">{student.family}</span>
+              </div>
+            )}
+            {student.phone && (
+              <div className="flex items-baseline">
+                <span className="font-bold text-[11px] w-[86px] shrink-0" style={{ color: '#BED7E4' }}>PHONE</span>
+                <span className="text-[12px] text-white">{student.phone}</span>
+              </div>
+            )}
+            {student.emergencyContact && student.emergencyContact !== student.phone && (
+              <div className="flex items-baseline">
+                <span className="font-bold text-[11px] w-[86px] shrink-0" style={{ color: '#BED7E4' }}>EMERGENCY</span>
+                <span className="text-[12px] text-white">{student.emergencyContact}</span>
+              </div>
+            )}
+            {student.address && (
+              <div className="flex items-baseline">
+                <span className="font-bold text-[11px] w-[86px] shrink-0" style={{ color: '#BED7E4' }}>ADDRESS</span>
+                <span className="text-[12px] text-white leading-snug">{student.address}</span>
+              </div>
+            )}
+          </div>
+
+          {/* School contact block (centered) */}
+          <div className="text-center px-4 mt-[16px] space-y-[3px]" style={{ color: '#CBE1EE' }}>
+            {school.schoolAddress && <p className="text-[12px] leading-snug">{school.schoolAddress}</p>}
+            {school.schoolPhone && <p className="text-[12px]">{school.schoolPhone}</p>}
+            {school.schoolEmail && <p className="text-[12px]">{school.schoolEmail}</p>}
+            {school.schoolWebsite && <p className="text-[12px]">{school.schoolWebsite}</p>}
+          </div>
+
+          {/* Seal (left) + principal signature (right) */}
+          <div className="absolute left-0 right-0 bottom-[38px] flex items-end justify-between px-[30px]">
+            <div className="w-[26px] h-[26px] rounded-full border flex items-center justify-center text-[5px] font-bold" style={{ borderColor: '#8DB4C8', color: '#8DB4C8' }}>
+              VERIFIED
+            </div>
+            <div className="text-center">
+              <div className="w-[90px] border-b" style={{ borderColor: '#BED7E4' }} />
+              <span className="text-[8px]" style={{ color: '#BED7E4' }}>Principal Signature</span>
+            </div>
+          </div>
+
+          {/* Bottom band */}
+          <div className="absolute left-0 right-0 bottom-0 h-[29px] flex items-center justify-center" style={{ backgroundColor: '#8DB4C8' }}>
+            <span className="text-[11px] font-bold text-[#0D2742]">If found, please return to the school office.</span>
           </div>
         </div>
       </div>
