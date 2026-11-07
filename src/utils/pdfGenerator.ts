@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Student, CardTemplateType, FamilyData } from '../types';
 import { getSchoolSettings } from './settingsHelper';
+import { getStudentAvatar } from './studentAvatarHelper';
 
 export interface SchoolInfo {
   name: string;
@@ -77,6 +78,12 @@ function renderCardOnPage(doc: jsPDF, student: Student, template: CardTemplateTy
   const width = 54;
   const height = 86;
 
+  // Resolve the photo through the avatar helper: students without an uploaded
+  // photo print the default boy/girl DP on every card template, and records
+  // still holding a legacy default-URL value are healed the same way. The
+  // initials fallback in each template still applies if addImage ever fails.
+  const cardPhoto = getStudentAvatar(student);
+
   if (template === 'modern-tech') {
     // Background
     doc.setFillColor(15, 23, 42); // slate-900
@@ -114,9 +121,9 @@ function renderCardOnPage(doc: jsPDF, student: Student, template: CardTemplateTy
 
     // Render Student Photo or Initials
     let renderedPhoto = false;
-    if (student.photo) {
+    if (cardPhoto) {
       try {
-        doc.addImage(student.photo, photoX, photoY, photoSize, photoSize);
+        doc.addImage(cardPhoto, photoX, photoY, photoSize, photoSize);
         renderedPhoto = true;
       } catch (e) {
         console.warn('Could not render photo in PDF, falling back to initials:', e);
@@ -235,9 +242,9 @@ function renderCardOnPage(doc: jsPDF, student: Student, template: CardTemplateTy
 
     // Monogram / Photo
     let renderedPhoto2 = false;
-    if (student.photo) {
+    if (cardPhoto) {
       try {
-        doc.addImage(student.photo, px + 0.5, py + 0.5, pSize - 1, pSize - 1);
+        doc.addImage(cardPhoto, px + 0.5, py + 0.5, pSize - 1, pSize - 1);
         renderedPhoto2 = true;
       } catch (e) {
         console.warn('Could not render photo in PDF template 2, falling back to initials:', e);
@@ -406,9 +413,9 @@ function renderCardOnPage(doc: jsPDF, student: Student, template: CardTemplateTy
     doc.rect(photoX, photoY, photoSize, photoSize, 'F');
 
     let renderedPhoto = false;
-    if (student.photo) {
+    if (cardPhoto) {
       try {
-        doc.addImage(student.photo, photoX, photoY, photoSize, photoSize);
+        doc.addImage(cardPhoto, photoX, photoY, photoSize, photoSize);
         renderedPhoto = true;
       } catch (e) {
         console.warn('Could not render photo in PDF, falling back to initials:', e);

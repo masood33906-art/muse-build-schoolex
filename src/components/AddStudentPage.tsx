@@ -1,25 +1,27 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { 
-  Trash2, 
-  Save, 
-  User, 
-  School, 
-  Users, 
-  Phone, 
+import {
+  Trash2,
+  Save,
+  User,
+  School,
+  Users,
+  Phone,
   ChevronDown,
   CheckCircle2,
   AlertCircle,
   AlertTriangle,
   Link as LinkIcon,
-  PlusCircle
+  PlusCircle,
+  Wallet
 } from 'lucide-react';
-import { Student, ClassInfo } from '../types';
+import { Student, ClassInfo, StudentStatus } from '../types';
 import { withClassIdFromName } from '../utils/classExportHelper';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
-import { 
-  BOY_AVATAR_URL, 
-  GIRL_AVATAR_URL, 
-  getDefaultAvatarByGender 
+import {
+  BOY_AVATAR_URL,
+  GIRL_AVATAR_URL,
+  getStudentAvatar,
+  isLegacyDefaultAvatar
 } from '../utils/studentAvatarHelper';
 
 interface AddStudentPageProps {
@@ -87,11 +89,34 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
     section: (availableClassNames[0] && availableClassMap.get(availableClassNames[0])?.[0]) || '',
     status: 'Active',
     gender: 'Male',
-    bloodGroup: 'B+',
+    bloodGroup: '',
     phone: '',
     emergencyContact: '',
     admissionDate: new Date().toISOString().slice(0, 10),
-    photo: ''
+    isNewAdmission: true,
+    photo: '',
+    rollNo: '',
+    dob: '',
+    fatherName: '',
+    cnic: '',
+    religion: '',
+    caste: '',
+    whatsapp: '',
+    email: '',
+    address: '',
+    guardianCnic: '',
+    guardianOccupation: '',
+    motherName: '',
+    motherCnic: '',
+    motherOccupation: '',
+    previousSchool: '',
+    previousClass: '',
+    previousResult: '',
+    reference: '',
+    note: '',
+    discount: '',
+    admissionFee: '',
+    classFee: ''
   });
 
   // Available sections strictly for the currently selected class
@@ -108,6 +133,10 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
   }, [formData.class, availableClassMap]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  const toggleSection = (key: string) => {
+    setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
+  };
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Group existing families from all students registry
@@ -155,7 +184,15 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
     if (editingStudent) {
       setFormData({
         ...editingStudent,
+        photo: isLegacyDefaultAvatar(editingStudent.photo) ? '' : (editingStudent.photo || ''),
         emergencyContact: editingStudent.emergencyContact || editingStudent.phone || ''
+      });
+      const nonEmpty = (v: unknown) => v !== undefined && v !== null && String(v).trim() !== '';
+      setOpenSections({
+        contact: nonEmpty(editingStudent.whatsapp) || nonEmpty(editingStudent.email) || nonEmpty(editingStudent.address) || nonEmpty(editingStudent.emergencyContact || editingStudent.phone),
+        parents: nonEmpty(editingStudent.fatherName) || nonEmpty(editingStudent.motherName) || nonEmpty(editingStudent.guardianCnic) || nonEmpty(editingStudent.guardianOccupation) || nonEmpty(editingStudent.motherCnic) || nonEmpty(editingStudent.motherOccupation),
+        background: nonEmpty(editingStudent.cnic) || nonEmpty(editingStudent.religion) || nonEmpty(editingStudent.caste) || nonEmpty(editingStudent.previousSchool) || nonEmpty(editingStudent.previousClass) || nonEmpty(editingStudent.previousResult),
+        fees: nonEmpty(editingStudent.admissionFee) || nonEmpty(editingStudent.classFee) || nonEmpty(editingStudent.discount) || nonEmpty(editingStudent.reference) || nonEmpty(editingStudent.note)
       });
       // Check if this editing student's family matches an existing family
       const matching = existingFamilies.find(
@@ -199,13 +236,36 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
         section: defaultSecs[0] || '',
         status: 'Active',
         gender: 'Male',
-        bloodGroup: 'B+',
+        bloodGroup: '',
         phone: '',
         emergencyContact: '',
         admissionDate: new Date().toISOString().slice(0, 10),
         isNewAdmission: true,
-        photo: ''
+        photo: '',
+        rollNo: '',
+        dob: '',
+        fatherName: '',
+        cnic: '',
+        religion: '',
+        caste: '',
+        whatsapp: '',
+        email: '',
+        address: '',
+        guardianCnic: '',
+        guardianOccupation: '',
+        motherName: '',
+        motherCnic: '',
+        motherOccupation: '',
+        previousSchool: '',
+        previousClass: '',
+        previousResult: '',
+        reference: '',
+        note: '',
+        discount: '',
+        admissionFee: '',
+        classFee: ''
       });
+      setOpenSections({});
       setFamilyMode('new');
       setSelectedExistingFamilyCode('');
     }
@@ -328,12 +388,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
   };
 
   // Active DP URL: custom uploaded photo or gender default (boy/girl PNG)
-  const activeAvatarUrl = useMemo(() => {
-    if (formData.photo && formData.photo.trim().length > 0) {
-      return formData.photo;
-    }
-    return getDefaultAvatarByGender(formData.gender);
-  }, [formData.photo, formData.gender]);
+  const activeAvatarUrl = useMemo(() => getStudentAvatar({ photo: formData.photo, gender: formData.gender, name: formData.name }), [formData.photo, formData.gender, formData.name]);
 
   const validate = () => {
     const errs: Record<string, string> = {};
@@ -341,6 +396,11 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
     // 1. Full name
     if (!formData.name?.trim()) {
       errs.name = 'Student full name is required';
+    }
+
+    // 1b. Date of Birth — required for new admissions only
+    if (!editingStudent && !formData.dob?.trim()) {
+      errs.dob = 'Date of Birth is required';
     }
 
     // 2. Student ID - must be non-empty AND completely unique
@@ -387,10 +447,10 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
     }
 
     const emergencyNumber = (formData.emergencyContact || formData.phone || '').trim();
-    // Default DP: if no custom photo uploaded, attach the gender-specific avatar PNG
-    const finalPhoto = formData.photo?.trim() 
-      ? formData.photo 
-      : getDefaultAvatarByGender(formData.gender);
+    // Photo: save only a real uploaded photo (base64) — never the gender
+    // default, and legacy default-URL values count as no photo.
+    const rawPhoto = formData.photo?.trim() ? formData.photo : '';
+    const finalPhoto = rawPhoto && !isLegacyDefaultAvatar(rawPhoto) ? rawPhoto : '';
 
     // Fix P0-3: stamp the stable classId of the selected class at save time.
     onSave(withClassIdFromName({
@@ -402,12 +462,34 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
       section: formData.section!.trim().toUpperCase(),
       status: formData.status || 'Active',
       gender: formData.gender || 'Male',
-      bloodGroup: formData.bloodGroup || 'B+',
+      bloodGroup: formData.bloodGroup || '',
       phone: emergencyNumber,
       emergencyContact: emergencyNumber,
       admissionDate: formData.admissionDate || new Date().toISOString().slice(0, 10),
-      isNewAdmission: editingStudent ? editingStudent.isNewAdmission : true,
-      photo: finalPhoto
+      isNewAdmission: formData.isNewAdmission !== undefined ? formData.isNewAdmission : (editingStudent ? editingStudent.isNewAdmission : true),
+      photo: finalPhoto,
+      rollNo: (formData.rollNo || '').trim(),
+      dob: (formData.dob || '').trim(),
+      fatherName: (formData.fatherName || '').trim(),
+      cnic: (formData.cnic || '').trim(),
+      religion: (formData.religion || '').trim(),
+      caste: (formData.caste || '').trim(),
+      whatsapp: (formData.whatsapp || '').trim(),
+      email: (formData.email || '').trim(),
+      address: (formData.address || '').trim(),
+      guardianCnic: (formData.guardianCnic || '').trim(),
+      guardianOccupation: (formData.guardianOccupation || '').trim(),
+      motherName: (formData.motherName || '').trim(),
+      motherCnic: (formData.motherCnic || '').trim(),
+      motherOccupation: (formData.motherOccupation || '').trim(),
+      previousSchool: (formData.previousSchool || '').trim(),
+      previousClass: (formData.previousClass || '').trim(),
+      previousResult: (formData.previousResult || '').trim(),
+      reference: (formData.reference || '').trim(),
+      note: (formData.note || '').trim(),
+      discount: (formData.discount || '').trim(),
+      admissionFee: (typeof formData.admissionFee === 'string' ? formData.admissionFee.trim() : formData.admissionFee) ?? '',
+      classFee: (typeof formData.classFee === 'string' ? formData.classFee.trim() : formData.classFee) ?? ''
     }, classes));
   };
 
@@ -494,12 +576,12 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
         </div>
 
         {/* ========================================================================= */}
-        {/* SECTION 1: PERSONAL INFORMATION (WITH GENDER SELECTION TRIGGERING DP)     */}
+        {/* SECTION 1: BASIC INFORMATION (WITH GENDER SELECTION TRIGGERING DP)        */}
         {/* ========================================================================= */}
         <div className="bg-surface-16 border border-[#212b3e] rounded-2xl p-6 shadow-xl space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-[#212d42]">
             <User className="w-4 h-4 text-emerald-400" />
-            <h2 className="text-sm font-bold text-white">Personal Information</h2>
+            <h2 className="text-sm font-bold text-white">Basic Information</h2>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -564,6 +646,28 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
               </div>
             </div>
 
+            {/* Date of Birth */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Date of Birth {!editingStudent ? <span className="text-rose-400">*</span> : <span className="text-slate-500 text-[10px] font-normal">Recommended</span>}
+              </label>
+              <input
+                type="date"
+                value={formData.dob || ''}
+                onChange={(e) => {
+                  setFormData({ ...formData, dob: e.target.value });
+                  if (errors.dob) {
+                    setErrors(prev => { const n = { ...prev }; delete n.dob; return n; });
+                  }
+                }}
+                className={`w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border ${
+                  errors.dob ? 'border-rose-500' : 'border-edge-40'
+                } focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors`}
+                id="input-student-dob"
+              />
+              {errors.dob && <p className="text-rose-400 text-[11px] mt-1">{errors.dob}</p>}
+            </div>
+
             {/* Blood Group Dropdown */}
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1.5">
@@ -571,11 +675,12 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
               </label>
               <div className="relative">
                 <select
-                  value={formData.bloodGroup || 'B+'}
+                  value={formData.bloodGroup || ''}
                   onChange={(e) => setFormData({ ...formData, bloodGroup: e.target.value })}
                   className="w-full appearance-none bg-surface-36 border border-edge-40 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 pr-10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors cursor-pointer"
                   id="input-student-blood-group"
                 >
+                  <option value="">— Select —</option>
                   {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(bg => (
                     <option key={bg} value={bg}>{bg}</option>
                   ))}
@@ -584,49 +689,59 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
               </div>
             </div>
 
-            {/* Status Dropdown */}
+            {/* Student ID / Roll Number (STRICTLY UNIQUE) */}
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Enrollment Status
-              </label>
-              <div className="relative">
-                <select
-                  value={formData.status || 'Active'}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                  className="w-full appearance-none bg-surface-36 border border-edge-40 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 pr-10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors cursor-pointer"
-                  id="input-student-status"
-                >
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                </select>
-                <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-semibold text-slate-300">
+                  Student ID <span className="text-rose-400">*</span>
+                </label>
+                {duplicateStudentConflict && (
+                  <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/30">
+                    ID Already Taken
+                  </span>
+                )}
               </div>
-            </div>
-
-            {/* Admission Date */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Admission Date
-              </label>
               <input
-                type="date"
-                value={formData.admissionDate || ''}
-                onChange={(e) => setFormData({ ...formData, admissionDate: e.target.value })}
-                className="w-full bg-surface-36 border border-edge-40 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
-                id="input-student-admission-date"
+                type="text"
+                value={formData.id || ''}
+                onChange={(e) => {
+                  setFormData({ ...formData, id: e.target.value });
+                  if (errors.id) {
+                    setErrors(prev => { const n = { ...prev }; delete n.id; return n; });
+                  }
+                }}
+                placeholder="e.g. S-00101"
+                className={`w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 font-mono border ${
+                  duplicateStudentConflict || errors.id
+                    ? 'border-rose-500 ring-1 ring-rose-500/50 bg-rose-950/20'
+                    : 'border-edge-40'
+                } focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors`}
+                id="input-student-id"
               />
+
+              {/* Prominent Duplicate ID Warning Message */}
+              {duplicateStudentConflict ? (
+                <div className="mt-1.5 p-2 rounded-lg bg-rose-950/40 border border-rose-500/40 flex items-start gap-1.5 text-rose-300 text-[11px]">
+                  <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Conflict:</strong> Student ID is already assigned to <strong>{duplicateStudentConflict.name}</strong> ({duplicateStudentConflict.class} - Sec {duplicateStudentConflict.section}). Please choose a unique ID.
+                  </span>
+                </div>
+              ) : errors.id ? (
+                <p className="text-rose-400 text-[11px] mt-1">{errors.id}</p>
+              ) : null}
             </div>
           </div>
         </div>
 
         {/* ========================================================================= */}
-        {/* SECTION 2: ACADEMIC DETAILS & STRICT UNIQUE STUDENT ID ENFORCEMENT       */}
+        {/* SECTION 2: ACADEMIC INFORMATION                                           */}
         {/* ========================================================================= */}
         <div className="bg-surface-16 border border-[#212b3e] rounded-2xl p-6 shadow-xl space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-[#212d42]">
             <div className="flex items-center gap-2">
               <School className="w-4 h-4 text-purple-400" />
-              <h2 className="text-sm font-bold text-white">Academic Details</h2>
+              <h2 className="text-sm font-bold text-white">Academic Information</h2>
             </div>
             {availableClassNames.length === 0 && onNavigateClasses && (
               <button
@@ -659,50 +774,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* Student ID / Roll Number (STRICTLY UNIQUE) */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-semibold text-slate-300">
-                  Student ID <span className="text-rose-400">*</span>
-                </label>
-                {duplicateStudentConflict && (
-                  <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/30">
-                    ID Already Taken
-                  </span>
-                )}
-              </div>
-              <input
-                type="text"
-                value={formData.id || ''}
-                onChange={(e) => {
-                  setFormData({ ...formData, id: e.target.value });
-                  if (errors.id) {
-                    setErrors(prev => { const n = { ...prev }; delete n.id; return n; });
-                  }
-                }}
-                placeholder="e.g. S-00101"
-                className={`w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 font-mono border ${
-                  duplicateStudentConflict || errors.id 
-                    ? 'border-rose-500 ring-1 ring-rose-500/50 bg-rose-950/20' 
-                    : 'border-edge-40'
-                } focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors`}
-                id="input-student-id"
-              />
-
-              {/* Prominent Duplicate ID Warning Message */}
-              {duplicateStudentConflict ? (
-                <div className="mt-1.5 p-2 rounded-lg bg-rose-950/40 border border-rose-500/40 flex items-start gap-1.5 text-rose-300 text-[11px]">
-                  <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
-                  <span>
-                    <strong>Conflict:</strong> Student ID is already assigned to <strong>{duplicateStudentConflict.name}</strong> ({duplicateStudentConflict.class} - Sec {duplicateStudentConflict.section}). Please choose a unique ID.
-                  </span>
-                </div>
-              ) : errors.id ? (
-                <p className="text-rose-400 text-[11px] mt-1">{errors.id}</p>
-              ) : null}
-            </div>
-
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Class Selection Dropdown — Strictly Available Classes Only */}
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1.5">
@@ -777,6 +849,71 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
               </div>
               {errors.section && <p className="text-rose-400 text-[11px] mt-1">{errors.section}</p>}
             </div>
+
+            {/* Roll No */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Roll No
+              </label>
+              <input
+                type="text"
+                value={formData.rollNo || ''}
+                onChange={(e) => setFormData({ ...formData, rollNo: e.target.value })}
+                placeholder="e.g. 12"
+                className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                id="input-student-rollNo"
+              />
+            </div>
+
+            {/* Status Dropdown */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Enrollment Status
+              </label>
+              <div className="relative">
+                <select
+                  value={formData.status || 'Active'}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value as StudentStatus })}
+                  className="w-full appearance-none bg-surface-36 border border-edge-40 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 pr-10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors cursor-pointer"
+                  id="input-student-status"
+                >
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+                <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Admission Date */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Admission Date
+              </label>
+              <input
+                type="date"
+                value={formData.admissionDate || ''}
+                onChange={(e) => setFormData({ ...formData, admissionDate: e.target.value })}
+                className="w-full bg-surface-36 border border-edge-40 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                id="input-student-admission-date"
+              />
+            </div>
+
+            {/* New Admission Toggle */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                New Admission
+              </label>
+              <label className="flex items-center gap-2.5 w-full bg-surface-36 border border-edge-40 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!formData.isNewAdmission}
+                  onChange={(e) => setFormData({ ...formData, isNewAdmission: e.target.checked })}
+                  className="w-4 h-4 accent-blue-600 cursor-pointer"
+                  id="input-student-isNewAdmission"
+                />
+                <span>New Admission</span>
+              </label>
+            </div>
           </div>
         </div>
 
@@ -787,7 +924,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#212d42]">
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-sky-400" />
-              <h2 className="text-sm font-bold text-white">Guardian & Family Details</h2>
+              <h2 className="text-sm font-bold text-white">Guardian & Family</h2>
             </div>
 
             {/* Mode Toggle: Existing Family vs New Family */}
@@ -921,7 +1058,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
             {/* Mandatory Emergency Contact Phone */}
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Emergency Phone Number <span className="text-rose-400">*</span>
+                Phone <span className="text-rose-400">*</span>
               </label>
               <div className="relative">
                 <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -985,6 +1122,422 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
                     Generate New Unique Family Code
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ========================================================================= */}
+        {/* SECTION 4: CONTACT DETAILS (COLLAPSIBLE)                                  */}
+        {/* ========================================================================= */}
+        <div className="bg-surface-16 border border-[#212b3e] rounded-2xl p-6 shadow-xl space-y-4">
+          <button
+            type="button"
+            onClick={() => toggleSection('contact')}
+            className="w-full flex items-center justify-between pb-3 border-b border-[#212d42] cursor-pointer"
+            id="toggle-section-contact"
+          >
+            <span className="flex items-center gap-2">
+              <Phone className="w-4 h-4 text-cyan-400" />
+              <span className="text-sm font-bold text-white">Contact Details</span>
+            </span>
+            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${openSections.contact ? 'rotate-180' : ''}`} />
+          </button>
+
+          {openSections.contact && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* WhatsApp */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  WhatsApp
+                </label>
+                <input
+                  type="tel"
+                  value={formData.whatsapp || ''}
+                  onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })}
+                  placeholder="+92 300 1234567"
+                  className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  id="input-student-whatsapp"
+                />
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={formData.email || ''}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="e.g. guardian@example.com"
+                  className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  id="input-student-email"
+                />
+              </div>
+
+              {/* Emergency Contact (binds emergencyContact only) */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Emergency Contact
+                </label>
+                <input
+                  type="tel"
+                  value={formData.emergencyContact || ''}
+                  onChange={(e) => {
+                    setFormData({ ...formData, emergencyContact: e.target.value });
+                    if (errors.emergencyContact) {
+                      setErrors(prev => { const n = { ...prev }; delete n.emergencyContact; return n; });
+                    }
+                  }}
+                  placeholder="+92 300 1234567"
+                  className={`w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border ${
+                    errors.emergencyContact ? 'border-rose-500' : 'border-edge-40'
+                  } focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors`}
+                  id="input-student-emergencyContact"
+                />
+                {errors.emergencyContact && (
+                  <p className="text-rose-400 text-[11px] mt-1 font-medium">{errors.emergencyContact}</p>
+                )}
+              </div>
+
+              {/* Address */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Address
+                </label>
+                <input
+                  type="text"
+                  value={formData.address || ''}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  placeholder="e.g. House 12, Street 3, Lahore"
+                  className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  id="input-student-address"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ========================================================================= */}
+        {/* SECTION 5: PARENTS & GUARDIAN DETAILS (COLLAPSIBLE)                       */}
+        {/* ========================================================================= */}
+        <div className="bg-surface-16 border border-[#212b3e] rounded-2xl p-6 shadow-xl space-y-4">
+          <button
+            type="button"
+            onClick={() => toggleSection('parents')}
+            className="w-full flex items-center justify-between pb-3 border-b border-[#212d42] cursor-pointer"
+            id="toggle-section-parents"
+          >
+            <span className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-amber-400" />
+              <span className="text-sm font-bold text-white">Parents & Guardian Details</span>
+            </span>
+            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${openSections.parents ? 'rotate-180' : ''}`} />
+          </button>
+
+          {openSections.parents && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Father Name */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Father Name
+                </label>
+                <input
+                  type="text"
+                  value={formData.fatherName || ''}
+                  onChange={(e) => setFormData({ ...formData, fatherName: e.target.value })}
+                  placeholder="e.g. Tariq Mehmood"
+                  className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  id="input-student-fatherName"
+                />
+              </div>
+
+              {/* Mother Name */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Mother Name
+                </label>
+                <input
+                  type="text"
+                  value={formData.motherName || ''}
+                  onChange={(e) => setFormData({ ...formData, motherName: e.target.value })}
+                  placeholder="e.g. Fatima Tariq"
+                  className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  id="input-student-motherName"
+                />
+              </div>
+
+              {/* Guardian CNIC */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Guardian CNIC
+                </label>
+                <input
+                  type="text"
+                  value={formData.guardianCnic || ''}
+                  onChange={(e) => setFormData({ ...formData, guardianCnic: e.target.value })}
+                  placeholder="e.g. 35202-1234567-1"
+                  className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  id="input-student-guardianCnic"
+                />
+              </div>
+
+              {/* Guardian Occupation */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Guardian Occupation
+                </label>
+                <input
+                  type="text"
+                  value={formData.guardianOccupation || ''}
+                  onChange={(e) => setFormData({ ...formData, guardianOccupation: e.target.value })}
+                  placeholder="e.g. Teacher"
+                  className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  id="input-student-guardianOccupation"
+                />
+              </div>
+
+              {/* Mother CNIC */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Mother CNIC
+                </label>
+                <input
+                  type="text"
+                  value={formData.motherCnic || ''}
+                  onChange={(e) => setFormData({ ...formData, motherCnic: e.target.value })}
+                  placeholder="e.g. 35202-1234567-2"
+                  className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  id="input-student-motherCnic"
+                />
+              </div>
+
+              {/* Mother Occupation */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Mother Occupation
+                </label>
+                <input
+                  type="text"
+                  value={formData.motherOccupation || ''}
+                  onChange={(e) => setFormData({ ...formData, motherOccupation: e.target.value })}
+                  placeholder="e.g. Housewife"
+                  className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  id="input-student-motherOccupation"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ========================================================================= */}
+        {/* SECTION 6: PERSONAL & BACKGROUND (COLLAPSIBLE)                            */}
+        {/* ========================================================================= */}
+        <div className="bg-surface-16 border border-[#212b3e] rounded-2xl p-6 shadow-xl space-y-4">
+          <button
+            type="button"
+            onClick={() => toggleSection('background')}
+            className="w-full flex items-center justify-between pb-3 border-b border-[#212d42] cursor-pointer"
+            id="toggle-section-background"
+          >
+            <span className="flex items-center gap-2">
+              <User className="w-4 h-4 text-teal-400" />
+              <span className="text-sm font-bold text-white">Personal & Background</span>
+            </span>
+            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${openSections.background ? 'rotate-180' : ''}`} />
+          </button>
+
+          {openSections.background && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Student CNIC / B-Form */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Student CNIC / B-Form
+                </label>
+                <input
+                  type="text"
+                  value={formData.cnic || ''}
+                  onChange={(e) => setFormData({ ...formData, cnic: e.target.value })}
+                  placeholder="e.g. 35202-1234567-3"
+                  className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  id="input-student-cnic"
+                />
+              </div>
+
+              {/* Religion */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Religion
+                </label>
+                <input
+                  type="text"
+                  value={formData.religion || ''}
+                  onChange={(e) => setFormData({ ...formData, religion: e.target.value })}
+                  placeholder="e.g. Islam"
+                  className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  id="input-student-religion"
+                />
+              </div>
+
+              {/* Caste */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Caste
+                </label>
+                <input
+                  type="text"
+                  value={formData.caste || ''}
+                  onChange={(e) => setFormData({ ...formData, caste: e.target.value })}
+                  placeholder="e.g. Rajput"
+                  className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  id="input-student-caste"
+                />
+              </div>
+
+              {/* Previous School */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Previous School
+                </label>
+                <input
+                  type="text"
+                  value={formData.previousSchool || ''}
+                  onChange={(e) => setFormData({ ...formData, previousSchool: e.target.value })}
+                  placeholder="e.g. City School"
+                  className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  id="input-student-previousSchool"
+                />
+              </div>
+
+              {/* Previous Class */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Previous Class
+                </label>
+                <input
+                  type="text"
+                  value={formData.previousClass || ''}
+                  onChange={(e) => setFormData({ ...formData, previousClass: e.target.value })}
+                  placeholder="e.g. Class 5"
+                  className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  id="input-student-previousClass"
+                />
+              </div>
+
+              {/* Previous Result */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Previous Result
+                </label>
+                <input
+                  type="text"
+                  value={formData.previousResult || ''}
+                  onChange={(e) => setFormData({ ...formData, previousResult: e.target.value })}
+                  placeholder="e.g. Passed / 85%"
+                  className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  id="input-student-previousResult"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ========================================================================= */}
+        {/* SECTION 7: FEES & OTHER INFORMATION (COLLAPSIBLE)                         */}
+        {/* ========================================================================= */}
+        <div className="bg-surface-16 border border-[#212b3e] rounded-2xl p-6 shadow-xl space-y-4">
+          <button
+            type="button"
+            onClick={() => toggleSection('fees')}
+            className="w-full flex items-center justify-between pb-3 border-b border-[#212d42] cursor-pointer"
+            id="toggle-section-fees"
+          >
+            <span className="flex items-center gap-2">
+              <Wallet className="w-4 h-4 text-emerald-400" />
+              <span className="text-sm font-bold text-white">Fees & Other Information</span>
+            </span>
+            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${openSections.fees ? 'rotate-180' : ''}`} />
+          </button>
+
+          {openSections.fees && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Admission Fee */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Admission Fee
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={formData.admissionFee ?? ''}
+                  onChange={(e) => setFormData({ ...formData, admissionFee: e.target.value })}
+                  placeholder="e.g. 5000"
+                  className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  id="input-student-admissionFee"
+                />
+              </div>
+
+              {/* Class Fee */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Class Fee
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={formData.classFee ?? ''}
+                  onChange={(e) => setFormData({ ...formData, classFee: e.target.value })}
+                  placeholder="e.g. 3000"
+                  className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  id="input-student-classFee"
+                />
+                <p className="text-slate-500 text-[11px] mt-1">Leave empty to use the class fee</p>
+              </div>
+
+              {/* Discount */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Discount
+                </label>
+                <input
+                  type="text"
+                  value={formData.discount || ''}
+                  onChange={(e) => setFormData({ ...formData, discount: e.target.value })}
+                  placeholder="e.g. 10% or 500"
+                  className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  id="input-student-discount"
+                />
+              </div>
+
+              {/* Reference */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Reference
+                </label>
+                <input
+                  type="text"
+                  value={formData.reference || ''}
+                  onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
+                  placeholder="e.g. Referred by staff / parent"
+                  className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  id="input-student-reference"
+                />
+              </div>
+
+              {/* Note */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Note
+                </label>
+                <input
+                  type="text"
+                  value={formData.note || ''}
+                  onChange={(e) => setFormData({ ...formData, note: e.target.value })}
+                  placeholder="Any additional note"
+                  className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  id="input-student-note"
+                />
               </div>
             </div>
           )}
