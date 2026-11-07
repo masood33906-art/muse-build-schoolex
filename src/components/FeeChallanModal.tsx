@@ -72,6 +72,11 @@ export const FeeChallanModal: React.FC<FeeChallanModalProps> = ({
 
   const bankSettings = useMemo(() => schoolSettings || getBankSettings(), [isOpen, schoolSettings]);
   const isCompact2Copy = bankSettings.feeChallanTemplate === 'compact-2copy';
+  // 'minimal-professional' keeps the STANDARD 3-copy structure — it is
+  // deliberately NOT compact (never the 2-copy branch) — but renders
+  // with strict black & white styling only (see the dedicated branch
+  // inside the challan-sheet map below).
+  const isMinimalProfessional = bankSettings.feeChallanTemplate === 'minimal-professional';
 
   const name = propName || student?.name || 'Student';
   const idNumber = propIdNumber || student?.id || 'S-0101';
@@ -105,6 +110,10 @@ export const FeeChallanModal: React.FC<FeeChallanModalProps> = ({
     window.print();
   };
 
+  // Copy count: only 'compact-2copy' gets 2 copies. Both 'standard-3copy'
+  // and 'minimal-professional' get the full 3 copies (School / Bank /
+  // Student) — minimal-professional changes presentation only, never
+  // the copy structure.
   const copyLabels = isCompact2Copy
     ? ['SCHOOL/COLLEGE COPY', 'STUDENT COPY']
     : ['SCHOOL/COLLEGE COPY', 'BANK COPY', 'STUDENT COPY'];
@@ -157,7 +166,7 @@ export const FeeChallanModal: React.FC<FeeChallanModalProps> = ({
             </div>
             <div>
               <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                Fee Challan Slip ({isCompact2Copy ? '2-Copy Voucher' : '3-Copy Bank Voucher'})
+                Fee Challan Slip ({isCompact2Copy ? '2-Copy Voucher' : isMinimalProfessional ? '3-Copy Minimal Professional Voucher' : '3-Copy Bank Voucher'})
                 <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
                   {itemsToRender.length > 1 ? `${itemsToRender.length} Challans` : activeChallanNo}
                 </span>
@@ -165,7 +174,9 @@ export const FeeChallanModal: React.FC<FeeChallanModalProps> = ({
               <p className="text-[11px] text-slate-400">
                 {isCompact2Copy
                   ? 'School & Student copies side-by-side on 1 sheet of paper'
-                  : 'School, Bank & Student copies side-by-side on 1 sheet of paper'}
+                  : isMinimalProfessional
+                    ? 'School, Bank & Student copies side-by-side on 1 sheet of paper — black & white, no colour'
+                    : 'School, Bank & Student copies side-by-side on 1 sheet of paper'}
               </p>
             </div>
           </div>
@@ -246,6 +257,201 @@ export const FeeChallanModal: React.FC<FeeChallanModalProps> = ({
             const lateFine = bankSettings.lateFineAmount ?? 500;
             const totalAfterDue = totalWithinDue + lateFine;
             const inWords = numberToWordsPKR(totalWithinDue);
+
+            // ── minimal-professional template ──────────────────────────
+            // Same 3-copy structure and EVERY field as the standard
+            // challan above/below — presentation only: strict black &
+            // white (black text, thin black borders/dividers, white
+            // background; no coloured fills, no background fills, no
+            // gradients, no icons/decoration), hierarchy via font
+            // weight/size/alignment only. The only non-black/white
+            // values used here are Tailwind's neutral `gray-*` shades.
+            if (isMinimalProfessional) {
+              return (
+                <div
+                  key={item.challanNo + '-' + itemIdx}
+                  className="bg-white text-black border border-black shadow-md p-2 print:shadow-none print:border-none print:p-0 page-break-challan"
+                >
+                  {/* 3 Copies Side-by-Side on 1 Sheet of Paper */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[10px] leading-tight font-sans">
+                    {copyLabels.map((copyLabel, idx) => (
+                      <div
+                        key={copyLabel}
+                        className={`relative border border-black p-2.5 flex flex-col justify-between bg-white ${
+                          idx < copyLabels.length - 1 ? 'border-r-black' : ''
+                        }`}
+                      >
+                        <div>
+                          {/* Copy Label Tag — outlined, no fill */}
+                          <div className="mb-1 flex items-center justify-between">
+                            <span className="text-[7.5px] font-black uppercase tracking-wider px-1.5 py-0.5 border border-black text-black">
+                              {copyLabel}
+                            </span>
+                          </div>
+
+                          {/* School & Bank Header — text only, no crest/icon */}
+                          <div className="flex items-start justify-between gap-2 pb-1 border-b border-black">
+                            {/* School logo, when the school has one,
+                                rendered in grayscale to stay B&W */}
+                            {bankSettings.schoolLogo && (
+                              <div className="w-8 h-8 flex items-center justify-center shrink-0 overflow-hidden">
+                                <img src={bankSettings.schoolLogo} alt="Logo" className="w-full h-full object-contain grayscale" />
+                              </div>
+                            )}
+
+                            {/* School Details */}
+                            <div className="text-center flex-1">
+                              <h3 className="font-extrabold text-[10.5px] uppercase tracking-tight text-black leading-none">
+                                {bankSettings.schoolName || 'DEMO SCHOOL SCHOOLIEE PAKISTAN'}
+                              </h3>
+                              {bankSettings.schoolPhone && (
+                                <p className="text-[8px] text-black font-semibold mt-0.5">
+                                  Phone Number : {bankSettings.schoolPhone}
+                                </p>
+                              )}
+                              <p className="text-[7.5px] text-gray-600">
+                                {bankSettings.schoolAddress || 'Faisalabad, Punjab, Pakistan'}
+                              </p>
+                            </div>
+
+                            {/* Bank Name */}
+                            <div className="text-right shrink-0">
+                              <div className="inline-flex items-center text-black font-bold text-[10px] tracking-tight uppercase">
+                                {bankSettings.bankName || 'Meezan Bank'}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Bank Account Info Strip */}
+                          <div className="pt-1 pb-1 text-[7.5px] text-black border-b border-gray-400 leading-tight">
+                            <p className="font-bold text-black">
+                              {bankSettings.bankName || 'Meezan Bank'} — Branch: {bankSettings.branchCode || '0214'}
+                            </p>
+                            <p className="text-gray-600 truncate">
+                              {bankSettings.branchName || 'Main Boulevard Branch, Lahore'}
+                            </p>
+                            <p className="font-bold text-black">
+                              Account No: <span className="font-mono text-[8px]">{bankSettings.accountNumber || '0214-0103492811'}</span>
+                            </p>
+                          </div>
+
+                          {/* Particulars 2-Column Key-Value Table */}
+                          <table className="w-full text-left text-[8px] border-collapse my-1">
+                            <tbody>
+                              <tr className="border-b border-gray-300">
+                                <td className="py-0.5 text-gray-700 font-medium w-[45%]">Challan Form No</td>
+                                <td className="py-0.5 font-bold font-mono text-black">{item.challanNo}</td>
+                              </tr>
+                              <tr className="border-b border-gray-300">
+                                <td className="py-0.5 text-gray-700 font-medium">Due Date</td>
+                                <td className="py-0.5 font-bold text-black">{item.dueDate}</td>
+                              </tr>
+                              <tr className="border-b border-gray-300">
+                                <td className="py-0.5 text-gray-700 font-medium">Voucher Validity</td>
+                                <td className="py-0.5 font-bold text-black">{item.validityDate}</td>
+                              </tr>
+                              <tr className="border-b border-gray-300">
+                                <td className="py-0.5 text-gray-700 font-medium">Student Reg No</td>
+                                <td className="py-0.5 font-bold font-mono text-black">{item.idNumber}</td>
+                              </tr>
+                              <tr className="border-b border-gray-300">
+                                <td className="py-0.5 text-gray-700 font-medium">Student Name</td>
+                                <td className="py-0.5 font-bold text-black">{item.name} ({item.idNumber})</td>
+                              </tr>
+                              <tr className="border-b border-gray-300">
+                                <td className="py-0.5 text-gray-700 font-medium">Father Name</td>
+                                <td className="py-0.5 font-bold text-black">{item.fatherName}</td>
+                              </tr>
+                              <tr className="border-b border-gray-300">
+                                <td className="py-0.5 text-gray-700 font-medium">Class</td>
+                                <td className="py-0.5 font-bold text-black">{item.className} - {item.section}</td>
+                              </tr>
+                              <tr className="border-b border-gray-300">
+                                <td className="py-0.5 text-gray-700 font-medium">Family Number</td>
+                                <td className="py-0.5 font-bold font-mono text-black">{item.family}</td>
+                              </tr>
+                              <tr className="border-b border-gray-300">
+                                <td className="py-0.5 text-gray-700 font-medium">Depositor NIC Number</td>
+                                <td className="py-0.5 text-gray-700">-</td>
+                              </tr>
+                              <tr className="border-b border-gray-300">
+                                <td className="py-0.5 text-gray-700 font-medium">Depositor Phone Number</td>
+                                <td className="py-0.5 text-gray-700">{item.phone}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+
+                          {/* Description & Amount Table — bordered, no header fill */}
+                          <table className="w-full text-left text-[8px] border border-black border-collapse mt-1">
+                            <thead>
+                              <tr className="border-b border-black text-[8px] font-bold uppercase text-black">
+                                <th className="py-1 px-1.5 border-r border-black">DESCRIPTION</th>
+                                <th className="py-1 px-1.5 text-right">AMOUNT</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-300">
+                              <tr>
+                                <td className="py-0.5 px-1.5 border-r border-black text-black">
+                                  {feePeriodOf(item.feeRange, item.issueDate)} Fee
+                                </td>
+                                <td className="py-0.5 px-1.5 text-right font-medium text-black">
+                                  {tuitionAmount.toLocaleString()} PKR
+                                </td>
+                              </tr>
+                              <tr>
+                                <td className="py-0.5 px-1.5 border-r border-black text-black">
+                                  Fine - Pending Dues
+                                </td>
+                                <td className="py-0.5 px-1.5 text-right font-medium text-black">
+                                  {fineAmount.toLocaleString()} PKR
+                                </td>
+                              </tr>
+
+                              {/* Summary Rows */}
+                              <tr className="border-t border-black font-bold">
+                                <td className="py-1 px-1.5 border-r border-black text-black">
+                                  Fee Within Due Date ( Till {item.dueDate} )
+                                </td>
+                                <td className="py-1 px-1.5 text-right text-black font-black">
+                                  {totalWithinDue.toLocaleString()} PKR
+                                </td>
+                              </tr>
+                              <tr className="font-bold text-black">
+                                <td className="py-1 px-1.5 border-r border-black">
+                                  Fee After Due Date ( From 16-Sep-2026 )
+                                </td>
+                                <td className="py-1 px-1.5 text-right font-black">
+                                  {totalAfterDue.toLocaleString()} PKR
+                                </td>
+                              </tr>
+                              <tr className="font-bold text-black">
+                                <td className="py-0.5 px-1.5 border-r border-black">
+                                  Voucher Validity
+                                </td>
+                                <td className="py-0.5 px-1.5 text-right">
+                                  {item.validityDate}
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+
+                          {/* Amount in words */}
+                          <div className="mt-1.5 text-[7.5px] text-black">
+                            <p>
+                              <span className="font-bold">Amount in words :</span>{' '}
+                              <span className="italic">{inWords}</span>
+                            </p>
+                            <p className="text-black font-bold mt-0.5 text-[7px]">
+                              Note: Please do not accept this voucher after its validity expires.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
 
             return (
               <div 

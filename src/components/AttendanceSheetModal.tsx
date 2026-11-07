@@ -70,6 +70,11 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
     return () => window.removeEventListener('schoolSettingsUpdated', handleSettingsChange);
   }, []);
   const isCompactMono = liveSettings.attendanceRegisterTemplate === 'compact-monochrome';
+  // minimal-professional: FULL register structure (same columns/fields as
+  // official-weekly) rendered in strict black & white only — black text,
+  // thin black borders, white background, no fills and no colour-coded
+  // status badges. It is deliberately NOT routed through the compact layout.
+  const isMinimalProfessional = liveSettings.attendanceRegisterTemplate === 'minimal-professional';
 
   // Sync entity type when initialEntityType changes
   React.useEffect(() => {
@@ -542,122 +547,122 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
             {/* Printable Preview Paper Container (Landscape oriented view) */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-900/70 print:p-0 print:bg-white print:overflow-visible">
               <div 
-                className="bg-white text-slate-900 rounded-xl shadow-2xl p-6 sm:p-8 max-w-6xl mx-auto border border-slate-200 print:border-none print:shadow-none print:p-0 print:max-w-none print:w-full font-sans"
+                className={`bg-white rounded-xl shadow-2xl max-w-6xl mx-auto border print:border-none print:shadow-none print:p-0 print:max-w-none print:w-full font-sans ${isMinimalProfessional ? 'text-black border-black p-5 sm:p-6' : 'text-slate-900 border-slate-200 p-6 sm:p-8'}`}
                 id="printable-attendance-sheet"
               >
                 {/* School Header */}
-                <div className="border-b-2 border-slate-900 pb-3 mb-4 text-center relative">
+                <div className={`text-center relative ${isMinimalProfessional ? 'border-b border-black pb-3 mb-3' : 'border-b-2 border-slate-900 pb-3 mb-4'}`}>
                   <div className="flex items-center justify-center gap-2 mb-1">
                     {liveSettings.schoolLogo ? (
-                      <img src={liveSettings.schoolLogo} alt={schoolInfo.name} className="w-8 h-8 rounded-lg object-contain border border-slate-200 p-0.5" />
+                      <img src={liveSettings.schoolLogo} alt={schoolInfo.name} className={`w-8 h-8 object-contain border p-0.5 ${isMinimalProfessional ? 'border-black' : 'rounded-lg border-slate-200'}`} />
                     ) : (
-                      <div className={`w-8 h-8 rounded-lg text-white flex items-center justify-center font-black text-sm shadow-sm ${isCompactMono ? 'bg-black' : 'bg-blue-950'}`}>
+                      <div className={isMinimalProfessional ? 'w-8 h-8 border border-black text-black flex items-center justify-center font-black text-sm' : `w-8 h-8 rounded-lg text-white flex items-center justify-center font-black text-sm shadow-sm ${isCompactMono ? 'bg-black' : 'bg-blue-950'}`}>
                         SCH
                       </div>
                     )}
-                    <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-950 uppercase">
+                    <h1 className={`text-xl sm:text-2xl font-black tracking-tight uppercase ${isMinimalProfessional ? 'text-black' : 'text-slate-950'}`}>
                       {schoolInfo.name}
                     </h1>
                   </div>
-                  <p className="text-xs text-slate-600 mt-0.5 font-medium">
+                  <p className={`text-xs mt-0.5 font-medium ${isMinimalProfessional ? 'text-black' : 'text-slate-600'}`}>
                     {schoolInfo.campus} • {schoolInfo.address} • Contact: {schoolInfo.phone}
                   </p>
                   <div className="mt-2.5 flex items-center justify-center gap-2">
-                    <div className={`inline-block px-4 py-1 rounded shadow-sm ${isCompactMono ? 'bg-white border-2 border-black text-black' : 'bg-slate-900 text-white'}`}>
+                    <div className={isMinimalProfessional ? 'inline-block px-4 py-1 border border-black text-black' : `inline-block px-4 py-1 rounded shadow-sm ${isCompactMono ? 'bg-white border-2 border-black text-black' : 'bg-slate-900 text-white'}`}>
                       <span className="text-xs font-bold tracking-wider uppercase">
                         OFFICIAL WEEKLY ATTENDANCE REGISTER ({entityType === 'student' ? 'STUDENTS' : 'STAFF'})
                       </span>
                     </div>
-                    <span className="px-2.5 py-1 rounded bg-slate-100 border border-slate-300 text-[10px] font-bold text-slate-700">
+                    <span className={isMinimalProfessional ? 'px-2.5 py-1 border border-black text-[10px] font-bold text-black' : 'px-2.5 py-1 rounded bg-slate-100 border border-slate-300 text-[10px] font-bold text-slate-700'}>
                       SESSION {liveSettings.session || '2026-2027'}
                     </span>
                   </div>
                 </div>
 
                 {/* Metadata Row with Overall Numbers */}
-                <div className={`grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 text-xs mb-3 ${isCompactMono ? 'bg-white border border-black' : 'bg-slate-50 border border-slate-200 rounded-lg'}`}>
+                <div className={`grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 text-xs mb-3 ${isMinimalProfessional ? 'border border-black' : isCompactMono ? 'bg-white border border-black' : 'bg-slate-50 border border-slate-200 rounded-lg'}`}>
                   <div>
-                    <span className="text-slate-500 block text-[10px] uppercase font-bold">Week Period</span>
-                    <span className="font-bold text-slate-900">{weekRangeLabel}</span>
+                    <span className={`block text-[10px] uppercase font-bold ${isMinimalProfessional ? 'text-black' : 'text-slate-500'}`}>Week Period</span>
+                    <span className={`font-bold ${isMinimalProfessional ? 'text-black' : 'text-slate-900'}`}>{weekRangeLabel}</span>
                   </div>
                   <div>
-                    <span className="text-slate-500 block text-[10px] uppercase font-bold">Scope / Entity</span>
-                    <span className="font-bold text-slate-900">{scopeLabel}</span>
+                    <span className={`block text-[10px] uppercase font-bold ${isMinimalProfessional ? 'text-black' : 'text-slate-500'}`}>Scope / Entity</span>
+                    <span className={`font-bold ${isMinimalProfessional ? 'text-black' : 'text-slate-900'}`}>{scopeLabel}</span>
                   </div>
                   <div>
-                    <span className="text-slate-500 block text-[10px] uppercase font-bold">Total Enrolled</span>
-                    <span className="font-bold text-blue-700">{memberSummaries.length} Members</span>
+                    <span className={`block text-[10px] uppercase font-bold ${isMinimalProfessional ? 'text-black' : 'text-slate-500'}`}>Total Enrolled</span>
+                    <span className={`font-bold ${isMinimalProfessional ? 'text-black' : 'text-blue-700'}`}>{memberSummaries.length} Members</span>
                   </div>
                   <div>
-                    <span className="text-slate-500 block text-[10px] uppercase font-bold">Week Attendance Rate</span>
-                    <span className="font-extrabold text-emerald-700">{totals.averageRate}% Avg</span>
+                    <span className={`block text-[10px] uppercase font-bold ${isMinimalProfessional ? 'text-black' : 'text-slate-500'}`}>Week Attendance Rate</span>
+                    <span className={`font-extrabold ${isMinimalProfessional ? 'text-black' : 'text-emerald-700'}`}>{totals.averageRate}% Avg</span>
                   </div>
                 </div>
 
                 {/* Status Key / Legend Box */}
-                <div className={`flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-[11px] mb-4 ${isCompactMono ? 'bg-neutral-100 border border-black' : 'bg-slate-100 border border-slate-200 rounded-lg'}`}>
-                  <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                <div className={`flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-[11px] mb-4 ${isMinimalProfessional ? 'border border-black text-black' : isCompactMono ? 'bg-neutral-100 border border-black' : 'bg-slate-100 border border-slate-200 rounded-lg'}`}>
+                  <div className={`flex items-center gap-1.5 font-bold ${isMinimalProfessional ? 'text-black' : 'text-slate-800'}`}>
                     <span>Attendance Status Codes:</span>
                   </div>
                   <div className="flex items-center flex-wrap gap-2.5 sm:gap-4">
-                    <span className="flex items-center gap-1.5"><strong className="inline-block w-5 py-0.5 text-center rounded bg-emerald-100 border border-emerald-300 text-emerald-800 text-[10px] font-black">P</strong> Present</span>
-                    <span className="flex items-center gap-1.5"><strong className="inline-block w-5 py-0.5 text-center rounded bg-cyan-100 border border-cyan-300 text-cyan-800 text-[10px] font-black">L</strong> Late</span>
-                    <span className="flex items-center gap-1.5"><strong className="inline-block w-5 py-0.5 text-center rounded bg-red-100 border border-red-300 text-red-800 text-[10px] font-black">A</strong> Absent</span>
-                    <span className="flex items-center gap-1.5"><strong className="inline-block w-5 py-0.5 text-center rounded bg-amber-100 border border-amber-300 text-amber-800 text-[10px] font-black">Lv</strong> Leave</span>
-                    <span className="flex items-center gap-1.5"><strong className="inline-block w-5 py-0.5 text-center rounded bg-slate-200 border border-slate-300 text-slate-600 text-[10px] font-black">-</strong> Not Marked</span>
+                    <span className="flex items-center gap-1.5"><strong className={`inline-block w-5 py-0.5 text-center border text-[10px] font-black ${isMinimalProfessional ? 'border-black text-black' : 'rounded bg-emerald-100 border-emerald-300 text-emerald-800'}`}>P</strong> Present</span>
+                    <span className="flex items-center gap-1.5"><strong className={`inline-block w-5 py-0.5 text-center border text-[10px] font-black ${isMinimalProfessional ? 'border-black text-black' : 'rounded bg-cyan-100 border-cyan-300 text-cyan-800'}`}>L</strong> Late</span>
+                    <span className="flex items-center gap-1.5"><strong className={`inline-block w-5 py-0.5 text-center border text-[10px] font-black ${isMinimalProfessional ? 'border-black text-black' : 'rounded bg-red-100 border-red-300 text-red-800'}`}>A</strong> Absent</span>
+                    <span className="flex items-center gap-1.5"><strong className={`inline-block w-5 py-0.5 text-center border text-[10px] font-black ${isMinimalProfessional ? 'border-black text-black' : 'rounded bg-amber-100 border-amber-300 text-amber-800'}`}>Lv</strong> Leave</span>
+                    <span className="flex items-center gap-1.5"><strong className={`inline-block w-5 py-0.5 text-center border text-[10px] font-black ${isMinimalProfessional ? 'border-black text-black' : 'rounded bg-slate-200 border-slate-300 text-slate-600'}`}>-</strong> Not Marked</span>
                   </div>
-                  <div className="text-[10px] text-slate-500 font-medium">
+                  <div className={`text-[10px] font-medium ${isMinimalProfessional ? 'text-black' : 'text-slate-500'}`}>
                     Official Institutional Document
                   </div>
                 </div>
 
                 {/* Weekly Attendance Table */}
-                <div className={`overflow-x-auto mb-6 ${isCompactMono ? 'border border-black' : 'border border-slate-300 rounded-lg'}`}>
+                <div className={`overflow-x-auto mb-6 ${isMinimalProfessional ? 'border border-black' : isCompactMono ? 'border border-black' : 'border border-slate-300 rounded-lg'}`}>
                   <table className="w-full text-left border-collapse text-[11px]">
                     <thead>
-                      <tr className={isCompactMono ? "bg-neutral-200 text-black font-bold border-b border-black" : "bg-slate-900 text-white font-semibold"}>
-                        <th className="py-2.5 px-2 text-center border-r border-slate-700 w-8">#</th>
-                        <th className="py-2.5 px-2.5 border-r border-slate-700 w-20">ID</th>
-                        <th className="py-2.5 px-3 border-r border-slate-700">Full Name</th>
-                        <th className="py-2.5 px-2.5 border-r border-slate-700">{entityType === 'student' ? 'Father / Family' : 'Role'}</th>
-                        <th className="py-2.5 px-2.5 text-center border-r border-slate-700">{entityType === 'student' ? 'Class & Sec' : 'Department'}</th>
+                      <tr className={isMinimalProfessional ? "text-black font-bold border-b border-black" : isCompactMono ? "bg-neutral-200 text-black font-bold border-b border-black" : "bg-slate-900 text-white font-semibold"}>
+                        <th className={`text-center border-r w-8 ${isMinimalProfessional ? 'py-2 px-2 border-black' : 'py-2.5 px-2 border-slate-700'}`}>#</th>
+                        <th className={`border-r w-20 ${isMinimalProfessional ? 'py-2 px-2.5 border-black' : 'py-2.5 px-2.5 border-slate-700'}`}>ID</th>
+                        <th className={`border-r ${isMinimalProfessional ? 'py-2 px-3 border-black' : 'py-2.5 px-3 border-slate-700'}`}>Full Name</th>
+                        <th className={`border-r ${isMinimalProfessional ? 'py-2 px-2.5 border-black' : 'py-2.5 px-2.5 border-slate-700'}`}>{entityType === 'student' ? 'Father / Family' : 'Role'}</th>
+                        <th className={`text-center border-r ${isMinimalProfessional ? 'py-2 px-2.5 border-black' : 'py-2.5 px-2.5 border-slate-700'}`}>{entityType === 'student' ? 'Class & Sec' : 'Department'}</th>
                         {/* 7 Days */}
                         {weekDays.map(d => (
-                          <th key={d.date} className="py-2.5 px-1.5 text-center border-r border-slate-700 w-14 font-mono text-[10px]">
+                          <th key={d.date} className={`px-1.5 text-center border-r w-14 font-mono text-[10px] ${isMinimalProfessional ? 'py-2 border-black' : 'py-2.5 border-slate-700'}`}>
                             {d.shortDay}
                           </th>
                         ))}
                         {/* Overall Numbers Columns */}
-                        <th className="py-2.5 px-1.5 text-center border-r border-slate-700 w-10 bg-slate-800 text-emerald-400 font-bold" title="Total Present">P</th>
-                        <th className="py-2.5 px-1.5 text-center border-r border-slate-700 w-10 bg-slate-800 text-red-400 font-bold" title="Total Absent">A</th>
-                        <th className="py-2.5 px-1.5 text-center border-r border-slate-700 w-10 bg-slate-800 text-cyan-400 font-bold" title="Total Late">L</th>
-                        <th className="py-2.5 px-1.5 text-center border-r border-slate-700 w-10 bg-slate-800 text-amber-400 font-bold" title="Total Leave">Lv</th>
-                        <th className="py-2.5 px-2 text-center w-14 bg-slate-800 text-white font-bold" title="Attendance %">Att %</th>
+                        <th className={`px-1.5 text-center border-r w-10 font-bold ${isMinimalProfessional ? 'py-2 border-black text-black' : 'py-2.5 border-slate-700 bg-slate-800 text-emerald-400'}`} title="Total Present">P</th>
+                        <th className={`px-1.5 text-center border-r w-10 font-bold ${isMinimalProfessional ? 'py-2 border-black text-black' : 'py-2.5 border-slate-700 bg-slate-800 text-red-400'}`} title="Total Absent">A</th>
+                        <th className={`px-1.5 text-center border-r w-10 font-bold ${isMinimalProfessional ? 'py-2 border-black text-black' : 'py-2.5 border-slate-700 bg-slate-800 text-cyan-400'}`} title="Total Late">L</th>
+                        <th className={`px-1.5 text-center border-r w-10 font-bold ${isMinimalProfessional ? 'py-2 border-black text-black' : 'py-2.5 border-slate-700 bg-slate-800 text-amber-400'}`} title="Total Leave">Lv</th>
+                        <th className={`px-2 text-center w-14 font-bold ${isMinimalProfessional ? 'py-2 text-black' : 'py-2.5 bg-slate-800 text-white'}`} title="Attendance %">Att %</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200">
+                    <tbody className={`divide-y ${isMinimalProfessional ? 'divide-black' : 'divide-slate-200'}`}>
                       {memberSummaries.length === 0 ? (
                         <tr>
-                          <td colSpan={17} className="py-8 text-center text-slate-500 italic">
+                          <td colSpan={17} className={`py-8 text-center italic ${isMinimalProfessional ? 'text-black' : 'text-slate-500'}`}>
                             No entries found for the selected scope.
                           </td>
                         </tr>
                       ) : (
                         memberSummaries.map((m, idx) => (
-                          <tr key={m.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/70'}>
-                            <td className="py-2 px-2 text-center border-r border-slate-200 font-mono text-slate-500 font-medium">
+                          <tr key={m.id} className={isMinimalProfessional ? 'bg-white' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/70'}>
+                            <td className={`px-2 text-center border-r font-mono font-medium ${isMinimalProfessional ? 'py-1.5 border-black text-black' : 'py-2 border-slate-200 text-slate-500'}`}>
                               {idx + 1}
                             </td>
-                            <td className="py-2 px-2.5 border-r border-slate-200 font-mono font-bold text-blue-900">
+                            <td className={`px-2.5 border-r font-mono font-bold ${isMinimalProfessional ? 'py-1.5 border-black text-black' : 'py-2 border-slate-200 text-blue-900'}`}>
                               {m.id}
                             </td>
-                            <td className="py-2 px-3 border-r border-slate-200 font-bold text-slate-900 whitespace-nowrap">
+                            <td className={`px-3 border-r font-bold whitespace-nowrap ${isMinimalProfessional ? 'py-1.5 border-black text-black' : 'py-2 border-slate-200 text-slate-900'}`}>
                               {m.name}
                             </td>
-                            <td className="py-2 px-2.5 border-r border-slate-200 text-slate-700 whitespace-nowrap">
+                            <td className={`px-2.5 border-r whitespace-nowrap ${isMinimalProfessional ? 'py-1.5 border-black text-black' : 'py-2 border-slate-200 text-slate-700'}`}>
                               {m.secondaryInfo}
                             </td>
-                            <td className="py-2 px-2.5 text-center border-r border-slate-200 text-slate-700 font-medium whitespace-nowrap">
+                            <td className={`px-2.5 text-center border-r font-medium whitespace-nowrap ${isMinimalProfessional ? 'py-1.5 border-black text-black' : 'py-2 border-slate-200 text-slate-700'}`}>
                               {m.groupInfo}
                             </td>
 
@@ -668,14 +673,21 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
                               const status = dayData?.status;
 
                               let badgeClasses = 'text-slate-400';
-                              if (status === 'present') badgeClasses = 'bg-emerald-100 text-emerald-800 font-black border border-emerald-300';
+                              if (isMinimalProfessional) {
+                                // Strict B&W: status is a plain black letter/symbol,
+                                // at most a thin black border — no fill, no colour.
+                                badgeClasses = status && status !== 'not_marked'
+                                  ? 'text-black font-black border border-black'
+                                  : 'text-black';
+                              }
+                              else if (status === 'present') badgeClasses = 'bg-emerald-100 text-emerald-800 font-black border border-emerald-300';
                               else if (status === 'late') badgeClasses = 'bg-cyan-100 text-cyan-800 font-black border border-cyan-300';
                               else if (status === 'absent') badgeClasses = 'bg-red-100 text-red-800 font-black border border-red-300';
                               else if (status === 'leave') badgeClasses = 'bg-amber-100 text-amber-800 font-black border border-amber-300';
 
                               return (
-                                <td key={d.date} className="py-2 px-1 text-center border-r border-slate-200">
-                                  <span className={`inline-block w-6 py-0.5 rounded text-[10px] ${badgeClasses}`}>
+                                <td key={d.date} className={`px-1 text-center border-r ${isMinimalProfessional ? 'py-1.5 border-black' : 'py-2 border-slate-200'}`}>
+                                  <span className={`inline-block w-6 py-0.5 text-[10px] ${isMinimalProfessional ? '' : 'rounded'} ${badgeClasses}`}>
                                     {code}
                                   </span>
                                 </td>
@@ -683,19 +695,19 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
                             })}
 
                             {/* Overall Numbers for this Member */}
-                            <td className="py-2 px-1 text-center border-r border-slate-200 font-bold text-emerald-700">
+                            <td className={`px-1 text-center border-r font-bold ${isMinimalProfessional ? 'py-1.5 border-black text-black' : 'py-2 border-slate-200 text-emerald-700'}`}>
                               {m.totalPresent}
                             </td>
-                            <td className="py-2 px-1 text-center border-r border-slate-200 font-bold text-red-700">
+                            <td className={`px-1 text-center border-r font-bold ${isMinimalProfessional ? 'py-1.5 border-black text-black' : 'py-2 border-slate-200 text-red-700'}`}>
                               {m.totalAbsent}
                             </td>
-                            <td className="py-2 px-1 text-center border-r border-slate-200 font-bold text-cyan-700">
+                            <td className={`px-1 text-center border-r font-bold ${isMinimalProfessional ? 'py-1.5 border-black text-black' : 'py-2 border-slate-200 text-cyan-700'}`}>
                               {m.totalLate}
                             </td>
-                            <td className="py-2 px-1 text-center border-r border-slate-200 font-bold text-amber-700">
+                            <td className={`px-1 text-center border-r font-bold ${isMinimalProfessional ? 'py-1.5 border-black text-black' : 'py-2 border-slate-200 text-amber-700'}`}>
                               {m.totalLeave}
                             </td>
-                            <td className="py-2 px-2 text-center font-black text-slate-900 bg-slate-100/70">
+                            <td className={`px-2 text-center font-black ${isMinimalProfessional ? 'py-1.5 text-black' : 'py-2 text-slate-900 bg-slate-100/70'}`}>
                               {m.attendanceRate}%
                             </td>
                           </tr>
@@ -706,30 +718,30 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
                     {/* Overall Numbers Footer */}
                     {memberSummaries.length > 0 && (
                       <tfoot>
-                        <tr className="bg-slate-100 border-t-2 border-slate-900 font-bold text-[11px] text-slate-900">
-                          <td colSpan={5} className="py-2.5 px-3 border-r border-slate-300 text-right uppercase tracking-wider">
+                        <tr className={isMinimalProfessional ? 'border-t-2 border-black font-bold text-[11px] text-black' : 'bg-slate-100 border-t-2 border-slate-900 font-bold text-[11px] text-slate-900'}>
+                          <td colSpan={5} className={`py-2.5 px-3 border-r text-right uppercase tracking-wider ${isMinimalProfessional ? 'border-black' : 'border-slate-300'}`}>
                             Overall Numbers ({memberSummaries.length} Entries):
                           </td>
                           {/* Total Present per day */}
                           {weekDays.map(d => (
-                            <td key={d.date} className="py-2.5 px-1 text-center border-r border-slate-300 font-mono text-[10px] text-emerald-800">
+                            <td key={d.date} className={`py-2.5 px-1 text-center border-r font-mono text-[10px] ${isMinimalProfessional ? 'border-black text-black' : 'border-slate-300 text-emerald-800'}`}>
                               P: {totals.dayTotals[d.date]?.present || 0}
                             </td>
                           ))}
                           {/* Grand Totals */}
-                          <td className="py-2.5 px-1 text-center border-r border-slate-300 text-emerald-800">
+                          <td className={`py-2.5 px-1 text-center border-r ${isMinimalProfessional ? 'border-black text-black' : 'border-slate-300 text-emerald-800'}`}>
                             {totals.grandPresent}
                           </td>
-                          <td className="py-2.5 px-1 text-center border-r border-slate-300 text-red-800">
+                          <td className={`py-2.5 px-1 text-center border-r ${isMinimalProfessional ? 'border-black text-black' : 'border-slate-300 text-red-800'}`}>
                             {totals.grandAbsent}
                           </td>
-                          <td className="py-2.5 px-1 text-center border-r border-slate-300 text-cyan-800">
+                          <td className={`py-2.5 px-1 text-center border-r ${isMinimalProfessional ? 'border-black text-black' : 'border-slate-300 text-cyan-800'}`}>
                             {totals.grandLate}
                           </td>
-                          <td className="py-2.5 px-1 text-center border-r border-slate-300 text-amber-800">
+                          <td className={`py-2.5 px-1 text-center border-r ${isMinimalProfessional ? 'border-black text-black' : 'border-slate-300 text-amber-800'}`}>
                             {totals.grandLeave}
                           </td>
-                          <td className="py-2.5 px-2 text-center bg-slate-200 text-blue-950 font-black">
+                          <td className={`py-2.5 px-2 text-center font-black ${isMinimalProfessional ? 'text-black' : 'bg-slate-200 text-blue-950'}`}>
                             {totals.averageRate}%
                           </td>
                         </tr>
@@ -739,26 +751,26 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
                 </div>
 
                 {/* Signatures Area */}
-                <div className="pt-6 mt-4 border-t border-slate-300 flex items-center justify-between text-xs text-slate-800">
+                <div className={`pt-6 mt-4 border-t flex items-center justify-between text-xs ${isMinimalProfessional ? 'border-black text-black' : 'border-slate-300 text-slate-800'}`}>
                   <div className="space-y-1 text-center">
-                    <div className="w-52 border-b border-slate-400 pb-1 font-semibold text-slate-900">
+                    <div className={`w-52 border-b pb-1 font-semibold ${isMinimalProfessional ? 'border-black text-black' : 'border-slate-400 text-slate-900'}`}>
                       _______________________
                     </div>
-                    <span className="font-semibold text-[10px] text-slate-600 uppercase">
+                    <span className={`font-semibold text-[10px] uppercase ${isMinimalProfessional ? 'text-black' : 'text-slate-600'}`}>
                       {entityType === 'student' ? 'Class Teacher Signature' : 'Department Incharge Signature'}
                     </span>
                   </div>
 
                   <div className="space-y-1 text-center">
-                    <div className="w-52 border-b border-slate-400 pb-1 font-semibold text-slate-900">
+                    <div className={`w-52 border-b pb-1 font-semibold ${isMinimalProfessional ? 'border-black text-black' : 'border-slate-400 text-slate-900'}`}>
                       _______________________
                     </div>
-                    <span className="font-semibold text-[10px] text-slate-600 uppercase">Principal / Administrator</span>
+                    <span className={`font-semibold text-[10px] uppercase ${isMinimalProfessional ? 'text-black' : 'text-slate-600'}`}>Principal / Administrator</span>
                   </div>
                 </div>
 
                 {/* Footer Note */}
-                <div className="mt-6 text-center text-[10px] text-slate-400">
+                <div className={`mt-6 text-center text-[10px] ${isMinimalProfessional ? 'text-black' : 'text-slate-400'}`}>
                   Weekly Attendance Register • Generated via Schooliee Management System • Official Record
                 </div>
               </div>

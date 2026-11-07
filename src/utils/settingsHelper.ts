@@ -1,12 +1,12 @@
 import { loadJSON, saveJSON } from './storage';
 
-export type RollNumberSlipTemplateType = 'minimal-stream' | 'classic-bordered';
+export type RollNumberSlipTemplateType = 'minimal-stream' | 'classic-bordered' | 'minimal-professional';
 export type IdCardTemplateSettingType = 'modern-tech' | 'classic-academic';
-export type FeeChallanTemplateType = 'standard-3copy' | 'compact-2copy';
-export type StudentFeeCardTemplateType = 'classic-ledger' | 'minimal-modern';
-export type StaffSalarySlipTemplateType = 'executive-emerald' | 'minimal-classic';
-export type ExamDmcTemplateType = 'official-crest' | 'minimal-classic';
-export type AttendanceRegisterTemplateType = 'official-weekly' | 'compact-monochrome';
+export type FeeChallanTemplateType = 'standard-3copy' | 'compact-2copy' | 'minimal-professional';
+export type StudentFeeCardTemplateType = 'classic-ledger' | 'minimal-modern' | 'minimal-professional';
+export type StaffSalarySlipTemplateType = 'executive-emerald' | 'minimal-classic' | 'minimal-professional';
+export type ExamDmcTemplateType = 'official-crest' | 'minimal-classic' | 'minimal-professional';
+export type AttendanceRegisterTemplateType = 'official-weekly' | 'compact-monochrome' | 'minimal-professional';
 
 export interface SchoolSettings {
   // 1. School Profile & Branding

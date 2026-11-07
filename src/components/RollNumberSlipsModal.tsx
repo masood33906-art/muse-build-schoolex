@@ -699,6 +699,131 @@ export function MinimalStreamSlipCard({
   total: number;
 }) {
   const activeTemplate = school.rollNumberSlipTemplate || 'minimal-stream';
+  const isMinimalProfessional = activeTemplate === 'minimal-professional';
+
+  if (isMinimalProfessional) {
+    return (
+      <div className="border border-black p-4 space-y-3 text-black bg-white font-sans">
+        {/* Header */}
+        <div className="text-center border-b border-black pb-2.5">
+          <div className="flex items-center justify-between text-[9px] font-mono font-bold text-black mb-1">
+            <span>SLIP #{index} OF {total}</span>
+            <span>SESSION: {school.session || '2025 - 2026'}</span>
+          </div>
+          <h3 className="text-base sm:text-lg font-black uppercase tracking-tight text-black">
+            {school.schoolName || 'DEMO SCHOOL SYSTEM'}
+          </h3>
+          <p className="text-[10px] font-medium text-black">
+            {school.campusName || 'Main Campus'} • {school.schoolAddress || 'Official Examination Center'}
+          </p>
+          <p className="text-[10px] font-bold uppercase tracking-wider border border-black text-black bg-white inline-block px-3.5 py-0.5 mt-1.5">
+            Roll Number Slip — {examTitle}
+          </p>
+        </div>
+
+        {/* Student Info + Photo */}
+        <div className="grid grid-cols-12 gap-3 items-center border-b border-black pb-3 text-xs">
+          <div className="col-span-9 grid grid-cols-2 gap-y-2 gap-x-3">
+            <div>
+              <span className="text-[10px] font-bold uppercase text-black block">Student Name</span>
+              <span className="font-black uppercase text-xs">{slip.student.name}</span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold uppercase text-black block">Father / Guardian</span>
+              <span className="font-bold uppercase text-xs">
+                {slip.student.fatherName || slip.student.family || '-'}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold uppercase text-black block">Class &amp; Section</span>
+              <span className="font-bold text-xs">
+                {slip.student.class} ({slip.student.section || 'A'})
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold uppercase text-black block">Roll Number &amp; ID</span>
+              <span className="font-mono font-black text-xs">
+                {slip.rollNo} • {slip.student.id}
+              </span>
+            </div>
+          </div>
+
+          <div className="col-span-3 flex justify-end">
+            <div className="w-16 h-20 border border-black overflow-hidden bg-white flex items-center justify-center">
+              <img
+                src={getStudentAvatar(slip.student)}
+                alt={slip.student.name}
+                className="w-full h-full object-cover"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* 6-Column Schedule Table */}
+        <div>
+          <table className="w-full text-left text-[11px] border-collapse border border-black">
+            <thead>
+              <tr className="bg-white border-b border-black font-bold text-[10px] uppercase">
+                <th className="py-1 px-2 border-r border-black w-8 text-center">Sr</th>
+                <th className="py-1 px-2 border-r border-black">Subject</th>
+                <th className="py-1 px-2 border-r border-black text-center">Date</th>
+                <th className="py-1 px-2 border-r border-black text-center">Time</th>
+                <th className="py-1 px-2 border-r border-black text-center">Room</th>
+                <th className="py-1 px-2 text-center w-14">Marks</th>
+              </tr>
+            </thead>
+            <tbody>
+              {slip.dateSheet.map((item, idx) => (
+                <tr key={idx} className="border-b border-black/30 last:border-b-0">
+                  <td className="py-1 px-2 border-r border-black/30 text-center font-mono">
+                    {idx + 1}
+                  </td>
+                  <td className="py-1 px-2 border-r border-black/30 font-bold uppercase">
+                    {item.subjectName}
+                  </td>
+                  <td className="py-1 px-2 border-r border-black/30 text-center font-mono text-[10px]">
+                    {item.date}
+                  </td>
+                  <td className="py-1 px-2 border-r border-black/30 text-center text-[10px]">
+                    {item.time}
+                  </td>
+                  <td className="py-1 px-2 border-r border-black/30 text-center font-mono text-[10px]">
+                    {item.room || 'Hall A'}
+                  </td>
+                  <td className="py-1 px-2 text-center font-mono">
+                    {item.totalMarks}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Candidate Instructions */}
+        <div className="bg-white border border-black p-2 text-[9.5px] leading-snug text-black">
+          <p className="font-bold">
+            INSTRUCTIONS: 1. Arrive 20 minutes before exam time. 2. Keep this admit card on your desk during all papers.
+          </p>
+          <p>
+            3. Mobile phones, smartwatches, and unauthorized study material are strictly prohibited in the examination hall.
+          </p>
+        </div>
+
+        {/* Footer Signatures + ID */}
+        <div className="pt-4 flex items-end justify-between text-[10px] font-bold uppercase">
+          <div className="border-t border-black pt-1 w-36 text-center">
+            Candidate Signature
+          </div>
+          <div className="text-[9px] font-mono font-normal text-black">
+            ID: {slip.student.id}
+          </div>
+          <div className="border-t border-black pt-1 w-44 text-center">
+            Controller of Examinations
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (activeTemplate === 'classic-bordered') {
     return (

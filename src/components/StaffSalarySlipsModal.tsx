@@ -46,6 +46,12 @@ export const StaffSalarySlipsModal: React.FC<StaffSalarySlipsModalProps> = ({
   // printed payslip's template interpretation.
   const salarySlipTheme = getSalarySlipTheme(getSchoolSettings().staffSalarySlipTemplate);
   const isMinimalClassic = salarySlipTheme.isMinimalClassic;
+  // 'minimal-professional' also resolves isMinimalClassic=true (that flag
+  // routes it through every monochrome branch below), so distinguish it via
+  // `template` for the places where it is stricter than minimal-classic:
+  // no grey fills at all (white instead of neutral-100) and no coloured
+  // deduction amounts.
+  const isMinimalProfessional = salarySlipTheme.template === 'minimal-professional';
 
   // List of staff to display in the PDF document preview
   const previewStaffList = useMemo(() => {
@@ -147,9 +153,11 @@ export const StaffSalarySlipsModal: React.FC<StaffSalarySlipsModalProps> = ({
                     </div>
                     <div className="text-right">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${
-                        isMinimalClassic
-                          ? 'bg-neutral-100 text-black border-black'
-                          : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                        isMinimalProfessional
+                          ? 'bg-white text-black border-black'
+                          : isMinimalClassic
+                            ? 'bg-neutral-100 text-black border-black'
+                            : 'bg-emerald-100 text-emerald-800 border-emerald-300'
                       }`}>
                         {staff.payStatus === 'Paid' ? '✓ DISBURSED / PAID' : '⚠ PENDING PAYMENT'}
                       </span>
@@ -228,7 +236,7 @@ export const StaffSalarySlipsModal: React.FC<StaffSalarySlipsModalProps> = ({
                           Rs. {base.toLocaleString()}
                         </td>
                         <td className="py-2 px-4 text-slate-700 border-l border-slate-200">Income Tax Withholding</td>
-                        <td className="py-2 px-4 text-right font-mono font-medium text-rose-700">
+                        <td className={`py-2 px-4 text-right font-mono font-medium ${isMinimalProfessional ? 'text-black' : 'text-rose-700'}`}>
                           Rs. {deductions.toLocaleString()}
                         </td>
                       </tr>
@@ -258,7 +266,7 @@ export const StaffSalarySlipsModal: React.FC<StaffSalarySlipsModalProps> = ({
                           Rs. {gross.toLocaleString()}
                         </td>
                         <td className="py-2.5 px-4 text-slate-900 border-l border-slate-200">Total Deductions</td>
-                        <td className="py-2.5 px-4 text-right font-mono text-rose-800">
+                        <td className={`py-2.5 px-4 text-right font-mono ${isMinimalProfessional ? 'text-black' : 'text-rose-800'}`}>
                           Rs. {deductions.toLocaleString()}
                         </td>
                       </tr>
@@ -267,9 +275,11 @@ export const StaffSalarySlipsModal: React.FC<StaffSalarySlipsModalProps> = ({
 
                   {/* Net Salary Banner */}
                   <div className={`p-3.5 flex items-center justify-between ${
-                    isMinimalClassic
-                      ? 'bg-neutral-100 text-black border-t-2 border-black'
-                      : 'bg-emerald-600 text-white'
+                    isMinimalProfessional
+                      ? 'bg-white text-black border-t-2 border-black'
+                      : isMinimalClassic
+                        ? 'bg-neutral-100 text-black border-t-2 border-black'
+                        : 'bg-emerald-600 text-white'
                   }`}>
                     <div className="font-bold uppercase tracking-wider text-xs">
                       NET SALARY PAYABLE:

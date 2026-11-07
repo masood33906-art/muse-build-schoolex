@@ -64,7 +64,8 @@ const DOCUMENTS: DocumentItem[] = [
     settingKey: 'rollNumberSlipTemplate',
     templates: [
       { id: 'minimal-stream', label: 'Minimal Stream', description: 'Clean modern card with dark header badge & streamlined schedule' },
-      { id: 'classic-bordered', label: 'Classic Bordered', description: 'Traditional double-bordered academic admit card' }
+      { id: 'classic-bordered', label: 'Classic Bordered', description: 'Traditional double-bordered academic admit card' },
+      { id: 'minimal-professional', label: 'Minimal Professional', description: 'Strict black & white, compact professional layout, print-ready' }
     ]
   },
   { 
@@ -94,7 +95,8 @@ const DOCUMENTS: DocumentItem[] = [
     settingKey: 'feeChallanTemplate',
     templates: [
       { id: 'standard-3copy', label: '3-Copy Bank Voucher', description: 'Bank Copy, School Copy & Student/Parent Copy' },
-      { id: 'compact-2copy', label: '2-Copy Compact Voucher', description: 'School Office Copy & Student/Parent Copy' }
+      { id: 'compact-2copy', label: '2-Copy Compact Voucher', description: 'School Office Copy & Student/Parent Copy' },
+      { id: 'minimal-professional', label: 'Minimal Professional', description: 'Strict black & white, compact professional layout, print-ready' }
     ]
   },
   { 
@@ -104,7 +106,8 @@ const DOCUMENTS: DocumentItem[] = [
     settingKey: 'studentFeeCardTemplate',
     templates: [
       { id: 'classic-ledger', label: 'Classic Ledger', description: 'Double-framed navy & crimson 12-month fee card' },
-      { id: 'minimal-modern', label: 'Minimal Modern', description: 'Monochrome clean-lined institutional ledger' }
+      { id: 'minimal-modern', label: 'Minimal Modern', description: 'Monochrome clean-lined institutional ledger' },
+      { id: 'minimal-professional', label: 'Minimal Professional', description: 'Strict black & white, compact professional layout, print-ready' }
     ]
   },
   { 
@@ -114,7 +117,8 @@ const DOCUMENTS: DocumentItem[] = [
     settingKey: 'staffSalarySlipTemplate',
     templates: [
       { id: 'executive-emerald', label: 'Executive Emerald', description: 'Modern dark header with emerald net-pay highlight' },
-      { id: 'minimal-classic', label: 'Minimal Classic', description: 'High-contrast monochrome payroll voucher' }
+      { id: 'minimal-classic', label: 'Minimal Classic', description: 'High-contrast monochrome payroll voucher' },
+      { id: 'minimal-professional', label: 'Minimal Professional', description: 'Strict black & white, compact professional layout, print-ready' }
     ]
   },
   { 
@@ -124,7 +128,8 @@ const DOCUMENTS: DocumentItem[] = [
     settingKey: 'examDmcTemplate',
     templates: [
       { id: 'official-crest', label: 'Official Crest', description: 'Royal blue header with summary metrics ribbon' },
-      { id: 'minimal-classic', label: 'Minimal Classic', description: 'Crisp black-bordered academic transcript' }
+      { id: 'minimal-classic', label: 'Minimal Classic', description: 'Crisp black-bordered academic transcript' },
+      { id: 'minimal-professional', label: 'Minimal Professional', description: 'Strict black & white, compact professional layout, print-ready' }
     ]
   },
   { 
@@ -134,7 +139,8 @@ const DOCUMENTS: DocumentItem[] = [
     settingKey: 'attendanceRegisterTemplate',
     templates: [
       { id: 'official-weekly', label: 'Official Weekly', description: 'Color-coded status badges with dark header' },
-      { id: 'compact-monochrome', label: 'Compact Monochrome', description: 'Ink-friendly monochrome print register' }
+      { id: 'compact-monochrome', label: 'Compact Monochrome', description: 'Ink-friendly monochrome print register' },
+      { id: 'minimal-professional', label: 'Minimal Professional', description: 'Strict black & white, compact professional layout, print-ready' }
     ]
   },
 ];
@@ -677,6 +683,97 @@ function RollNumberSlipPreview({
   slip: RollSlipData;
   examTitle: string;
 }) {
+  // 'minimal-professional' is not handled by the shared MinimalStreamSlipCard
+  // (it lives in RollNumberSlipsModal and only branches classic / stream), so
+  // this preview renders the strict B&W variant locally with the same fields.
+  const isMinimalProfessional = school.rollNumberSlipTemplate === 'minimal-professional';
+
+  if (isMinimalProfessional) {
+    return (
+      <div className="w-full max-w-3xl bg-white text-black p-3 font-sans shadow-2xl border border-black">
+        <div className="border border-black p-3 space-y-2">
+          {/* Header */}
+          <div className="text-center border-b border-black pb-2">
+            <div className="flex items-center justify-between text-[9px] font-mono text-[#666] mb-0.5">
+              <span>SLIP #1 OF 1</span>
+              <span>SESSION: {school.session || '2025 - 2026'}</span>
+            </div>
+            <h3 className="text-base font-black uppercase tracking-tight text-black">
+              {school.schoolName || 'DEMO SCHOOL SYSTEM'}
+            </h3>
+            <p className="text-[10px] font-bold uppercase tracking-wider bg-black text-white inline-block px-3 py-0.5 mt-1">
+              {examTitle} — Roll Number Slip
+            </p>
+          </div>
+
+          {/* Student Info + Photo */}
+          <div className="grid grid-cols-12 gap-3 items-center border-b border-black pb-2 text-[11px]">
+            <div className="col-span-9 grid grid-cols-2 gap-y-1 gap-x-3">
+              <div>
+                <span className="text-[9px] font-bold uppercase text-[#666] block">Student Name</span>
+                <span className="font-black uppercase text-[11px] text-black">{slip.student.name}</span>
+              </div>
+              <div>
+                <span className="text-[9px] font-bold uppercase text-[#666] block">Father / Guardian</span>
+                <span className="font-bold uppercase text-[11px] text-black">
+                  {slip.student.fatherName || slip.student.family || '-'}
+                </span>
+              </div>
+              <div>
+                <span className="text-[9px] font-bold uppercase text-[#666] block">Class &amp; Section</span>
+                <span className="font-bold text-[11px] text-black">
+                  {slip.student.class} ({slip.student.section || 'A'})
+                </span>
+              </div>
+              <div>
+                <span className="text-[9px] font-bold uppercase text-[#666] block">Roll Number</span>
+                <span className="inline-block px-2 py-0.5 bg-black text-white font-mono font-black text-[11px]">
+                  {slip.rollNo}
+                </span>
+              </div>
+            </div>
+            <div className="col-span-3 flex justify-end">
+              <div className="w-14 h-[72px] border border-black bg-white flex items-center justify-center text-lg font-black text-black">
+                {slip.student.name.charAt(0)}
+              </div>
+            </div>
+          </div>
+
+          {/* Compact Schedule Table */}
+          <table className="w-full text-left text-[10px] border-collapse border border-black">
+            <thead>
+              <tr className="bg-white border-b border-black font-bold text-[9px] uppercase text-black">
+                <th className="py-1 px-2 border-r border-black w-8 text-center">#</th>
+                <th className="py-1 px-2 border-r border-black">Subject</th>
+                <th className="py-1 px-2 border-r border-black text-center">Date</th>
+                <th className="py-1 px-2 border-r border-black text-center">Time</th>
+                <th className="py-1 px-2 text-center w-14">Marks</th>
+              </tr>
+            </thead>
+            <tbody>
+              {slip.dateSheet.map((item, idx) => (
+                <tr key={idx} className="border-b border-[#999] last:border-b-0 text-black">
+                  <td className="py-0.5 px-2 border-r border-[#999] text-center font-mono">{idx + 1}</td>
+                  <td className="py-0.5 px-2 border-r border-[#999] font-bold uppercase">{item.subjectName}</td>
+                  <td className="py-0.5 px-2 border-r border-[#999] text-center font-mono text-[10px]">{item.date}</td>
+                  <td className="py-0.5 px-2 border-r border-[#999] text-center text-[10px]">{item.time}</td>
+                  <td className="py-0.5 px-2 text-center font-mono">{item.totalMarks}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Footer Signatures */}
+          <div className="pt-3 flex items-end justify-between text-[9px] font-bold uppercase text-black">
+            <div className="border-t border-black pt-1 w-32 text-center">Candidate Sign</div>
+            <div className="text-[9px] font-mono text-[#666]">ID: {slip.student.id}</div>
+            <div className="border-t border-black pt-1 w-36 text-center">Controller of Exams</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full max-w-3xl">
       <MinimalStreamSlipCard
@@ -978,13 +1075,15 @@ function FeeChallanPreview({
   school: SchoolSettings;
   student: Student;
 }) {
-  const isCompact2Copy = school.feeChallanTemplate === 'compact-2copy';
+  const isMinimalProfessional = school.feeChallanTemplate === 'minimal-professional';
+  const isCompact2Copy = !isMinimalProfessional && school.feeChallanTemplate === 'compact-2copy';
+  // Minimal Professional always uses the full 3-copy structure, in B&W.
   const copies = isCompact2Copy
     ? ['School Copy', 'Student / Parent Copy']
     : ['Bank Copy', 'School Copy', 'Student / Parent Copy'];
 
   return (
-    <div className="w-full max-w-4xl bg-white text-black p-4 font-sans shadow-2xl border-2 border-black rounded-sm space-y-3">
+    <div className={`w-full max-w-4xl bg-white text-black font-sans shadow-2xl border-2 border-black rounded-sm space-y-3 ${isMinimalProfessional ? 'p-3' : 'p-4'}`}>
       <div className={`grid grid-cols-1 ${isCompact2Copy ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-3`}>
         {copies.map((copyName, idx) => (
           <div 
@@ -995,16 +1094,16 @@ function FeeChallanPreview({
           >
             {/* Header */}
             <div className="text-center border-b border-black pb-2 space-y-0.5">
-              <span className="font-bold text-[10px] uppercase text-blue-900 block truncate">
+              <span className={`font-bold text-[10px] uppercase block truncate ${isMinimalProfessional ? 'text-black' : 'text-blue-900'}`}>
                 {school.bankName || 'Faysal Bank Limited'}
               </span>
-              <span className="font-mono text-[9px] text-neutral-600 block">
+              <span className={`font-mono text-[9px] block ${isMinimalProfessional ? 'text-[#666]' : 'text-neutral-600'}`}>
                 A/C: {school.accountNumber || '301829300000192'}
               </span>
               <h4 className="font-black text-xs uppercase truncate">
                 {school.schoolName || 'Demo School'}
               </h4>
-              <span className="inline-block bg-neutral-200 text-black px-2 py-0.5 text-[9px] font-black uppercase mt-1">
+              <span className={`inline-block px-2 py-0.5 text-[9px] font-black uppercase mt-1 ${isMinimalProfessional ? 'bg-white text-black border border-black' : 'bg-neutral-200 text-black'}`}>
                 {copyName}
               </span>
             </div>
@@ -1017,7 +1116,7 @@ function FeeChallanPreview({
               </div>
               <div className="flex justify-between">
                 <span>Due Date:</span>
-                <span className="font-bold text-red-600">10 Sep 2026</span>
+                <span className={`font-bold ${isMinimalProfessional ? 'text-black' : 'text-red-600'}`}>10 Sep 2026</span>
               </div>
               <div className="flex justify-between">
                 <span>Student:</span>
@@ -1036,25 +1135,25 @@ function FeeChallanPreview({
             {/* Breakdown */}
             <table className="w-full text-[10px] border border-black border-collapse">
               <thead>
-                <tr className="bg-neutral-100 border-b border-black font-bold">
+                <tr className={`${isMinimalProfessional ? 'bg-white text-black' : 'bg-neutral-100'} border-b border-black font-bold`}>
                   <th className="p-1 text-left">Description</th>
                   <th className="p-1 text-right">PKR</th>
                 </tr>
               </thead>
               <tbody>
-                <tr className="border-b border-neutral-300">
+                <tr className={`border-b ${isMinimalProfessional ? 'border-[#999]' : 'border-neutral-300'}`}>
                   <td className="p-1">Tuition Fee</td>
                   <td className="p-1 text-right font-mono">4,500</td>
                 </tr>
-                <tr className="border-b border-neutral-300">
+                <tr className={`border-b ${isMinimalProfessional ? 'border-[#999]' : 'border-neutral-300'}`}>
                   <td className="p-1">Exam Fund</td>
                   <td className="p-1 text-right font-mono">300</td>
                 </tr>
-                <tr className="bg-neutral-200 font-black border-t border-black">
+                <tr className={`${isMinimalProfessional ? 'bg-white text-black' : 'bg-neutral-200'} font-black border-t border-black`}>
                   <td className="p-1">Payable Within Due Date</td>
                   <td className="p-1 text-right font-mono">4,800</td>
                 </tr>
-                <tr className="text-[9px] text-neutral-700">
+                <tr className={`text-[9px] ${isMinimalProfessional ? 'text-[#333]' : 'text-neutral-700'}`}>
                   <td className="p-1">After Due Date (+{school.lateFineAmount || 300})</td>
                   <td className="p-1 text-right font-mono">{(4800 + (school.lateFineAmount || 300)).toLocaleString()}</td>
                 </tr>
@@ -1062,7 +1161,7 @@ function FeeChallanPreview({
             </table>
 
             {/* Signatures */}
-            <div className="pt-3 flex justify-between text-[8px] text-neutral-600 border-t border-black">
+            <div className={`pt-3 flex justify-between text-[8px] border-t border-black ${isMinimalProfessional ? 'text-[#666]' : 'text-neutral-600'}`}>
               <span>Cashier Sign</span>
               <span>Bank Stamp</span>
             </div>
@@ -1086,7 +1185,103 @@ function StudentFeeCardPreview({
   classes: ClassInfo[];
 }) {
   const cardData = buildStudentFeeCardData(student, classes, school);
+  const isMinimalProfessional = school.studentFeeCardTemplate === 'minimal-professional';
   const isMinimalTemplate = school.studentFeeCardTemplate === 'minimal-modern';
+
+  if (isMinimalProfessional) {
+    return (
+      <div className="w-full max-w-3xl bg-white text-black p-3 font-sans shadow-2xl overflow-x-auto border border-black">
+        <div className="border border-black p-3">
+          {/* Top Header Row */}
+          <div className="flex items-center justify-between text-[10px] font-bold mb-1 text-black">
+            <span>School NO- {cardData.schoolNo}</span>
+            <div className="bg-black text-white px-4 py-0.5 text-[11px] font-black tracking-wider uppercase">
+              FEE CARD
+            </div>
+            <span>Affiliation No- {cardData.affiliationNo}</span>
+          </div>
+
+          {/* UDISE */}
+          <div className="text-center text-[9px] font-bold mb-1 text-[#666]">
+            UDISE- {cardData.udiseNo}
+          </div>
+
+          {/* School Name */}
+          <div className="text-center mb-1 leading-tight">
+            <h1 className="text-xl font-black tracking-tight uppercase text-black font-sans">
+              {cardData.schoolName}
+            </h1>
+            <p className="text-[10px] text-[#666] font-sans">
+              {cardData.trustName}
+            </p>
+          </div>
+
+          <div className="text-center text-[9px] font-bold text-[#333]">
+            {cardData.schoolAddress}
+          </div>
+
+          {/* Session */}
+          <div className="flex justify-center my-1.5">
+            <div className="px-4 py-0.5 border border-black text-[9px] font-bold text-black">
+              Session : {cardData.academicSession}
+            </div>
+          </div>
+
+          {/* Member Info */}
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[11px] text-black my-2 font-medium">
+            <div className="flex items-baseline">
+              <span className="font-bold shrink-0 mr-2 text-black">Name:</span>
+              <span className="border-b border-[#999] flex-1 font-bold text-black px-1">{cardData.student.name}</span>
+            </div>
+            <div className="flex items-baseline">
+              <span className="font-bold shrink-0 mr-2 text-black">Father&apos;s Name:</span>
+              <span className="border-b border-[#999] flex-1 text-black px-1">{cardData.fatherName}</span>
+            </div>
+            <div className="flex items-baseline">
+              <span className="font-bold shrink-0 mr-2 text-black">Class &amp; Sec:</span>
+              <span className="border-b border-[#999] flex-1 text-black px-1">{cardData.className} - {cardData.section}</span>
+            </div>
+            <div className="flex items-baseline">
+              <span className="font-bold shrink-0 mr-2 text-black">Roll No / A/c:</span>
+              <span className="border-b border-[#999] flex-1 font-mono text-black px-1">{cardData.rollNo} / {cardData.accountNo}</span>
+            </div>
+          </div>
+
+          {/* 12-Month Table (first 6 months shown, as in the other previews) */}
+          <div className="mt-2 overflow-x-auto">
+            <table className="w-full text-left text-[9px] border-collapse border border-black text-black">
+              <thead className="bg-white text-black font-bold uppercase text-[8px]">
+                <tr>
+                  <th className="p-1 border border-black">MONTH</th>
+                  <th className="p-1 border border-black text-center">ADMISSION</th>
+                  <th className="p-1 border border-black text-center">ANNUAL</th>
+                  <th className="p-1 border border-black text-center">TUITION</th>
+                  <th className="p-1 border border-black text-center">TOTAL PAYABLE</th>
+                  <th className="p-1 border border-black text-center">PAID</th>
+                  <th className="p-1 border border-black text-center">DUES</th>
+                  <th className="p-1 border border-black text-center">REC. NO.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cardData.months.slice(0, 6).map((row) => (
+                  <tr key={row.month}>
+                    <td className="p-0.5 font-bold border border-[#999]">{row.month}</td>
+                    <td className="p-0.5 text-right font-mono border border-[#999]">{formatOrBlank(row.admissionFee)}</td>
+                    <td className="p-0.5 text-right font-mono border border-[#999]">{formatOrBlank(row.annualFee)}</td>
+                    <td className="p-0.5 text-right font-mono border border-[#999]">{formatOrBlank(row.tuitionFee)}</td>
+                    <td className="p-0.5 text-right font-mono font-bold border border-[#999]">{formatOrBlank(row.totalPayable)}</td>
+                    <td className="p-0.5 text-right font-mono font-bold border border-[#999]">{formatOrBlank(row.amountPaid)}</td>
+                    <td className="p-0.5 text-right font-mono border border-[#999]">{formatOrBlank(row.dues)}</td>
+                    <td className="p-0.5 text-center font-mono border border-[#999]">{row.receiptNo}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-3xl bg-white text-slate-900 rounded-xl p-5 shadow-2xl overflow-x-auto border border-slate-300">
@@ -1196,7 +1391,66 @@ function StaffSalarySlipPreview({
 }) {
   // Template interpretation comes from the shared salary-slip theme
   // (Fix P1-2) — the same mapping both PDF generators consume.
-  const isMinimalClassic = getSalarySlipTheme(school.staffSalarySlipTemplate).isMinimalClassic;
+  const salaryTheme = getSalarySlipTheme(school.staffSalarySlipTemplate);
+  const isMinimalClassic = salaryTheme.isMinimalClassic;
+  // Explicit check on the template value itself, so this preview renders
+  // strict B&W for 'minimal-professional' regardless of how the shared
+  // theme flags it; the theme is still consumed the same way as the other
+  // templates (its template id is honoured when it resolves to this value).
+  const isMinimalProfessional =
+    school.staffSalarySlipTemplate === 'minimal-professional' ||
+    salaryTheme.template === 'minimal-professional';
+
+  if (isMinimalProfessional) {
+    return (
+      <div className="w-full max-w-2xl bg-white text-black p-4 font-sans shadow-2xl space-y-3 border border-black">
+        <div className="text-center border-b border-black pb-2 space-y-1">
+          <h2 className="text-base font-black uppercase text-black">{school.schoolName || 'DEMO SCHOOL'}</h2>
+          <p className="text-[10px] text-[#666]">{school.schoolAddress}</p>
+          <span className="inline-block border border-black px-3 py-0.5 text-[11px] font-black uppercase text-black">
+            OFFICIAL SALARY PAYSLIP — SEPTEMBER 2026
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 text-[11px] border-b border-black pb-2 text-black">
+          <div>Employee Name: <strong>{staff.name}</strong></div>
+          <div>Designation: <strong>{staff.role}</strong></div>
+          <div>Employee ID: <strong className="font-mono">{staff.id}</strong></div>
+          <div>Department: <strong>{staff.department || 'Academics'}</strong></div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 text-[11px] text-black">
+          <div className="border border-black p-2 space-y-1">
+            <span className="font-bold border-b border-black block pb-1 uppercase text-[9px] text-black">Earnings</span>
+            <div className="flex justify-between"><span>Basic Salary</span><span className="font-mono font-bold">Rs {staff.salary ? staff.salary.toLocaleString() : '65,000'}</span></div>
+            <div className="flex justify-between"><span>Allowances</span><span className="font-mono">Rs 0</span></div>
+            <div className="flex justify-between font-bold border-t border-black pt-1">
+              <span>Gross Salary</span><span className="font-mono">Rs {staff.salary ? staff.salary.toLocaleString() : '65,000'}</span>
+            </div>
+          </div>
+
+          <div className="border border-black p-2 space-y-1">
+            <span className="font-bold border-b border-black block pb-1 uppercase text-[9px] text-black">Deductions</span>
+            <div className="flex justify-between"><span>Tax / Provident</span><span className="font-mono">Rs 0</span></div>
+            <div className="flex justify-between"><span>Leave Deduction</span><span className="font-mono">Rs 0</span></div>
+            <div className="flex justify-between font-bold border-t border-black pt-1">
+              <span>Total Deductions</span><span className="font-mono">Rs 0</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-2 flex justify-between items-center text-[13px] font-black bg-white border border-black text-black">
+          <span>NET SALARY PAYABLE:</span>
+          <span className="text-sm font-mono">PKR {staff.salary ? staff.salary.toLocaleString() : '65,000'}/-</span>
+        </div>
+
+        <div className="pt-3 flex justify-between text-[11px] font-bold border-t border-black text-[#333]">
+          <span>Accountant / Bursar Sign</span>
+          <span>Recipient Signature</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`w-full max-w-2xl bg-white text-black p-6 font-sans shadow-2xl space-y-4 ${
@@ -1281,7 +1535,75 @@ function ExamDmcPreview({
   student: Student;
   exam: Exam;
 }) {
+  const isMinimalProfessional = school.examDmcTemplate === 'minimal-professional';
   const isMinimalDmc = school.examDmcTemplate === 'minimal-classic';
+
+  if (isMinimalProfessional) {
+    return (
+      <div className="w-full max-w-2xl bg-white text-black p-4 font-sans shadow-2xl space-y-3 border border-black">
+        <div className="flex items-center justify-between pb-2 border-b border-black">
+          <div>
+            <h2 className="text-base font-black uppercase text-black">
+              {school.schoolName || 'DEMO SCHOOL'}
+            </h2>
+            <p className="text-[10px] font-semibold text-[#666]">{exam.name || 'Annual Examination 2026'}</p>
+          </div>
+          <span className="inline-block bg-black text-white px-3 py-1 text-[11px] font-black uppercase">
+            D.M.C
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 text-[11px] p-2 border border-black bg-white text-black">
+          <div>Student: <strong>{student.name}</strong></div>
+          <div>Father Name: <strong>{student.fatherName || 'Ahmad Khan'}</strong></div>
+          <div>Class: <strong>{student.class} - {student.section || 'A'}</strong></div>
+          <div>Roll Number: <strong className="font-mono">{student.rollNo || '01'}</strong></div>
+        </div>
+
+        <table className="w-full text-[11px] border border-black border-collapse text-black">
+          <thead>
+            <tr className="bg-black text-white font-bold text-[10px] uppercase">
+              <th className="p-1.5 border-r border-[#666] text-left">Subject</th>
+              <th className="p-1.5 border-r border-[#666] text-center">Max Marks</th>
+              <th className="p-1.5 border-r border-[#666] text-center">Passing</th>
+              <th className="p-1.5 border-r border-[#666] text-center">Obtained</th>
+              <th className="p-1.5 text-center">Grade</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              { name: 'Mathematics', max: 100, pass: 33, obt: 92, grade: 'A+' },
+              { name: 'English', max: 100, pass: 33, obt: 88, grade: 'A' },
+              { name: 'General Science', max: 100, pass: 33, obt: 94, grade: 'A+' },
+              { name: 'Urdu', max: 100, pass: 33, obt: 85, grade: 'A' },
+              { name: 'Islamiat', max: 50, pass: 17, obt: 47, grade: 'A+' },
+            ].map((row, i) => (
+              <tr key={i} className="border-b border-[#999] text-[10px] text-black">
+                <td className="p-1 border-r border-[#999] font-bold">{row.name}</td>
+                <td className="p-1 border-r border-[#999] text-center font-mono">{row.max}</td>
+                <td className="p-1 border-r border-[#999] text-center font-mono">{row.pass}</td>
+                <td className="p-1 border-r border-[#999] text-center font-mono font-bold">{row.obt}</td>
+                <td className="p-1 text-center font-black text-black">{row.grade}</td>
+              </tr>
+            ))}
+            <tr className="bg-white font-black border-t border-black text-black">
+              <td className="p-1 border-r border-[#999]">Grand Total</td>
+              <td className="p-1 border-r border-[#999] text-center font-mono">450</td>
+              <td className="p-1 border-r border-[#999] text-center font-mono">—</td>
+              <td className="p-1 border-r border-[#999] text-center font-mono">406</td>
+              <td className="p-1 text-center text-black">90.2% (A+)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div className="pt-3 flex justify-between text-[11px] font-bold border-t border-black text-black">
+          <span>Class Incharge</span>
+          <span>Exam Controller</span>
+          <span>{school.principalName || 'Principal'}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`w-full max-w-2xl bg-white text-black p-6 font-sans shadow-2xl space-y-4 ${
@@ -1361,8 +1683,67 @@ function AttendanceRegisterPreview({
   school: SchoolSettings;
   student: Student;
 }) {
+  const isMinimalProfessional = school.attendanceRegisterTemplate === 'minimal-professional';
   const isCompactMono = school.attendanceRegisterTemplate === 'compact-monochrome';
   const days = ['Mon (07)', 'Tue (08)', 'Wed (09)', 'Thu (10)', 'Fri (11)', 'Sat (12)', 'Sun (13)'];
+
+  if (isMinimalProfessional) {
+    return (
+      <div className="w-full max-w-4xl bg-white text-black p-4 font-sans shadow-2xl space-y-3 border border-black">
+        <div className="text-center border-b border-black pb-2 space-y-1">
+          <h2 className="text-base font-black uppercase text-black">{school.schoolName || 'DEMO SCHOOL'}</h2>
+          <div className="flex items-center justify-center gap-2">
+            <span className="inline-block px-3 py-0.5 text-[11px] font-black uppercase border border-black text-black bg-white">
+              OFFICIAL WEEKLY ATTENDANCE REGISTER (STUDENTS)
+            </span>
+            <span className="px-2 py-0.5 bg-white border border-black text-[9px] font-bold text-black">
+              SESSION {school.session || '2025-2026'}
+            </span>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-[10px] border border-black border-collapse text-black">
+            <thead>
+              <tr className="bg-white text-black font-bold border-b border-black">
+                <th className="p-1.5 border-r border-black text-left">Student Name</th>
+                <th className="p-1.5 border-r border-black text-center">Class</th>
+                {days.map((d) => (
+                  <th key={d} className="p-1.5 border-r border-black text-center font-mono text-[9px]">
+                    {d}
+                  </th>
+                ))}
+                <th className="p-1.5 text-center font-bold">Att %</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[student.name, 'Zainab Bibi', 'Ahmed Raza', 'Fatima Zahra'].map((name, sIdx) => (
+                <tr key={name} className="border-b border-[#999]">
+                  <td className="p-1.5 border-r border-[#999] font-bold">{name}</td>
+                  <td className="p-1.5 border-r border-[#999] text-center">{student.class} ({student.section || 'A'})</td>
+                  {days.map((d, i) => {
+                    const isSun = i === 6;
+                    const isAbs = !isSun && (i + sIdx) % 5 === 0;
+                    return (
+                      <td key={d} className="p-1 border-r border-[#999] text-center font-mono font-bold text-black">
+                        {isSun ? '-' : isAbs ? 'A' : 'P'}
+                      </td>
+                    );
+                  })}
+                  <td className="p-1.5 text-center font-black">{sIdx % 2 === 0 ? '100%' : '83%'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="pt-3 flex justify-between text-[11px] font-bold border-t border-black text-[#333]">
+          <span>Class Teacher Signature: ____________</span>
+          <span>Principal / Administrator: ____________</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`w-full max-w-4xl bg-white text-black p-6 font-sans shadow-2xl space-y-4 ${

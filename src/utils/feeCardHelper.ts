@@ -280,6 +280,12 @@ export function generateFeeCardPdf(
 
   const settings = schoolSettings || getSchoolSettings();
   const isMinimalTemplate = settings.studentFeeCardTemplate === 'minimal-modern';
+  // 'minimal-professional': strict black & white only. Every colour in its
+  // branches below is pure black (0,0,0) or an equal-channel grey (51 / 85 /
+  // 153), and it uses no fills at all. 'minimal-modern' cannot be reused for
+  // it: its palette is slate-based ([15,23,42], [71,85,105], [241,245,249],
+  // [148,163,184]...) whose channels differ, i.e. blue-tinted, not grey.
+  const isMinimalProfessional = settings.studentFeeCardTemplate === 'minimal-professional';
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -301,7 +307,11 @@ export function generateFeeCardPdf(
     // ==========================================
     // PAGE 1: SCHOOL INFO & MEMBER DETAILS + 12-MONTH TABLE
     // ==========================================
-    if (isMinimalTemplate) {
+    if (isMinimalProfessional) {
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.4);
+      doc.rect(margin, margin, contentWidth, pageHeight - margin * 2);
+    } else if (isMinimalTemplate) {
       doc.setDrawColor(15, 23, 42);
       doc.setLineWidth(0.5);
       doc.rect(margin, margin, contentWidth, pageHeight - margin * 2);
@@ -315,23 +325,30 @@ export function generateFeeCardPdf(
     // Left: School No
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8.5);
-    doc.setTextColor(isMinimalTemplate ? 15 : 27, isMinimalTemplate ? 23 : 54, isMinimalTemplate ? 42 : 93);
+    doc.setTextColor(isMinimalProfessional ? 0 : isMinimalTemplate ? 15 : 27, isMinimalProfessional ? 0 : isMinimalTemplate ? 23 : 54, isMinimalProfessional ? 0 : isMinimalTemplate ? 42 : 93);
     doc.text(`School NO- ${cardData.schoolNo}`, margin + 5, headerStartY + 3);
 
     // Center: Pill Badge "FEE CARD"
-    if (isMinimalTemplate) {
+    if (isMinimalProfessional) {
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.4);
+    } else if (isMinimalTemplate) {
       doc.setFillColor(15, 23, 42);
     } else {
       doc.setFillColor(220, 38, 38); // Red
     }
-    doc.roundedRect(pageWidth / 2 - 16, headerStartY - 1, 32, 6.5, 1.5, 1.5, 'F');
-    doc.setTextColor(255, 255, 255);
+    if (isMinimalProfessional) {
+      doc.rect(pageWidth / 2 - 16, headerStartY - 1, 32, 6.5, 'S');
+    } else {
+      doc.roundedRect(pageWidth / 2 - 16, headerStartY - 1, 32, 6.5, 1.5, 1.5, 'F');
+    }
+    doc.setTextColor(isMinimalProfessional ? 0 : 255, isMinimalProfessional ? 0 : 255, isMinimalProfessional ? 0 : 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
     doc.text('FEE CARD', pageWidth / 2, headerStartY + 3.5, { align: 'center' });
 
     // Right: Affiliation No
-    doc.setTextColor(isMinimalTemplate ? 15 : 27, isMinimalTemplate ? 23 : 54, isMinimalTemplate ? 42 : 93);
+    doc.setTextColor(isMinimalProfessional ? 0 : isMinimalTemplate ? 15 : 27, isMinimalProfessional ? 0 : isMinimalTemplate ? 23 : 54, isMinimalProfessional ? 0 : isMinimalTemplate ? 42 : 93);
     doc.setFontSize(8.5);
     doc.text(`Affiliation No- ${cardData.affiliationNo}`, pageWidth - margin - 5, headerStartY + 3, { align: 'right' });
 
@@ -340,7 +357,9 @@ export function generateFeeCardPdf(
     doc.text(`UDISE- ${cardData.udiseNo}`, pageWidth / 2, headerStartY + 9, { align: 'center' });
 
     // School Name (Dynamic from Settings)
-    if (isMinimalTemplate) {
+    if (isMinimalProfessional) {
+      doc.setTextColor(0, 0, 0);
+    } else if (isMinimalTemplate) {
       doc.setTextColor(15, 23, 42);
     } else {
       doc.setTextColor(190, 24, 24);
@@ -350,9 +369,11 @@ export function generateFeeCardPdf(
     doc.text((cardData.schoolName || 'DEMO SCHOOL').toUpperCase(), pageWidth / 2, headerStartY + 17, { align: 'center' });
 
     // Trust / Management
-    doc.setFont('helvetica', 'italic');
+    doc.setFont('helvetica', isMinimalProfessional ? 'normal' : 'italic');
     doc.setFontSize(8.5);
-    if (isMinimalTemplate) {
+    if (isMinimalProfessional) {
+      doc.setTextColor(51, 51, 51);
+    } else if (isMinimalTemplate) {
       doc.setTextColor(71, 85, 105);
     } else {
       doc.setTextColor(153, 27, 27);
@@ -362,22 +383,22 @@ export function generateFeeCardPdf(
     // Circular Crest / ISO Subtitle
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
-    doc.setTextColor(100, 116, 139);
+    doc.setTextColor(isMinimalProfessional ? 85 : 100, isMinimalProfessional ? 85 : 116, isMinimalProfessional ? 85 : 139);
     doc.text('An ISO 9001:2015 Certified School', pageWidth / 2, headerStartY + 28.5, { align: 'center' });
 
     // School Address
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.5);
-    doc.setTextColor(30, 41, 59);
+    doc.setTextColor(isMinimalProfessional ? 0 : 30, isMinimalProfessional ? 0 : 41, isMinimalProfessional ? 0 : 59);
     doc.text(cardData.schoolAddress, pageWidth / 2, headerStartY + 33, { align: 'center' });
 
     // Session Box (pill shape with border)
-    doc.setDrawColor(isMinimalTemplate ? 15 : 27, isMinimalTemplate ? 23 : 54, isMinimalTemplate ? 42 : 93);
+    doc.setDrawColor(isMinimalProfessional ? 0 : isMinimalTemplate ? 15 : 27, isMinimalProfessional ? 0 : isMinimalTemplate ? 23 : 54, isMinimalProfessional ? 0 : isMinimalTemplate ? 42 : 93);
     doc.setLineWidth(0.4);
     doc.roundedRect(pageWidth / 2 - 32, headerStartY + 36, 64, 6, 3, 3);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
-    doc.setTextColor(isMinimalTemplate ? 15 : 27, isMinimalTemplate ? 23 : 54, isMinimalTemplate ? 42 : 93);
+    doc.setTextColor(isMinimalProfessional ? 0 : isMinimalTemplate ? 15 : 27, isMinimalProfessional ? 0 : isMinimalTemplate ? 23 : 54, isMinimalProfessional ? 0 : isMinimalTemplate ? 42 : 93);
     doc.text(`Session : ${cardData.academicSession}`, pageWidth / 2, headerStartY + 40.2, { align: 'center' });
 
     // ==========================================
@@ -385,7 +406,7 @@ export function generateFeeCardPdf(
     // ==========================================
     const memberY = headerStartY + 47;
     doc.setFontSize(8.5);
-    doc.setTextColor(30, 41, 59);
+    doc.setTextColor(isMinimalProfessional ? 0 : 30, isMinimalProfessional ? 0 : 41, isMinimalProfessional ? 0 : 59);
 
     const leftX = margin + 8;
     const rightX = pageWidth - margin - 8;
@@ -395,7 +416,7 @@ export function generateFeeCardPdf(
     doc.text('Name', leftX, memberY);
     doc.setFont('helvetica', 'normal');
     doc.text(cardData.student.name || '', leftX + 15, memberY - 0.5);
-    doc.setDrawColor(180, 195, 215);
+    doc.setDrawColor(isMinimalProfessional ? 153 : 180, isMinimalProfessional ? 153 : 195, isMinimalProfessional ? 153 : 215);
     doc.line(leftX + 13, memberY + 1, rightX, memberY + 1);
 
     // Line 2: Father's Name
@@ -491,23 +512,24 @@ export function generateFeeCardPdf(
       body: tableBody,
       theme: 'grid',
       headStyles: {
-        fillColor: isMinimalTemplate ? [241, 245, 249] : [214, 230, 245],
-        textColor: isMinimalTemplate ? [15, 23, 42] : [27, 54, 93],
+        fillColor: isMinimalProfessional ? false : isMinimalTemplate ? [241, 245, 249] : [214, 230, 245],
+        textColor: isMinimalProfessional ? [0, 0, 0] : isMinimalTemplate ? [15, 23, 42] : [27, 54, 93],
         fontStyle: 'bold',
         fontSize: 6.2,
         halign: 'center',
         valign: 'middle',
         cellPadding: 1.4,
         lineWidth: 0.3,
-        lineColor: isMinimalTemplate ? [148, 163, 184] : [70, 130, 180]
+        lineColor: isMinimalProfessional ? [0, 0, 0] : isMinimalTemplate ? [148, 163, 184] : [70, 130, 180]
       },
       bodyStyles: {
+        ...(isMinimalProfessional ? { fillColor: false } : {}),
         fontSize: 6.5,
         cellPadding: 1.6,
-        textColor: [20, 30, 50],
+        textColor: isMinimalProfessional ? [0, 0, 0] : [20, 30, 50],
         valign: 'middle',
         lineWidth: 0.25,
-        lineColor: isMinimalTemplate ? [203, 213, 225] : [100, 150, 200]
+        lineColor: isMinimalProfessional ? [0, 0, 0] : isMinimalTemplate ? [203, 213, 225] : [100, 150, 200]
       },
       columnStyles: {
         0: { fontStyle: 'bold', halign: 'left', cellWidth: 17 },   // MONTH
@@ -530,14 +552,20 @@ export function generateFeeCardPdf(
 
     // Authorised Signatory at Bottom Right of the single-page Fee Card
     const sigY = pageHeight - margin - 18;
-    doc.setDrawColor(27, 54, 93);
-    doc.setLineDashPattern([1, 1], 0);
+    doc.setDrawColor(isMinimalProfessional ? 0 : 27, isMinimalProfessional ? 0 : 54, isMinimalProfessional ? 0 : 93);
+    if (!isMinimalProfessional) {
+      doc.setLineDashPattern([1, 1], 0);
+    }
     doc.line(pageWidth - margin - 65, sigY, pageWidth - margin - 15, sigY);
     doc.setLineDashPattern([], 0); // reset dash
 
-    doc.setFont('times', 'italic');
+    if (isMinimalProfessional) {
+      doc.setFont('helvetica', 'normal');
+    } else {
+      doc.setFont('times', 'italic');
+    }
     doc.setFontSize(10.5);
-    doc.setTextColor(27, 54, 93);
+    doc.setTextColor(isMinimalProfessional ? 0 : 27, isMinimalProfessional ? 0 : 54, isMinimalProfessional ? 0 : 93);
     doc.text('Authorised Signatory', pageWidth - margin - 40, sigY + 5, { align: 'center' });
   });
 
