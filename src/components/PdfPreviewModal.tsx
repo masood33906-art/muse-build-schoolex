@@ -107,7 +107,7 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
       <div 
-        className="bg-[#111724] border border-[#22334e] rounded-2xl w-full max-w-5xl h-[92vh] flex flex-col shadow-2xl overflow-hidden"
+        className="bg-surface-12 border border-edge-32 rounded-2xl w-full max-w-5xl h-[92vh] flex flex-col shadow-2xl overflow-hidden"
         id="modal-pdf-preview"
       >
         {/* Toast Alert */}
@@ -119,7 +119,7 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
         )}
 
         {/* Modal Header */}
-        <div className="px-5 py-3.5 border-b border-[#1f2c42] flex items-center justify-between bg-[#151e2e] shrink-0">
+        <div className="px-5 py-3.5 border-b border-edge-19 flex items-center justify-between bg-[#151e2e] shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-red-500/15 border border-red-500/30 flex items-center justify-center text-red-400">
               <FileText className="w-5 h-5" />
@@ -144,7 +144,7 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
               <button
                 type="button"
                 onClick={handleOpenInNewTab}
-                className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-[#1f2e46] transition-colors cursor-pointer text-xs flex items-center gap-1"
+                className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-edge-23 transition-colors cursor-pointer text-xs flex items-center gap-1"
                 title="Open in new window"
               >
                 <ExternalLink className="w-4 h-4" />
@@ -154,7 +154,7 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-[#1f2e46] transition-colors cursor-pointer"
+              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-edge-23 transition-colors cursor-pointer"
               title="Close Preview"
               id="btn-close-pdf-preview"
             >
@@ -189,7 +189,7 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
         </div>
 
         {/* Modal Footer with Print/Save PDF and Cancel options */}
-        <div className="px-5 py-3.5 bg-[#151e2e] border-t border-[#1f2c42] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
+        <div className="px-5 py-3.5 bg-[#151e2e] border-t border-edge-19 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
           {/* Metadata pill */}
           <div className="flex items-center gap-2 text-xs text-slate-400">
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#1d283c] text-slate-300 font-mono text-[11px] border border-[#273752]">

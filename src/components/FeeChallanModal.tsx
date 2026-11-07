@@ -1,13 +1,27 @@
 import React, { useMemo } from 'react';
-import { 
-  X, 
-  Printer, 
-  Download
+import {
+  X,
+  Printer,
+  Download,
+  AlertCircle
 } from 'lucide-react';
 import { Student } from '../types';
 import { formatPKR, numberToWordsPKR } from '../utils/feeHelper';
 import { getBankSettings, SchoolSettings } from '../utils/settingsHelper';
 import { GeneratedChallan } from '../utils/challanStore';
+import { localISODate, monthKeyOf, monthLabelFromKey } from '../utils/dates';
+
+// Fix P0-4: the fee period printed on a challan is the challan's own
+// month/year — taken from its feeRange when that already names a month,
+// otherwise derived from its issue date, otherwise the current month.
+// Never a forced fixed month.
+const MONTH_YEAR_RE = /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}/i;
+function feePeriodOf(feeRange: string, issueDate: string): string {
+  if (feeRange && MONTH_YEAR_RE.test(feeRange)) return feeRange;
+  const d = new Date(issueDate);
+  if (!Number.isNaN(d.getTime())) return monthLabelFromKey(localISODate(d).slice(0, 7));
+  return monthLabelFromKey(monthKeyOf());
+}
 
 interface FeeChallanModalProps {
   isOpen: boolean;
@@ -65,15 +79,29 @@ export const FeeChallanModal: React.FC<FeeChallanModalProps> = ({
   const section = propSection || student?.section || 'A';
   const phone = propPhone || student?.phone || '-';
   const family = propFamily || student?.family || student?.fatherName || 'Guardian';
-  const totalFee = propTotalFee ?? 4800;
+  // Fix P1-8: a single challan opened WITHOUT an explicit amount has NO
+  // fee — the old code silently invented 4,800 PKR. Bulk challans carry
+  // their own explicit per-challan amounts and are unaffected. When the
+  // fee is not set, no document is produced: the modal shows a clear
+  // "Fee not set" notice and printing is blocked (same pattern as the
+  // Fees module's "Set the class fee … to start billing" warning).
+  const hasBulkChallans = !!(multipleChallans && multipleChallans.length > 0);
+  const feeNotSet = !hasBulkChallans && propTotalFee === undefined;
+  const totalFee = propTotalFee ?? 0;
   const remainingDue = propRemainingDue ?? (totalFee - propTotalPaid);
 
   const activeChallanNo = challanNumber || `SN7-0000${idNumber.replace(/[^0-9]/g, '').slice(-4) || '1326'}`;
-  const activeIssueDate = propIssueDate || '15-Sep-2026';
-  const activeDueDate = propDueDate || '15-Sep-2026';
-  const activeValidityDate = propValidityDate || '15-Sep-2026';
+  // Fix P0-4: a challan printed without explicit dates is dated TODAY (its
+  // generation date), and its fee period is the current month — never fixed
+  // Sep-2026 constants.
+  const todayFormatted = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const currentFeePeriod = monthLabelFromKey(monthKeyOf());
+  const activeIssueDate = propIssueDate || todayFormatted;
+  const activeDueDate = propDueDate || todayFormatted;
+  const activeValidityDate = propValidityDate || todayFormatted;
 
   const handlePrint = () => {
+    if (feeNotSet) return; // Fix P1-8: never print a challan with no real fee
     window.print();
   };
 
@@ -94,7 +122,7 @@ export const FeeChallanModal: React.FC<FeeChallanModalProps> = ({
     issueDate: activeIssueDate,
     dueDate: activeDueDate,
     validityDate: activeValidityDate,
-    feeRange: feeRange || 'Sep 2026'
+    feeRange: feeRange || currentFeePeriod
   };
 
   const itemsToRender = multipleChallans && multipleChallans.length > 0 
@@ -111,7 +139,7 @@ export const FeeChallanModal: React.FC<FeeChallanModalProps> = ({
         issueDate: c.issueDate || activeIssueDate,
         dueDate: c.dueDate || activeDueDate,
         validityDate: c.validityDate || activeValidityDate,
-        feeRange: c.feeRange || 'Sep 2026'
+        feeRange: c.feeRange || currentFeePeriod
       }))
     : [singleChallanItem];
 
@@ -145,7 +173,13 @@ export const FeeChallanModal: React.FC<FeeChallanModalProps> = ({
             <button
               type="button"
               onClick={handlePrint}
-              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-blue-600/25 cursor-pointer"
+              disabled={feeNotSet}
+              title={feeNotSet ? 'Fee not set — set the class fee before printing this challan' : undefined}
+              className={`px-4 py-2 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-md ${
+                feeNotSet
+                  ? 'bg-slate-700 text-slate-400 cursor-not-allowed shadow-none'
+                  : 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/25 cursor-pointer'
+              }`}
               id="btn-print-modal-challan"
             >
               <Printer className="w-4 h-4" />
@@ -154,7 +188,7 @@ export const FeeChallanModal: React.FC<FeeChallanModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#1f2b3e] transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-edge-17 transition-colors cursor-pointer"
               id="btn-close-modal-challan"
             >
               <X className="w-5 h-5" />
@@ -186,11 +220,30 @@ export const FeeChallanModal: React.FC<FeeChallanModalProps> = ({
             }
           `}} />
 
-          {itemsToRender.map((item, itemIdx) => {
-            const fineAmount = bankSettings.lateFineAmount || 500;
+          {/* Fix P1-8: no amount was provided for this challan, so NO
+              challan sheet is rendered at all — only this explicit
+              notice. A document with an invented amount must never
+              reach paper. */}
+          {feeNotSet && (
+            <div className="max-w-xl mx-auto bg-white p-8 rounded-xl shadow-md border border-amber-300 text-center no-print" role="alert">
+              <AlertCircle className="w-10 h-10 text-amber-500 mx-auto mb-3" />
+              <h3 className="text-base font-bold text-slate-900">Fee not set</h3>
+              <p className="text-sm text-slate-600 mt-2 leading-relaxed">
+                No fee amount was provided for {name}&apos;s challan, so no amount has been
+                filled in and this challan cannot be printed. Set the class fee first
+                (Classes → Edit Class / Change Fee), then generate the challan again.
+              </p>
+            </div>
+          )}
+
+          {!feeNotSet && itemsToRender.map((item, itemIdx) => {
+            // Fix #7b: `??` keeps the settings default (500) when the
+            // value is absent, but a late fine DELIBERATELY set to 0 in
+            // settings is a real 0 and must not be overridden to 500.
+            const fineAmount = bankSettings.lateFineAmount ?? 500;
             const tuitionAmount = item.totalFee > fineAmount ? (item.totalFee - fineAmount) : item.totalFee;
             const totalWithinDue = item.totalFee;
-            const lateFine = bankSettings.lateFineAmount || 500;
+            const lateFine = bankSettings.lateFineAmount ?? 500;
             const totalAfterDue = totalWithinDue + lateFine;
             const inWords = numberToWordsPKR(totalWithinDue);
 
@@ -235,9 +288,11 @@ export const FeeChallanModal: React.FC<FeeChallanModalProps> = ({
                             <h3 className="font-extrabold text-[10.5px] uppercase tracking-tight text-slate-950 leading-none">
                               {bankSettings.schoolName || 'DEMO SCHOOL SCHOOLIEE PAKISTAN'}
                             </h3>
-                            <p className="text-[8px] text-slate-800 font-semibold mt-0.5">
-                              Phone Number : {bankSettings.schoolPhone || '03356226026'}
-                            </p>
+                            {bankSettings.schoolPhone && (
+                              <p className="text-[8px] text-slate-800 font-semibold mt-0.5">
+                                Phone Number : {bankSettings.schoolPhone}
+                              </p>
+                            )}
                             <p className="text-[7.5px] text-slate-600">
                               {bankSettings.schoolAddress || 'Faisalabad, Punjab, Pakistan'}
                             </p>
@@ -321,7 +376,7 @@ export const FeeChallanModal: React.FC<FeeChallanModalProps> = ({
                           <tbody className="divide-y divide-slate-200">
                             <tr>
                               <td className="py-0.5 px-1.5 border-r border-slate-300 text-slate-800">
-                                {item.feeRange.includes('Sep') ? item.feeRange : 'Sep 2026'} Fee
+                                {feePeriodOf(item.feeRange, item.issueDate)} Fee
                               </td>
                               <td className="py-0.5 px-1.5 text-right font-medium text-slate-900">
                                 {tuitionAmount.toLocaleString()} PKR

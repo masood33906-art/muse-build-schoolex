@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "server": "node server/index.js",
     "start:desktop": "electron .",
     "dist:win": "npm run build && electron-builder --win nsis",

@@ -184,17 +184,17 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
       <div 
-        className="w-full max-w-4xl bg-[#0c121e] border border-[#1e2d42] rounded-2xl shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[94vh]"
+        className="w-full max-w-4xl bg-surface-6 border border-[#1e2d42] rounded-2xl shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[94vh]"
         id="modal-fee-cards"
       >
         {/* Header */}
-        <div className="px-5 py-3.5 bg-[#121a28] border-b border-[#1b283d] flex items-center justify-between no-print">
+        <div className="px-5 py-3.5 bg-[#121a28] border-b border-edge-11 flex items-center justify-between no-print">
           <div className="flex items-center gap-3">
             {viewMode === 'preview' && (
               <button
                 type="button"
                 onClick={() => setViewMode('select')}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-[#1a2538] transition-colors cursor-pointer mr-1"
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-surface-43 transition-colors cursor-pointer mr-1"
                 title="Back to Student Selection"
               >
                 <ArrowLeft className="w-4 h-4" />
@@ -213,7 +213,7 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#1a2538] transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-surface-43 transition-colors cursor-pointer"
             id="btn-close-fee-card-modal"
           >
             <X className="w-5 h-5" />
@@ -221,7 +221,7 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-5 no-print bg-[#080d16]">
+        <div className="flex-1 overflow-y-auto p-5 no-print bg-surface-1">
           {viewMode === 'select' ? (
             /* SELECTION VIEW */
             <div className="space-y-5 max-w-2xl mx-auto py-2">
@@ -261,7 +261,7 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
                       searchInputRef.current?.focus();
                       setIsDropdownOpen(true);
                     }}
-                    className="min-h-[50px] p-2 rounded-xl bg-[#0f1725] border border-[#22334b] focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 flex flex-wrap items-center gap-1.5 transition-all cursor-text"
+                    className="min-h-[50px] p-2 rounded-xl bg-surface-9 border border-edge-29 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 flex flex-wrap items-center gap-1.5 transition-all cursor-text"
                     id="container-fee-card-search"
                   >
                     <Search className="w-4 h-4 text-slate-400 ml-1 mr-1 shrink-0" />
@@ -320,7 +320,7 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
                   {/* Dropdown Menu */}
                   {isDropdownOpen && (
                     <div 
-                      className="absolute left-0 right-0 mt-1.5 bg-[#0f1725] border border-[#263a56] rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto py-1 text-xs divide-y divide-[#172338]"
+                      className="absolute left-0 right-0 mt-1.5 bg-surface-9 border border-[#263a56] rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto py-1 text-xs divide-y divide-[#172338]"
                       id="dropdown-student-search-results"
                     >
                       {searchResults.length === 0 ? (
@@ -370,7 +370,7 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
                 <button
                   type="button"
                   onClick={handleCancelEverything}
-                  className="px-4 py-2 rounded-xl bg-[#141d2c] hover:bg-[#1a263a] border border-[#23354e] text-slate-300 hover:text-white text-xs font-semibold cursor-pointer transition-all"
+                  className="px-4 py-2 rounded-xl bg-[#141d2c] hover:bg-surface-44 border border-edge-35 text-slate-300 hover:text-white text-xs font-semibold cursor-pointer transition-all"
                   id="btn-cancel-fee-cards"
                 >
                   Cancel
@@ -402,7 +402,7 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setViewMode('select')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#152033] hover:bg-[#1c2c45] border border-[#223552] text-slate-300 hover:text-white font-medium cursor-pointer transition-all"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-35 hover:bg-[#1c2c45] border border-[#223552] text-slate-300 hover:text-white font-medium cursor-pointer transition-all"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
                   <span>Edit Selection</span>
@@ -416,7 +416,7 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
                   <button
                     type="button"
                     onClick={handleDownloadPdf}
-                    className="px-3 py-1.5 rounded-lg bg-[#152033] hover:bg-[#1c2c45] border border-[#223552] text-slate-200 hover:text-white font-medium flex items-center gap-1.5 cursor-pointer transition-all"
+                    className="px-3 py-1.5 rounded-lg bg-surface-35 hover:bg-[#1c2c45] border border-[#223552] text-slate-200 hover:text-white font-medium flex items-center gap-1.5 cursor-pointer transition-all"
                     id="btn-preview-download-pdf"
                   >
                     <Download className="w-3.5 h-3.5" />
@@ -443,10 +443,10 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
                     className="bg-white text-slate-900 rounded-xl p-5 shadow-2xl overflow-x-auto border border-slate-300 relative"
                     id={`preview-fee-card-${cardData.student.id}`}
                   >
-                    <div className={isMinimalTemplate ? "border border-slate-900 p-4 relative" : "border-2 border-[#1b365d] p-3.5 relative"}>
-                      <div className={isMinimalTemplate ? "p-1" : "border border-[#1b365d] p-3.5"}>
+                    <div className={isMinimalTemplate ? "border border-slate-900 p-4 relative" : "border-2 border-doc-deep p-3.5 relative"}>
+                      <div className={isMinimalTemplate ? "p-1" : "border border-doc-deep p-3.5"}>
                         {/* Top Header Row */}
-                        <div className={`flex items-center justify-between text-[11px] font-bold mb-1 ${isMinimalTemplate ? 'text-slate-900' : 'text-[#1b365d]'}`}>
+                        <div className={`flex items-center justify-between text-[11px] font-bold mb-1 ${isMinimalTemplate ? 'text-slate-900' : 'text-doc-deep'}`}>
                           <span>School NO- {cardData.schoolNo}</span>
                           <div className={`${isMinimalTemplate ? 'bg-slate-900' : 'bg-[#dc2626]'} text-white px-5 py-0.5 rounded-full text-xs font-black tracking-wider uppercase`}>
                             FEE CARD
@@ -455,7 +455,7 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
                         </div>
 
                         {/* UDISE */}
-                        <div className={`text-center text-[10px] font-bold mb-1 ${isMinimalTemplate ? 'text-slate-600' : 'text-[#1b365d]'}`}>
+                        <div className={`text-center text-[10px] font-bold mb-1 ${isMinimalTemplate ? 'text-slate-600' : 'text-doc-deep'}`}>
                           UDISE- {cardData.udiseNo}
                         </div>
 
@@ -479,7 +479,7 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
 
                         {/* Session Pill */}
                         <div className="flex justify-center my-2">
-                          <div className={`px-6 py-0.5 border rounded-full text-[10px] font-bold ${isMinimalTemplate ? 'border-slate-900 text-slate-900' : 'border-[#1b365d] text-[#1b365d]'}`}>
+                          <div className={`px-6 py-0.5 border rounded-full text-[10px] font-bold ${isMinimalTemplate ? 'border-slate-900 text-slate-900' : 'border-doc-deep text-doc-deep'}`}>
                             Session : {cardData.academicSession}
                           </div>
                         </div>
@@ -548,60 +548,60 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
                         {/* 12-Month Table */}
                         <div className="mt-3 overflow-x-auto">
                           <table className="w-full text-left text-[10px] border-collapse border border-[#2b5b84]">
-                            <thead className="bg-[#d6e6f5] text-[#1b365d] font-bold uppercase text-[9px]">
+                            <thead className="bg-[#d6e6f5] text-doc-deep font-bold uppercase text-[9px]">
                               <tr>
-                                <th className="p-1.5 border border-[#4682b4]">MONTH</th>
-                                <th className="p-1.5 border border-[#4682b4] text-center leading-tight">ADMISSION<br/>FEE</th>
-                                <th className="p-1.5 border border-[#4682b4] text-center leading-tight">ANNUAL<br/>FEE</th>
-                                <th className="p-1.5 border border-[#4682b4] text-center leading-tight">TUITION<br/>FEE</th>
-                                <th className="p-1.5 border border-[#4682b4] text-center leading-tight">CONVEY<br/>FEE</th>
-                                <th className="p-1.5 border border-[#4682b4] text-center">L.fine</th>
-                                <th className="p-1.5 border border-[#4682b4] text-center">ARREAR</th>
-                                <th className="p-1.5 border border-[#4682b4] text-center leading-tight">TOTAL AMT.<br/>PAYABLE</th>
-                                <th className="p-1.5 border border-[#4682b4] text-center leading-tight">AMOUNT<br/>PAID</th>
-                                <th className="p-1.5 border border-[#4682b4] text-center">DUES</th>
-                                <th className="p-1.5 border border-[#4682b4] text-center">REC. NO.</th>
-                                <th className="p-1.5 border border-[#4682b4] text-center leading-tight">SIGN &amp;<br/>DATE</th>
+                                <th className="p-1.5 border border-doc">MONTH</th>
+                                <th className="p-1.5 border border-doc text-center leading-tight">ADMISSION<br/>FEE</th>
+                                <th className="p-1.5 border border-doc text-center leading-tight">ANNUAL<br/>FEE</th>
+                                <th className="p-1.5 border border-doc text-center leading-tight">TUITION<br/>FEE</th>
+                                <th className="p-1.5 border border-doc text-center leading-tight">CONVEY<br/>FEE</th>
+                                <th className="p-1.5 border border-doc text-center">L.fine</th>
+                                <th className="p-1.5 border border-doc text-center">ARREAR</th>
+                                <th className="p-1.5 border border-doc text-center leading-tight">TOTAL AMT.<br/>PAYABLE</th>
+                                <th className="p-1.5 border border-doc text-center leading-tight">AMOUNT<br/>PAID</th>
+                                <th className="p-1.5 border border-doc text-center">DUES</th>
+                                <th className="p-1.5 border border-doc text-center">REC. NO.</th>
+                                <th className="p-1.5 border border-doc text-center leading-tight">SIGN &amp;<br/>DATE</th>
                               </tr>
                             </thead>
                             <tbody>
                               {cardData.months.map((row) => (
                                 <tr key={row.month} className="hover:bg-slate-50 transition-colors">
-                                  <td className="p-1 font-bold text-[#1b365d] border border-[#7aa3c7] whitespace-nowrap">
+                                  <td className="p-1 font-bold text-doc-deep border border-doc-soft whitespace-nowrap">
                                     {row.month}
                                   </td>
                                   {/* ZERO RULE: NOTHING IN BOX IF ZERO */}
-                                  <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                                  <td className="p-1 text-right font-mono border border-doc-soft">
                                     {formatOrBlank(row.admissionFee)}
                                   </td>
-                                  <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                                  <td className="p-1 text-right font-mono border border-doc-soft">
                                     {formatOrBlank(row.annualFee)}
                                   </td>
-                                  <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                                  <td className="p-1 text-right font-mono border border-doc-soft">
                                     {formatOrBlank(row.tuitionFee)}
                                   </td>
-                                  <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                                  <td className="p-1 text-right font-mono border border-doc-soft">
                                     {formatOrBlank(row.conveyFee)}
                                   </td>
-                                  <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                                  <td className="p-1 text-right font-mono border border-doc-soft">
                                     {formatOrBlank(row.lateFine)}
                                   </td>
-                                  <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                                  <td className="p-1 text-right font-mono border border-doc-soft">
                                     {formatOrBlank(row.arrear)}
                                   </td>
-                                  <td className="p-1 text-right font-mono font-bold text-slate-900 border border-[#7aa3c7]">
+                                  <td className="p-1 text-right font-mono font-bold text-slate-900 border border-doc-soft">
                                     {formatOrBlank(row.totalPayable)}
                                   </td>
-                                  <td className="p-1 text-right font-mono font-bold text-slate-900 border border-[#7aa3c7]">
+                                  <td className="p-1 text-right font-mono font-bold text-slate-900 border border-doc-soft">
                                     {formatOrBlank(row.amountPaid)}
                                   </td>
-                                  <td className="p-1 text-right font-mono font-bold text-slate-900 border border-[#7aa3c7]">
+                                  <td className="p-1 text-right font-mono font-bold text-slate-900 border border-doc-soft">
                                     {formatOrBlank(row.dues)}
                                   </td>
-                                  <td className="p-1 text-center font-mono text-slate-700 border border-[#7aa3c7] whitespace-nowrap">
+                                  <td className="p-1 text-center font-mono text-slate-700 border border-doc-soft whitespace-nowrap">
                                     {row.receiptNo}
                                   </td>
-                                  <td className="p-1 text-center font-mono text-slate-700 border border-[#7aa3c7] whitespace-nowrap">
+                                  <td className="p-1 text-center font-mono text-slate-700 border border-doc-soft whitespace-nowrap">
                                     {row.signDate}
                                   </td>
                                 </tr>
@@ -629,11 +629,11 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 bg-[#121a28] border-t border-[#1b283d] flex items-center justify-between text-xs no-print">
+        <div className="px-5 py-3 bg-[#121a28] border-t border-edge-11 flex items-center justify-between text-xs no-print">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-1.5 rounded-lg bg-[#182335] hover:bg-[#202e44] border border-[#263753] text-slate-300 hover:text-white font-medium cursor-pointer transition-all"
+            className="px-4 py-1.5 rounded-lg bg-edge-3 hover:bg-[#202e44] border border-edge-39 text-slate-300 hover:text-white font-medium cursor-pointer transition-all"
           >
             Close
           </button>
@@ -667,10 +667,10 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
                 className="p-6 bg-white text-slate-900 min-h-screen flex flex-col justify-between"
                 style={{ pageBreakAfter: 'always', breakAfter: 'page' }}
               >
-                <div className={isMinimalTemplate ? "border border-slate-900 p-3" : "border-2 border-[#1b365d] p-3"}>
-                  <div className={isMinimalTemplate ? "p-1" : "border border-[#1b365d] p-3"}>
+                <div className={isMinimalTemplate ? "border border-slate-900 p-3" : "border-2 border-doc-deep p-3"}>
+                  <div className={isMinimalTemplate ? "p-1" : "border border-doc-deep p-3"}>
                     {/* Top Bar */}
-                    <div className={`flex items-center justify-between text-[11px] font-bold mb-1 ${isMinimalTemplate ? 'text-slate-900' : 'text-[#1b365d]'}`}>
+                    <div className={`flex items-center justify-between text-[11px] font-bold mb-1 ${isMinimalTemplate ? 'text-slate-900' : 'text-doc-deep'}`}>
                       <span>School NO- {cData.schoolNo}</span>
                       <div className={`${isMinimalTemplate ? 'bg-slate-900' : 'bg-[#dc2626]'} text-white px-4 py-0.5 rounded-full text-xs font-black tracking-wider uppercase`}>
                         FEE CARD
@@ -679,7 +679,7 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
                     </div>
 
                     {/* UDISE */}
-                    <div className={`text-center text-[10px] font-bold mb-1 ${isMinimalTemplate ? 'text-slate-600' : 'text-[#1b365d]'}`}>
+                    <div className={`text-center text-[10px] font-bold mb-1 ${isMinimalTemplate ? 'text-slate-600' : 'text-doc-deep'}`}>
                       UDISE- {cData.udiseNo}
                     </div>
 
@@ -702,7 +702,7 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
 
                     {/* Session */}
                     <div className="flex justify-center my-1.5">
-                      <div className={`px-5 py-0.5 border rounded-full text-[10px] font-bold ${isMinimalTemplate ? 'border-slate-900 text-slate-900' : 'border-[#1b365d] text-[#1b365d]'}`}>
+                      <div className={`px-5 py-0.5 border rounded-full text-[10px] font-bold ${isMinimalTemplate ? 'border-slate-900 text-slate-900' : 'border-doc-deep text-doc-deep'}`}>
                         Session : {cData.academicSession}
                       </div>
                     </div>
@@ -770,59 +770,59 @@ export const FeeCardModal: React.FC<FeeCardModalProps> = ({
 
                     {/* 12-Month Table */}
                     <table className="w-full text-left text-[9px] border-collapse border border-[#2b5b84] mt-2">
-                      <thead className="bg-[#d6e6f5] text-[#1b365d] font-bold uppercase text-[8px]">
+                      <thead className="bg-[#d6e6f5] text-doc-deep font-bold uppercase text-[8px]">
                         <tr>
-                          <th className="p-1 border border-[#4682b4]">MONTH</th>
-                          <th className="p-1 border border-[#4682b4] text-center leading-tight">ADMISSION<br/>FEE</th>
-                          <th className="p-1 border border-[#4682b4] text-center leading-tight">ANNUAL<br/>FEE</th>
-                          <th className="p-1 border border-[#4682b4] text-center leading-tight">TUITION<br/>FEE</th>
-                          <th className="p-1 border border-[#4682b4] text-center leading-tight">CONVEY<br/>FEE</th>
-                          <th className="p-1 border border-[#4682b4] text-center">L.fine</th>
-                          <th className="p-1 border border-[#4682b4] text-center">ARREAR</th>
-                          <th className="p-1 border border-[#4682b4] text-center leading-tight">TOTAL AMT.<br/>PAYABLE</th>
-                          <th className="p-1 border border-[#4682b4] text-center leading-tight">AMOUNT<br/>PAID</th>
-                          <th className="p-1 border border-[#4682b4] text-center">DUES</th>
-                          <th className="p-1 border border-[#4682b4] text-center">REC. NO.</th>
-                          <th className="p-1 border border-[#4682b4] text-center leading-tight">SIGN &amp;<br/>DATE</th>
+                          <th className="p-1 border border-doc">MONTH</th>
+                          <th className="p-1 border border-doc text-center leading-tight">ADMISSION<br/>FEE</th>
+                          <th className="p-1 border border-doc text-center leading-tight">ANNUAL<br/>FEE</th>
+                          <th className="p-1 border border-doc text-center leading-tight">TUITION<br/>FEE</th>
+                          <th className="p-1 border border-doc text-center leading-tight">CONVEY<br/>FEE</th>
+                          <th className="p-1 border border-doc text-center">L.fine</th>
+                          <th className="p-1 border border-doc text-center">ARREAR</th>
+                          <th className="p-1 border border-doc text-center leading-tight">TOTAL AMT.<br/>PAYABLE</th>
+                          <th className="p-1 border border-doc text-center leading-tight">AMOUNT<br/>PAID</th>
+                          <th className="p-1 border border-doc text-center">DUES</th>
+                          <th className="p-1 border border-doc text-center">REC. NO.</th>
+                          <th className="p-1 border border-doc text-center leading-tight">SIGN &amp;<br/>DATE</th>
                         </tr>
                       </thead>
                       <tbody>
                         {cData.months.map((row) => (
                           <tr key={row.month}>
-                            <td className="p-1 font-bold text-[#1b365d] border border-[#7aa3c7] whitespace-nowrap">
+                            <td className="p-1 font-bold text-doc-deep border border-doc-soft whitespace-nowrap">
                               {row.month}
                             </td>
-                            <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                            <td className="p-1 text-right font-mono border border-doc-soft">
                               {formatOrBlank(row.admissionFee)}
                             </td>
-                            <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                            <td className="p-1 text-right font-mono border border-doc-soft">
                               {formatOrBlank(row.annualFee)}
                             </td>
-                            <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                            <td className="p-1 text-right font-mono border border-doc-soft">
                               {formatOrBlank(row.tuitionFee)}
                             </td>
-                            <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                            <td className="p-1 text-right font-mono border border-doc-soft">
                               {formatOrBlank(row.conveyFee)}
                             </td>
-                            <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                            <td className="p-1 text-right font-mono border border-doc-soft">
                               {formatOrBlank(row.lateFine)}
                             </td>
-                            <td className="p-1 text-right font-mono border border-[#7aa3c7]">
+                            <td className="p-1 text-right font-mono border border-doc-soft">
                               {formatOrBlank(row.arrear)}
                             </td>
-                            <td className="p-1 text-right font-mono font-bold text-slate-900 border border-[#7aa3c7]">
+                            <td className="p-1 text-right font-mono font-bold text-slate-900 border border-doc-soft">
                               {formatOrBlank(row.totalPayable)}
                             </td>
-                            <td className="p-1 text-right font-mono font-bold text-slate-900 border border-[#7aa3c7]">
+                            <td className="p-1 text-right font-mono font-bold text-slate-900 border border-doc-soft">
                               {formatOrBlank(row.amountPaid)}
                             </td>
-                            <td className="p-1 text-right font-mono font-bold text-slate-900 border border-[#7aa3c7]">
+                            <td className="p-1 text-right font-mono font-bold text-slate-900 border border-doc-soft">
                               {formatOrBlank(row.dues)}
                             </td>
-                            <td className="p-1 text-center font-mono text-slate-700 border border-[#7aa3c7] whitespace-nowrap">
+                            <td className="p-1 text-center font-mono text-slate-700 border border-doc-soft whitespace-nowrap">
                               {row.receiptNo}
                             </td>
-                            <td className="p-1 text-center font-mono text-slate-700 border border-[#7aa3c7] whitespace-nowrap">
+                            <td className="p-1 text-center font-mono text-slate-700 border border-doc-soft whitespace-nowrap">
                               {row.signDate}
                             </td>
                           </tr>

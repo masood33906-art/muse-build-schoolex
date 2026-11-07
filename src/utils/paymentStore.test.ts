@@ -77,8 +77,7 @@ function makeStudent(id: string, familyId = 'F0001', name = 'Ali Khan'): Student
     familyId,
     phone: '03001234567',
     address: 'Lahore',
-    status: 'Active',
-    feeStatus: 'Unpaid'
+    status: 'Active'
   };
 }
 
@@ -295,7 +294,6 @@ function seedTwoMonthsForStudent(studentId: string): StudentFeeItem[] {
     department: 'Mathematics',
     qualification: 'M.Sc',
     salary: 50000,
-    joinDate: '2026-01-01',
     joiningDate: '2026-01-01',
     status: 'Active',
     payStatus: 'Paid', // bogus Paid with no paidMonths

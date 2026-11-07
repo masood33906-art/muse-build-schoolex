@@ -263,12 +263,20 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
     };
   }, [hoveredStrip, totalBalance, totalExpense, totalIncome]);
 
-  // Helper date range label
+  // Helper date range labels — computed from the selected range and today's
+  // date (Fix P0-4: previously fixed Sep-2026 strings were shown no matter
+  // what the real range or date was). These now describe exactly the ranges
+  // computeLedgerGraphData filters by.
+  const labelNow = new Date();
+  const fmtFullDate = (d: Date) => d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const fmtMonthYear = (d: Date) => d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+  const firstOfThisMonth = new Date(labelNow.getFullYear(), labelNow.getMonth(), 1);
+  const firstOfLastMonth = new Date(labelNow.getFullYear(), labelNow.getMonth() - 1, 1);
   const dateRangeLabels: Record<DateRangeOption, string> = {
-    current_month: '01 - 16 Sep 2026',
-    last_month: 'Last Month (Aug 2026)',
-    last_year: 'Last Year (2025)',
-    five_years: 'Past 5 Years',
+    current_month: `${fmtFullDate(firstOfThisMonth)} – ${fmtFullDate(labelNow)}`,
+    last_month: `Last Month (${fmtMonthYear(firstOfLastMonth)})`,
+    last_year: `Last Year (${labelNow.getFullYear() - 1})`,
+    five_years: `Past 5 Years (${labelNow.getFullYear() - 4} – ${labelNow.getFullYear()})`,
     all_time: 'All Time'
   };
 
@@ -318,7 +326,7 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
         {/* 1ST CONTAINER: TOTAL BALANCE, RECORD BUTTONS & AREA GRAPH */}
         {/* ========================================================= */}
         <div 
-          className="lg:col-span-7 bg-[#101726] border border-[#1d2b40] rounded-2xl p-5 shadow-xl flex flex-col justify-between"
+          className="lg:col-span-7 bg-surface-13 border border-edge-16 rounded-2xl p-5 shadow-xl flex flex-col justify-between"
           id="container-1-total-balance"
         >
           {/* Top Section */}
@@ -368,7 +376,7 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
                 className={`p-3.5 rounded-xl border text-left flex items-center gap-3 transition-all cursor-pointer ${
                   graphMode === 'income'
                     ? 'bg-[#142236] border-blue-500/60 ring-1 ring-blue-500/40 shadow-lg shadow-blue-900/20'
-                    : 'bg-[#121b2b] border-[#1d2a3e] hover:bg-[#162234] hover:border-slate-700'
+                    : 'bg-surface-20 border-[#1d2a3e] hover:bg-[#162234] hover:border-slate-700'
                 }`}
                 id="btn-switch-graph-income"
               >
@@ -390,7 +398,7 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
                 className={`p-3.5 rounded-xl border text-left flex items-center gap-3 transition-all cursor-pointer ${
                   graphMode === 'expenses'
                     ? 'bg-[#291b1b] border-amber-500/60 ring-1 ring-amber-500/40 shadow-lg shadow-amber-950/20'
-                    : 'bg-[#121b2b] border-[#1d2a3e] hover:bg-[#162234] hover:border-slate-700'
+                    : 'bg-surface-20 border-[#1d2a3e] hover:bg-[#162234] hover:border-slate-700'
                 }`}
                 id="btn-switch-graph-expenses"
               >
@@ -582,7 +590,7 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
         {/* 2ND CONTAINER: TOTAL PROFIT RADIAL CHART WITH STRIP HOVER */}
         {/* ========================================================= */}
         <div 
-          className="lg:col-span-5 bg-[#101726] border border-[#1d2b40] rounded-2xl p-5 shadow-xl flex flex-col justify-between relative"
+          className="lg:col-span-5 bg-surface-13 border border-edge-16 rounded-2xl p-5 shadow-xl flex flex-col justify-between relative"
           id="container-2-total-profit"
         >
           {/* Header Row: Total Profit Title & Date Range Dropdown */}
@@ -596,7 +604,7 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
               <button
                 type="button"
                 onClick={() => setIsDateRangeOpen(!isDateRangeOpen)}
-                className="px-3 py-1.5 rounded-xl bg-[#152033] hover:bg-[#1d2c45] border border-[#23344d] text-xs text-slate-200 flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-3 py-1.5 rounded-xl bg-surface-35 hover:bg-[#1d2c45] border border-[#23344d] text-xs text-slate-200 flex items-center gap-1.5 transition-all cursor-pointer"
                 id="btn-date-range-dropdown"
               >
                 <span>{dateRangeLabels[dateRange]}</span>
@@ -613,16 +621,16 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
                     type="button"
                     onClick={() => { setDateRange('current_month'); setIsDateRangeOpen(false); }}
                     className={`w-full text-left px-3.5 py-2 hover:bg-[#182538] transition-colors cursor-pointer ${
-                      dateRange === 'current_month' ? 'text-blue-400 font-bold bg-[#142033]' : 'text-slate-300'
+                      dateRange === 'current_month' ? 'text-blue-400 font-bold bg-surface-33' : 'text-slate-300'
                     }`}
                   >
-                    01 - 16 Sep 2026 (This Month)
+                    {dateRangeLabels.current_month} (This Month)
                   </button>
                   <button
                     type="button"
                     onClick={() => { setDateRange('last_month'); setIsDateRangeOpen(false); }}
                     className={`w-full text-left px-3.5 py-2 hover:bg-[#182538] transition-colors cursor-pointer ${
-                      dateRange === 'last_month' ? 'text-blue-400 font-bold bg-[#142033]' : 'text-slate-300'
+                      dateRange === 'last_month' ? 'text-blue-400 font-bold bg-surface-33' : 'text-slate-300'
                     }`}
                   >
                     Last Month
@@ -631,7 +639,7 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
                     type="button"
                     onClick={() => { setDateRange('last_year'); setIsDateRangeOpen(false); }}
                     className={`w-full text-left px-3.5 py-2 hover:bg-[#182538] transition-colors cursor-pointer ${
-                      dateRange === 'last_year' ? 'text-blue-400 font-bold bg-[#142033]' : 'text-slate-300'
+                      dateRange === 'last_year' ? 'text-blue-400 font-bold bg-surface-33' : 'text-slate-300'
                     }`}
                   >
                     Last Year
@@ -640,7 +648,7 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
                     type="button"
                     onClick={() => { setDateRange('five_years'); setIsDateRangeOpen(false); }}
                     className={`w-full text-left px-3.5 py-2 hover:bg-[#182538] transition-colors cursor-pointer ${
-                      dateRange === 'five_years' ? 'text-blue-400 font-bold bg-[#142033]' : 'text-slate-300'
+                      dateRange === 'five_years' ? 'text-blue-400 font-bold bg-surface-33' : 'text-slate-300'
                     }`}
                   >
                     5 Years
@@ -649,7 +657,7 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
                     type="button"
                     onClick={() => { setDateRange('all_time'); setIsDateRangeOpen(false); }}
                     className={`w-full text-left px-3.5 py-2 hover:bg-[#182538] transition-colors cursor-pointer ${
-                      dateRange === 'all_time' ? 'text-blue-400 font-bold bg-[#142033]' : 'text-slate-300'
+                      dateRange === 'all_time' ? 'text-blue-400 font-bold bg-surface-33' : 'text-slate-300'
                     }`}
                   >
                     All the way from starting time
@@ -792,7 +800,7 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
               onMouseLeave={() => setHoveredStrip(null)}
               className="flex items-center gap-1.5 text-slate-300 hover:text-white transition-colors cursor-pointer"
             >
-              <span className="w-2.5 h-2.5 rounded-full bg-[#10b981]" />
+              <span className="w-2.5 h-2.5 rounded-full bg-success" />
               <span className="font-medium">Profit</span>
             </button>
 
@@ -823,7 +831,7 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
       {/* 3RD CONTAINER: PIPELINE TABS, FILTERS & ATTRIBUTES TABLE   */}
       {/* ========================================================= */}
       <div 
-        className="bg-[#101726] border border-[#1d2b40] rounded-2xl p-5 shadow-xl space-y-4"
+        className="bg-surface-13 border border-edge-16 rounded-2xl p-5 shadow-xl space-y-4"
         id="container-3-ledger-entries-table"
       >
         {/* Top Controls: Pipeline Tabs & Filter Selectors */}
@@ -839,8 +847,8 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
                 onClick={() => { setPipeline('All'); setCurrentPage(1); }}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
                   pipeline === 'All'
-                    ? 'bg-[#1b283d] text-white border border-[#2d405e] shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#141e2e]'
+                    ? 'bg-edge-11 text-white border border-[#2d405e] shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-surface-27'
                 }`}
                 id="tab-pipeline-all"
               >
@@ -857,7 +865,7 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
                   pipeline === 'Incoming'
                     ? 'bg-[#122b22] text-emerald-300 border border-[#1d4737] shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#141e2e]'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-surface-27'
                 }`}
                 id="tab-pipeline-incoming"
               >
@@ -874,7 +882,7 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
                   pipeline === 'Outgoing'
                     ? 'bg-[#2b1818] text-rose-300 border border-[#4a2424] shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#141e2e]'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-surface-27'
                 }`}
                 id="tab-pipeline-outgoing"
               >
@@ -891,7 +899,7 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
                   pipeline === 'System'
                     ? 'bg-[#152336] text-cyan-300 border border-[#213957] shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#141e2e]'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-surface-27'
                 }`}
                 id="tab-pipeline-system"
               >
@@ -915,7 +923,7 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
                 value={searchQuery}
                 onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                 placeholder="Search by reason, category, user, note, amount..."
-                className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-[#090f1a] border border-[#1e2e45] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-surface-4 border border-[#1e2e45] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
                 id="input-ledger-search"
               />
               {searchQuery && (
@@ -934,7 +942,7 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
               <select
                 value={selectedUser}
                 onChange={(e) => { setSelectedUser(e.target.value); setCurrentPage(1); }}
-                className="w-full px-3 py-2 rounded-xl bg-[#090f1a] border border-[#1e2e45] text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
+                className="w-full px-3 py-2 rounded-xl bg-surface-4 border border-[#1e2e45] text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
                 id="select-filter-user"
               >
                 <option value="all">All Users</option>
@@ -949,7 +957,7 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
               <select
                 value={selectedCategory}
                 onChange={(e) => { setSelectedCategory(e.target.value); setCurrentPage(1); }}
-                className="w-full px-3 py-2 rounded-xl bg-[#090f1a] border border-[#1e2e45] text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
+                className="w-full px-3 py-2 rounded-xl bg-surface-4 border border-[#1e2e45] text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
                 id="select-filter-category"
               >
                 <option value="all">All Categories</option>
@@ -964,7 +972,7 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
               <select
                 value={selectedPaymentType}
                 onChange={(e) => { setSelectedPaymentType(e.target.value); setCurrentPage(1); }}
-                className="w-full px-3 py-2 rounded-xl bg-[#090f1a] border border-[#1e2e45] text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
+                className="w-full px-3 py-2 rounded-xl bg-surface-4 border border-[#1e2e45] text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
                 id="select-filter-payment"
               >
                 <option value="all">All Payments</option>
@@ -981,9 +989,9 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
 
         {/* Transactions Table */}
         {/* User requirement: "bellow from it an attributes fro each entry such as date with slightly pade time, amount, created by, payment type, type, category, reason, note and document. do not include the action attribute(ingore it)." */}
-        <div className="overflow-x-auto rounded-xl border border-[#1b283d] bg-[#090f1a]">
+        <div className="overflow-x-auto rounded-xl border border-edge-11 bg-surface-4">
           <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-[#0e1625] text-slate-400 font-semibold border-b border-[#1b283d]">
+            <thead className="bg-[#0e1625] text-slate-400 font-semibold border-b border-edge-11">
               <tr>
                 <th className="py-3 px-3.5 whitespace-nowrap">Date</th>
                 <th className="py-3 px-3.5 whitespace-nowrap">Amount</th>
@@ -1112,7 +1120,7 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
                 type="button"
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="p-1.5 rounded-lg bg-[#121b2b] hover:bg-[#1a263c] border border-[#1f304c] text-slate-300 disabled:opacity-30 disabled:pointer-events-none cursor-pointer transition-all"
+                className="p-1.5 rounded-lg bg-surface-20 hover:bg-[#1a263c] border border-[#1f304c] text-slate-300 disabled:opacity-30 disabled:pointer-events-none cursor-pointer transition-all"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
@@ -1125,7 +1133,7 @@ export const LedgerModule: React.FC<LedgerModuleProps> = ({
                 type="button"
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
-                className="p-1.5 rounded-lg bg-[#121b2b] hover:bg-[#1a263c] border border-[#1f304c] text-slate-300 disabled:opacity-30 disabled:pointer-events-none cursor-pointer transition-all"
+                className="p-1.5 rounded-lg bg-surface-20 hover:bg-[#1a263c] border border-[#1f304c] text-slate-300 disabled:opacity-30 disabled:pointer-events-none cursor-pointer transition-all"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>

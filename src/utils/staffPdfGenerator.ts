@@ -2,7 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { StaffMember, CardTemplateType, SalaryBreakdown } from '../types';
 import { SchoolInfo, DEFAULT_SCHOOL } from './pdfGenerator';
-import { getSchoolSettings } from './settingsHelper';
+import { getSchoolSettings, StaffSalarySlipTemplateType } from './settingsHelper';
 import { getInitials } from '../data/initialStudents';
 
 // Generates a single vertical Staff ID Card PDF (54mm x 86mm standard ID card CR80 size)
@@ -289,6 +289,102 @@ function renderStaffCardOnPage(doc: jsPDF, staff: StaffMember, template: CardTem
   }
 }
 
+/* ============================================================================
+ * Salary-slip template theme — the SINGLE source of truth for how each
+ * `staffSalarySlipTemplate` value looks (Fix P1-2).
+ *
+ * The values below are taken verbatim from the interpretations that already
+ * existed in the bulk payslip renderer (`renderSinglePayslipSheet`) and the
+ * on-screen previews, per template:
+ *   - 'executive-emerald': slate-900 banner + emerald accent stripe, emerald
+ *     table header slate-800, emerald net-pay band, "STAFF SALARY PAYSLIP".
+ *   - 'minimal-classic': black-bordered header box, all-black text/table
+ *     header, light-grey net-pay box with black border, "MONTHLY SALARY
+ *     PAYSLIP".
+ * Every salary-slip surface — the single-slip PDF, the bulk/combined PDF and
+ * both on-screen previews — must resolve its design through
+ * `getSalarySlipTheme` so the chosen template can never be honored in one
+ * place and ignored in another again.
+ * ========================================================================== */
+
+export type RgbColor = [number, number, number];
+
+export interface SalarySlipTheme {
+  template: StaffSalarySlipTemplateType;
+  isMinimalClassic: boolean;
+  /** 'banner' = filled dark header band; 'bordered' = black-outlined header box */
+  headerStyle: 'banner' | 'bordered';
+  /** Banner fill (banner style only; null for the bordered header) */
+  headerBannerFill: RgbColor | null;
+  /** Accent stripe along the banner's bottom edge (banner style only) */
+  headerAccentStripe: RgbColor | null;
+  headerSchoolColor: RgbColor;
+  headerSubColor: RgbColor;
+  headerTitleColor: RgbColor;
+  /** Document title printed in the header, before the month */
+  headerTitle: string;
+  infoBoxBorder: RgbColor;
+  statusPaidColor: RgbColor;
+  tableHeadFill: RgbColor;
+  netBoxFill: RgbColor;
+  /** Net-pay box outline (bordered variant only; null = solid band) */
+  netBoxBorder: RgbColor | null;
+  netTextColor: RgbColor;
+}
+
+const SALARY_SLIP_THEMES: Record<StaffSalarySlipTemplateType, SalarySlipTheme> = {
+  'executive-emerald': {
+    template: 'executive-emerald',
+    isMinimalClassic: false,
+    headerStyle: 'banner',
+    headerBannerFill: [15, 23, 42], // slate-900
+    headerAccentStripe: [16, 185, 129], // emerald-500
+    headerSchoolColor: [255, 255, 255],
+    headerSubColor: [148, 163, 184], // slate-400
+    headerTitleColor: [52, 211, 153], // emerald-400
+    headerTitle: 'STAFF SALARY PAYSLIP',
+    infoBoxBorder: [226, 232, 240], // slate-200
+    statusPaidColor: [5, 150, 105], // emerald-600
+    tableHeadFill: [30, 41, 59], // slate-800
+    netBoxFill: [16, 185, 129], // emerald-500
+    netBoxBorder: null,
+    netTextColor: [255, 255, 255]
+  },
+  'minimal-classic': {
+    template: 'minimal-classic',
+    isMinimalClassic: true,
+    headerStyle: 'bordered',
+    headerBannerFill: null,
+    headerAccentStripe: null,
+    headerSchoolColor: [0, 0, 0],
+    headerSubColor: [0, 0, 0],
+    headerTitleColor: [0, 0, 0],
+    headerTitle: 'MONTHLY SALARY PAYSLIP',
+    infoBoxBorder: [0, 0, 0],
+    statusPaidColor: [0, 0, 0],
+    tableHeadFill: [0, 0, 0],
+    netBoxFill: [241, 245, 249], // slate-100
+    netBoxBorder: [0, 0, 0],
+    netTextColor: [0, 0, 0]
+  }
+};
+
+/**
+ * Resolves the salary-slip theme for a template value. When no template is
+ * passed, the currently saved setting is read — the same pattern the ID-card
+ * generators use (`getSchoolSettings().staffIdCardTemplate` above). Unknown
+ * or missing values fall back to the default 'executive-emerald' theme, which
+ * is also what `getSchoolSettings()` defaults the setting itself to.
+ */
+export function getSalarySlipTheme(
+  template?: StaffSalarySlipTemplateType | string | null
+): SalarySlipTheme {
+  const active = template ?? getSchoolSettings().staffSalarySlipTemplate;
+  return active === 'minimal-classic'
+    ? SALARY_SLIP_THEMES['minimal-classic']
+    : SALARY_SLIP_THEMES['executive-emerald'];
+}
+
 // Generates an Official Printable / Downloadable Salary Pay Slip PDF
 export function generateSalarySlipPdf(
   staff: StaffMember,
@@ -304,29 +400,61 @@ export function generateSalarySlipPdf(
   const pageWidth = 148;
   const margin = 12;
 
-  // Header Banner
-  doc.setFillColor(15, 23, 42); // slate-900
-  doc.rect(0, 0, pageWidth, 28, 'F');
+  // The chosen Settings -> Templates salary-slip template, resolved through
+  // the shared theme (Fix P1-2). Previously this generator ignored the
+  // setting and always printed the emerald design.
+  const theme = getSalarySlipTheme();
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.setTextColor(255, 255, 255);
-  doc.text(school.name.toUpperCase(), pageWidth / 2, 10, { align: 'center' });
+  // Header — banner (executive-emerald) or bordered box (minimal-classic),
+  // matching the bulk payslip renderer's interpretation of the template.
+  if (theme.headerStyle === 'bordered') {
+    doc.setDrawColor(...theme.headerTitleColor);
+    doc.setLineWidth(0.5);
+    doc.rect(margin, 6, pageWidth - margin * 2, 22);
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(148, 163, 184);
-  doc.text(`${school.campus} • ${school.address} • Ph: ${school.phone}`, pageWidth / 2, 15, { align: 'center' });
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor(...theme.headerSchoolColor);
+    doc.text(school.name.toUpperCase(), pageWidth / 2, 13, { align: 'center' });
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(16, 185, 129); // emerald-400
-  doc.text(`STAFF SALARY PAYSLIP - ${breakdown.month.toUpperCase()}`, pageWidth / 2, 22, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...theme.headerSubColor);
+    doc.text(`${school.campus} • ${school.address} • Ph: ${school.phone}`, pageWidth / 2, 18, { align: 'center' });
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(...theme.headerTitleColor);
+    doc.text(`${theme.headerTitle} — ${breakdown.month.toUpperCase()}`, pageWidth / 2, 24.5, { align: 'center' });
+  } else {
+    doc.setFillColor(...(theme.headerBannerFill as RgbColor));
+    doc.rect(0, 0, pageWidth, 28, 'F');
+
+    if (theme.headerAccentStripe) {
+      doc.setFillColor(...theme.headerAccentStripe);
+      doc.rect(0, 26.8, pageWidth, 1.2, 'F');
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor(...theme.headerSchoolColor);
+    doc.text(school.name.toUpperCase(), pageWidth / 2, 10, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...theme.headerSubColor);
+    doc.text(`${school.campus} • ${school.address} • Ph: ${school.phone}`, pageWidth / 2, 15, { align: 'center' });
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(...theme.headerTitleColor);
+    doc.text(`${theme.headerTitle} — ${breakdown.month.toUpperCase()}`, pageWidth / 2, 22, { align: 'center' });
+  }
 
   // Employee Information Box
   doc.setFillColor(248, 250, 252);
   doc.roundedRect(margin, 33, pageWidth - margin * 2, 28, 2, 2, 'F');
-  doc.setDrawColor(226, 232, 240);
+  doc.setDrawColor(...theme.infoBoxBorder);
   doc.roundedRect(margin, 33, pageWidth - margin * 2, 28, 2, 2, 'S');
 
   doc.setFont('helvetica', 'bold');
@@ -362,7 +490,7 @@ export function generateSalarySlipPdf(
   doc.text(breakdown.paymentMethod, col2X + 26, 51);
   
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(5, 150, 105); // emerald-600
+  doc.setTextColor(...theme.statusPaidColor);
   doc.text('PAID', col2X + 26, 57);
 
   // AutoTable for Earnings & Deductions
@@ -384,7 +512,7 @@ export function generateSalarySlipPdf(
     theme: 'grid',
     head: [['Earnings & Allowances', 'Amount', 'Deductions', 'Amount']],
     headStyles: {
-      fillColor: [30, 41, 59],
+      fillColor: theme.tableHeadFill,
       textColor: [255, 255, 255],
       fontStyle: 'bold',
       fontSize: 8.5
@@ -396,15 +524,23 @@ export function generateSalarySlipPdf(
     }
   });
 
-  // Net Payable Highlight Box
+  // Net Payable Highlight Box — solid emerald band (executive-emerald) or
+  // light box with black border (minimal-classic), per the shared theme.
   const finalY = (doc as any).lastAutoTable?.finalY || 105;
-  
-  doc.setFillColor(16, 185, 129); // emerald-500
-  doc.roundedRect(margin, finalY + 4, pageWidth - margin * 2, 14, 2, 2, 'F');
+
+  if (theme.netBoxBorder) {
+    doc.setFillColor(...theme.netBoxFill);
+    doc.setDrawColor(...theme.netBoxBorder);
+    doc.setLineWidth(0.5);
+    doc.rect(margin, finalY + 4, pageWidth - margin * 2, 14, 'FD');
+  } else {
+    doc.setFillColor(...theme.netBoxFill);
+    doc.roundedRect(margin, finalY + 4, pageWidth - margin * 2, 14, 2, 2, 'F');
+  }
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
-  doc.setTextColor(255, 255, 255);
+  doc.setTextColor(...theme.netTextColor);
   doc.text('NET SALARY PAYABLE:', margin + 6, finalY + 12.5);
 
   doc.setFontSize(13);
@@ -874,7 +1010,11 @@ function renderSinglePayslipSheet(
   margin: number
 ) {
   const settings = getSchoolSettings();
-  const isMinimalClassic = settings.staffSalarySlipTemplate === 'minimal-classic';
+  // Shared salary-slip theme (Fix P1-2) — this renderer is where the
+  // per-template values originally came from; it now reads them from the
+  // same theme object the single-slip generator and previews consume.
+  const theme = getSalarySlipTheme(settings.staffSalarySlipTemplate);
+  const isMinimalClassic = theme.isMinimalClassic;
   const base = staff.salary || 0;
   const allowances = Math.round(base * 0.1);
   const deductions = Math.round(base * 0.05);
@@ -883,49 +1023,53 @@ function renderSinglePayslipSheet(
   const refNo = `SLP-${staff.id}-${month.substring(0, 3).toUpperCase()}-2026`;
 
   if (isMinimalClassic) {
-    doc.setDrawColor(0, 0, 0);
+    doc.setDrawColor(...theme.headerTitleColor);
     doc.setLineWidth(0.5);
     doc.rect(margin, 10, pageWidth - margin * 2, 22);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(14);
-    doc.setTextColor(0, 0, 0);
+    doc.setTextColor(...theme.headerSchoolColor);
     doc.text(school.name.toUpperCase(), pageWidth / 2, 18, { align: 'center' });
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8.5);
+    doc.setTextColor(...theme.headerSubColor);
     doc.text(`${school.campus} • ${school.address} • Ph: ${school.phone}`, pageWidth / 2, 23, { align: 'center' });
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
-    doc.text(`MONTHLY SALARY PAYSLIP — ${month.toUpperCase()}`, pageWidth / 2, 29, { align: 'center' });
+    doc.setTextColor(...theme.headerTitleColor);
+    doc.text(`${theme.headerTitle} — ${month.toUpperCase()}`, pageWidth / 2, 29, { align: 'center' });
   } else {
     // Header Banner
-    doc.setFillColor(15, 23, 42); // slate-900
+    doc.setFillColor(...(theme.headerBannerFill as RgbColor));
     doc.rect(0, 0, pageWidth, 30, 'F');
 
     // Emerald accent stripe
-    doc.setFillColor(16, 185, 129); // emerald-500
-    doc.rect(0, 29, pageWidth, 1.5, 'F');
+    if (theme.headerAccentStripe) {
+      doc.setFillColor(...theme.headerAccentStripe);
+      doc.rect(0, 29, pageWidth, 1.5, 'F');
+    }
 
     // School Header
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(14);
-    doc.setTextColor(255, 255, 255);
+    doc.setTextColor(...theme.headerSchoolColor);
     doc.text(school.name.toUpperCase(), pageWidth / 2, 10, { align: 'center' });
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8.5);
-    doc.setTextColor(148, 163, 184);
+    doc.setTextColor(...theme.headerSubColor);
     doc.text(`${school.campus} • ${school.address} • Ph: ${school.phone}`, pageWidth / 2, 16, { align: 'center' });
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10.5);
-    doc.setTextColor(52, 211, 153);
-    doc.text(`STAFF SALARY PAYSLIP — ${month.toUpperCase()}`, pageWidth / 2, 23.5, { align: 'center' });
+    doc.setTextColor(...theme.headerTitleColor);
+    doc.text(`${theme.headerTitle} — ${month.toUpperCase()}`, pageWidth / 2, 23.5, { align: 'center' });
   }
 
   // Employee Information Box
   doc.setFillColor(248, 250, 252);
   doc.roundedRect(margin, 36, pageWidth - margin * 2, 32, 2, 2, 'F');
-  doc.setDrawColor(isMinimalClassic ? 0 : 226, isMinimalClassic ? 0 : 232, isMinimalClassic ? 0 : 240);
+  doc.setDrawColor(...theme.infoBoxBorder);
   doc.roundedRect(margin, 36, pageWidth - margin * 2, 32, 2, 2, 'S');
 
   doc.setFont('helvetica', 'bold');
@@ -962,7 +1106,7 @@ function renderSinglePayslipSheet(
 
   doc.setFont('helvetica', 'bold');
   if (isPaid) {
-    doc.setTextColor(isMinimalClassic ? 0 : 5, isMinimalClassic ? 0 : 150, isMinimalClassic ? 0 : 105);
+    doc.setTextColor(...theme.statusPaidColor);
     doc.text('PAID (CONFIRMED)', col2X + 36, 61);
   } else {
     doc.setTextColor(220, 38, 38);
@@ -988,7 +1132,7 @@ function renderSinglePayslipSheet(
     theme: 'grid',
     head: [['Earnings & Allowances', 'Amount', 'Deductions', 'Amount']],
     headStyles: {
-      fillColor: isMinimalClassic ? [0, 0, 0] : [30, 41, 59],
+      fillColor: theme.tableHeadFill,
       textColor: [255, 255, 255],
       fontStyle: 'bold',
       fontSize: 8.5
@@ -1004,23 +1148,23 @@ function renderSinglePayslipSheet(
 
   // Net Payable Highlight Box
   if (isMinimalClassic) {
-    doc.setFillColor(241, 245, 249);
-    doc.setDrawColor(0, 0, 0);
+    doc.setFillColor(...theme.netBoxFill);
+    doc.setDrawColor(...(theme.netBoxBorder as RgbColor));
     doc.setLineWidth(0.5);
     doc.rect(margin, finalY + 5, pageWidth - margin * 2, 14, 'FD');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10.5);
-    doc.setTextColor(0, 0, 0);
+    doc.setTextColor(...theme.netTextColor);
     doc.text('NET SALARY PAYABLE:', margin + 6, finalY + 14);
     doc.setFontSize(13);
     doc.text(`Rs. ${net.toLocaleString()}`, pageWidth - margin - 6, finalY + 14, { align: 'right' });
   } else {
-    doc.setFillColor(16, 185, 129); // emerald-500
+    doc.setFillColor(...theme.netBoxFill);
     doc.roundedRect(margin, finalY + 5, pageWidth - margin * 2, 14, 2, 2, 'F');
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10.5);
-    doc.setTextColor(255, 255, 255);
+    doc.setTextColor(...theme.netTextColor);
     doc.text('NET SALARY PAYABLE:', margin + 6, finalY + 14);
 
     doc.setFontSize(13);

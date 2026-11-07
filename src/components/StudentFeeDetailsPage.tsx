@@ -786,11 +786,14 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
       formattedDateOnly,
       paymentMethod,
       status: 'Paid',
+      // Fix P0-4: the invoice carries the school's REAL identity from
+      // settings — previously a hardcoded demo school name/address/phone/
+      // email was printed on every invoice regardless of configuration.
       school: {
-        name: 'Demo School Schooliee Pakistan',
-        address: 'Faisalabad, Punjab, Pakistan',
-        phone: '03356226026',
-        email: 'demo-school@schooliee.com'
+        name: getBankSettings().schoolName,
+        address: getBankSettings().schoolAddress,
+        phone: getBankSettings().schoolPhone,
+        email: getBankSettings().schoolEmail
       },
       invoiceTo: {
         guardianName: family?.familyName || primaryStudent?.family || 'Shahid Abbasi',
@@ -887,7 +890,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
   return (
     <div className="min-h-screen bg-[#0a0f18] text-slate-100 font-sans pb-16" id="family-student-fee-details-page">
       {/* Top Breadcrumb & Page Header */}
-      <div className="border-b border-[#182335] bg-[#0c1320]/80 backdrop-blur sticky top-0 z-30 px-6 py-4">
+      <div className="border-b border-edge-3 bg-[#0c1320]/80 backdrop-blur sticky top-0 z-30 px-6 py-4">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <BreadcrumbTrail
@@ -911,7 +914,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
             <button
               type="button"
               onClick={() => setIsChallanModalOpen(true)}
-              className="px-3.5 py-2 rounded-xl bg-[#141d2d] hover:bg-[#1a263a] border border-[#21324a] text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+              className="px-3.5 py-2 rounded-xl bg-surface-26 hover:bg-surface-44 border border-[#21324a] text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm"
               id="btn-print-fee-details"
             >
               <Printer className="w-4 h-4 text-slate-400" />
@@ -935,17 +938,27 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
               type="button"
               onClick={() => {
                 if (!primaryStudent) return;
+                // Fix #7b: the reminder states an amount to a real
+                // guardian, so it must be the family's real selected
+                // due — when nothing payable is selected there is no
+                // amount to state and the reminder is blocked (same
+                // guard pattern as Mark as Paid below). The old code
+                // invented 5,000 PKR in exactly that case.
+                if (finalFee <= 0) {
+                  onShowToast('No fee amount to remind about — select the unpaid fee items first so the reminder carries the real amount due.', 'error');
+                  return;
+                }
                 const names = familyStudents.map(s => s.name);
                 const url = createWhatsAppFeeAlertUrl(
                   guardianPhone,
                   guardianName,
                   names,
-                  finalFee > 0 ? finalFee : 5000,
+                  finalFee,
                   family?.familyId || primaryStudent.familyId || 'F0000'
                 );
                 window.open(url, '_blank');
               }}
-              className="px-3.5 py-2 rounded-xl bg-[#141d2d] hover:bg-[#1a263a] border border-[#21324a] text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+              className="px-3.5 py-2 rounded-xl bg-surface-26 hover:bg-surface-44 border border-[#21324a] text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm"
               id="btn-send-reminder"
             >
               <BellRing className="w-4 h-4 text-amber-400" />
@@ -957,7 +970,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
 
       <div className="max-w-7xl mx-auto px-6 pt-6 space-y-6">
         {/* Guardian / Parent Identity Banner */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 rounded-2xl bg-[#0f1726] border border-[#1d2b40] shadow-sm">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 rounded-2xl bg-surface-10 border border-edge-16 shadow-sm">
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-cyan-600 to-blue-600 border border-cyan-400/40 text-white font-extrabold text-xl flex items-center justify-center shadow-lg shadow-cyan-600/25 shrink-0">
               {guardianCode}
@@ -983,7 +996,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
           </div>
 
           {/* Contact Details & Family Financial Summary */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-3 border-t border-[#1b283d] text-xs">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-3 border-t border-edge-11 text-xs">
             <div className="flex flex-col sm:flex-row sm:items-center gap-6 text-slate-300">
               <div className="space-y-1">
                 <div className="flex items-center gap-2 font-mono text-slate-200">
@@ -999,7 +1012,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
 
             {/* Family Financial Breakdown: Total, Paid, Due Remaining */}
             <div className="flex items-center gap-2 sm:gap-3 bg-[#0a0f19] border border-[#1b293d] rounded-xl px-3 py-2 shadow-inner">
-              <div className="text-right px-2 border-r border-[#19263a]">
+              <div className="text-right px-2 border-r border-edge-5">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
                   Total
                 </span>
@@ -1007,7 +1020,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                   {formatPKR(familyTotals.grandTotal)}
                 </span>
               </div>
-              <div className="text-right px-2 border-r border-[#19263a]">
+              <div className="text-right px-2 border-r border-edge-5">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
                   Paid
                 </span>
@@ -1032,7 +1045,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
           {/* ================= LEFT COLUMN: CONTAINER FOR EACH STUDENT ================= */}
           <div className="lg:col-span-8 space-y-6">
             {familyStudents.length === 0 ? (
-              <div className="p-8 text-center bg-[#0f1726] rounded-2xl border border-[#1d2b40] text-slate-400 text-xs">
+              <div className="p-8 text-center bg-surface-10 rounded-2xl border border-edge-16 text-slate-400 text-xs">
                 No student accounts found for this family.
               </div>
             ) : (
@@ -1062,13 +1075,13 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                 return (
                   <div 
                     key={st.id} 
-                    className="rounded-2xl bg-[#0f1726] border border-[#1d2b40] overflow-hidden shadow-sm transition-all"
+                    className="rounded-2xl bg-surface-10 border border-edge-16 overflow-hidden shadow-sm transition-all"
                     id={`fee-student-container-${st.id}`}
                   >
                     {/* Collapsed-by-default Student Row Header */}
                     <div 
                       onClick={() => toggleStudentExpand(st.id)}
-                      className="p-4 bg-[#131d2f] hover:bg-[#162237] border-b border-[#1b273b] flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer select-none transition-colors"
+                      className="p-4 bg-[#131d2f] hover:bg-[#162237] border-b border-edge-8 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer select-none transition-colors"
                     >
                       {/* Left: Chevron + Avatar + Student Details */}
                       <div className="flex items-center gap-3">
@@ -1118,7 +1131,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                       {/* Right: Total Paid, Remaining Due, Add Payment Button */}
                       <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                         {/* Total Paid */}
-                        <div className="text-right px-3 py-1.5 bg-[#090f19] rounded-xl border border-[#1b2a3f]">
+                        <div className="text-right px-3 py-1.5 bg-surface-3 rounded-xl border border-[#1b2a3f]">
                           <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">
                             Total Paid
                           </span>
@@ -1128,7 +1141,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                         </div>
 
                         {/* Remaining Due */}
-                        <div className="text-right px-3 py-1.5 bg-[#090f19] rounded-xl border border-[#1b2a3f]">
+                        <div className="text-right px-3 py-1.5 bg-surface-3 rounded-xl border border-[#1b2a3f]">
                           <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">
                             Remaining Due
                           </span>
@@ -1156,9 +1169,9 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
 
                     {/* Expanded Content with Two Tabs: Unpaid (Default) & Paid History */}
                     {isExpanded && (
-                      <div className="border-t border-[#1b273b] bg-[#0c1422] p-4 space-y-4">
+                      <div className="border-t border-edge-8 bg-[#0c1422] p-4 space-y-4">
                         {/* Tab Switcher */}
-                        <div className="flex items-center justify-between gap-3 border-b border-[#1b273b] pb-3 flex-wrap">
+                        <div className="flex items-center justify-between gap-3 border-b border-edge-8 pb-3 flex-wrap">
                           <div className="flex items-center gap-2">
                             {/* Tab 1: Unpaid (Default) */}
                             <button
@@ -1167,7 +1180,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                               className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                                 activeTab === 'unpaid'
                                   ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
-                                  : 'bg-[#131d2e] text-slate-300 hover:bg-[#1a283f] hover:text-white'
+                                  : 'bg-surface-25 text-slate-300 hover:bg-[#1a283f] hover:text-white'
                               }`}
                             >
                               <AlertCircle className="w-3.5 h-3.5" />
@@ -1186,7 +1199,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                               className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                                 activeTab === 'paid'
                                   ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
-                                  : 'bg-[#131d2e] text-slate-300 hover:bg-[#1a283f] hover:text-white'
+                                  : 'bg-surface-25 text-slate-300 hover:bg-[#1a283f] hover:text-white'
                               }`}
                             >
                               <History className="w-3.5 h-3.5" />
@@ -1207,7 +1220,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                               className={`px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
                                 allOutstandingChecked
                                   ? 'bg-blue-600/20 border-blue-500/50 text-blue-300'
-                                  : 'bg-[#182335] border-[#22334e] text-slate-300 hover:bg-[#1f2d44]'
+                                  : 'bg-edge-3 border-edge-32 text-slate-300 hover:bg-[#1f2d44]'
                               }`}
                             >
                               {allOutstandingChecked ? (
@@ -1231,7 +1244,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                                 const hasNoClassFee = studentItems.length === 0 && (Number(clsObj?.fee) || 0) <= 0;
                                 if (hasNoClassFee) {
                                   return (
-                                    <div className="py-8 px-4 text-center rounded-xl bg-[#090f19] border border-amber-500/30 space-y-2">
+                                    <div className="py-8 px-4 text-center rounded-xl bg-surface-3 border border-amber-500/30 space-y-2">
                                       <AlertCircle className="w-8 h-8 text-amber-400 mx-auto" />
                                       <p className="text-xs font-semibold text-amber-300">
                                         Set the class fee for {st.class || 'this class'} to start billing
@@ -1249,7 +1262,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                                   );
                                 }
                                 return (
-                                  <div className="py-8 px-4 text-center rounded-xl bg-[#090f19] border border-[#19263a] space-y-2">
+                                  <div className="py-8 px-4 text-center rounded-xl bg-surface-3 border border-edge-5 space-y-2">
                                     <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
                                     <p className="text-xs font-semibold text-slate-200">No Outstanding Fees</p>
                                     <p className="text-[11px] text-slate-400">
@@ -1259,16 +1272,16 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                                 );
                               })()
                             ) : (
-                              <div className="overflow-x-auto rounded-xl border border-[#1b273b] bg-[#090f19]">
+                              <div className="overflow-x-auto rounded-xl border border-edge-8 bg-surface-3">
                                 <table className="w-full text-left text-xs">
                                   <thead>
-                                    <tr className="border-b border-[#1b273b] bg-[#111928] text-slate-400 text-[10px] uppercase tracking-wider font-semibold">
+                                    <tr className="border-b border-edge-8 bg-[#111928] text-slate-400 text-[10px] uppercase tracking-wider font-semibold">
                                       <th className="py-2.5 px-3 w-8">
                                         <input
                                           type="checkbox"
                                           checked={allOutstandingChecked}
                                           onChange={() => handleToggleStudentAll(st.id)}
-                                          className="rounded bg-[#0a0f18] border-[#22334e] text-blue-600 focus:ring-0 focus:ring-offset-0 cursor-pointer w-3.5 h-3.5"
+                                          className="rounded bg-[#0a0f18] border-edge-32 text-blue-600 focus:ring-0 focus:ring-offset-0 cursor-pointer w-3.5 h-3.5"
                                         />
                                       </th>
                                       <th className="py-2.5 px-3">Month</th>
@@ -1295,7 +1308,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                                         <tr 
                                           key={item.id} 
                                           className={`hover:bg-[#131d2c] transition-colors ${
-                                            isChecked ? 'bg-[#0f1725]' : 'opacity-70'
+                                            isChecked ? 'bg-surface-9' : 'opacity-70'
                                           }`}
                                         >
                                           {/* Checkbox */}
@@ -1304,7 +1317,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                                               type="checkbox"
                                               checked={isChecked}
                                               onChange={() => handleToggleItem(item.id)}
-                                              className="rounded bg-[#0a0f18] border-[#22334e] text-blue-600 focus:ring-0 focus:ring-offset-0 cursor-pointer w-3.5 h-3.5"
+                                              className="rounded bg-[#0a0f18] border-edge-32 text-blue-600 focus:ring-0 focus:ring-offset-0 cursor-pointer w-3.5 h-3.5"
                                             />
                                           </td>
 
@@ -1357,7 +1370,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                                               }}
                                               placeholder="0"
                                               disabled={!isChecked}
-                                              className="w-full px-3 py-1.5 rounded-lg bg-[#0b101a] border border-[#21334c] text-white focus:outline-none focus:border-blue-500 text-xs font-mono font-semibold text-right disabled:opacity-40 disabled:cursor-not-allowed"
+                                              className="w-full px-3 py-1.5 rounded-lg bg-surface-5 border border-edge-28 text-white focus:outline-none focus:border-blue-500 text-xs font-mono font-semibold text-right disabled:opacity-40 disabled:cursor-not-allowed"
                                               title={`Max payable for this item is ${formatPKR(maxPayable)}`}
                                             />
                                           </td>
@@ -1375,7 +1388,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                         {activeTab === 'paid' && (
                           <div>
                             {paidHistoryItems.length === 0 ? (
-                              <div className="py-8 px-4 text-center rounded-xl bg-[#090f19] border border-[#19263a] space-y-2">
+                              <div className="py-8 px-4 text-center rounded-xl bg-surface-3 border border-edge-5 space-y-2">
                                 <History className="w-8 h-8 text-slate-500 mx-auto" />
                                 <p className="text-xs font-semibold text-slate-300">No Payment History</p>
                                 <p className="text-[11px] text-slate-500">
@@ -1384,10 +1397,10 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                               </div>
                             ) : (
                               <div className="space-y-3">
-                                <div className="overflow-x-auto rounded-xl border border-[#1b273b] bg-[#090f19]">
+                                <div className="overflow-x-auto rounded-xl border border-edge-8 bg-surface-3">
                                   <table className="w-full text-left text-xs">
                                     <thead>
-                                      <tr className="border-b border-[#1b273b] bg-[#111928] text-slate-400 text-[10px] uppercase tracking-wider font-semibold">
+                                      <tr className="border-b border-edge-8 bg-[#111928] text-slate-400 text-[10px] uppercase tracking-wider font-semibold">
                                         <th className="py-2.5 px-3">Month</th>
                                         <th className="py-2.5 px-3">Fee Type</th>
                                         <th className="py-2.5 px-3">Description / Reason</th>
@@ -1440,7 +1453,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
 
                                 {/* Pagination / View More Controls */}
                                 {paidHistoryItems.length > 10 && (
-                                  <div className="flex items-center justify-between text-xs text-slate-400 px-3 py-2 bg-[#090f19] rounded-lg border border-[#19263a] flex-wrap gap-2">
+                                  <div className="flex items-center justify-between text-xs text-slate-400 px-3 py-2 bg-surface-3 rounded-lg border border-edge-5 flex-wrap gap-2">
                                     <span>
                                       Showing {displayedPaidHistory.length} of {paidHistoryItems.length} paid records
                                     </span>
@@ -1504,9 +1517,9 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
           {/* ================= RIGHT COLUMN: AGGREGATE PAYMENT & NOTES ================= */}
           <div className="lg:col-span-4 space-y-5 lg:sticky lg:top-4 self-start z-20">
             {/* Payment Panel: Sticks when scrolling */}
-            <div className="rounded-2xl bg-[#0f1726] border border-[#1d2b40] p-5 shadow-xl space-y-5 max-h-[calc(100vh-2rem)] overflow-y-auto" id="sticky-payment-panel">
+            <div className="rounded-2xl bg-surface-10 border border-edge-16 p-5 shadow-xl space-y-5 max-h-[calc(100vh-2rem)] overflow-y-auto" id="sticky-payment-panel">
               {/* Credit Pill */}
-              <div className="space-y-2 pb-3 border-b border-[#1b273b]">
+              <div className="space-y-2 pb-3 border-b border-edge-8">
                 <div className="flex items-center justify-between">
                   <div className="text-xs">
                     <span className="text-slate-400">Credit Balance: </span>
@@ -1563,7 +1576,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                         {familyStudents.filter(st => (itemsByStudent[st.id] || []).some(i => selectedItemIds.has(i.id))).length} / {familyStudents.length}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between text-sm pt-2 border-t border-[#1b273b]">
+                    <div className="flex items-center justify-between text-sm pt-2 border-t border-edge-8">
                       <span className="font-bold text-slate-200">Total Payable:</span>
                       <span className="text-xl font-black text-emerald-400 font-mono">
                         {formatPKR(defaultCash)}
@@ -1578,7 +1591,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                         min="0"
                         value={cashReceivedOverride !== '' ? cashReceivedOverride : String(defaultCash)}
                         onChange={(e) => setCashReceivedOverride(e.target.value)}
-                        className="w-full px-3 py-1.5 rounded-xl bg-[#0b101a] border border-[#21334c] text-white text-xs font-mono font-bold focus:outline-none focus:border-emerald-500"
+                        className="w-full px-3 py-1.5 rounded-xl bg-surface-5 border border-edge-28 text-white text-xs font-mono font-bold focus:outline-none focus:border-emerald-500"
                       />
                       {extraCredit > 0 && (
                         <p className="mt-1 text-[11px] font-semibold text-emerald-400">
@@ -1604,7 +1617,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                       className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer text-center ${
                         paymentMethod === m
                           ? 'bg-blue-600 border-blue-500 text-white shadow-md'
-                          : 'bg-[#141e2f] border-[#22334e] text-slate-300 hover:bg-[#1a273e]'
+                          : 'bg-surface-28 border-edge-32 text-slate-300 hover:bg-surface-46'
                       }`}
                     >
                       {m}
@@ -1622,7 +1635,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                   type="date"
                   value={paymentDate}
                   onChange={(e) => setPaymentDate(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl bg-[#0b101a] border border-[#21334c] text-white text-xs focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2 rounded-xl bg-surface-5 border border-edge-28 text-white text-xs focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -1636,7 +1649,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                   value={paymentNote}
                   onChange={(e) => setPaymentNote(e.target.value)}
                   placeholder="e.g. Paid by father in cash at fee counter"
-                  className="w-full px-3.5 py-2 rounded-xl bg-[#0b101a] border border-[#21334c] text-white text-xs focus:outline-none focus:border-blue-500 placeholder:text-slate-600"
+                  className="w-full px-3.5 py-2 rounded-xl bg-surface-5 border border-edge-28 text-white text-xs focus:outline-none focus:border-blue-500 placeholder:text-slate-600"
                 />
               </div>
 
@@ -1654,17 +1667,17 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
             </div>
 
             {/* Notes Log Card */}
-            <div className="rounded-2xl bg-[#0f1726] border border-[#1d2b40] p-5 shadow-sm space-y-4">
+            <div className="rounded-2xl bg-surface-10 border border-edge-16 p-5 shadow-sm space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold text-white uppercase tracking-wider">
                   Notes &amp; Activity
                 </h3>
-                <div className="flex rounded-lg bg-[#141d2d] p-0.5 text-[10px]">
+                <div className="flex rounded-lg bg-surface-26 p-0.5 text-[10px]">
                   <button
                     type="button"
                     onClick={() => setNotesTab('active')}
                     className={`px-2.5 py-1 rounded font-semibold cursor-pointer ${
-                      notesTab === 'active' ? 'bg-[#22344f] text-white' : 'text-slate-400'
+                      notesTab === 'active' ? 'bg-edge-33 text-white' : 'text-slate-400'
                     }`}
                   >
                     Active
@@ -1673,7 +1686,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                     type="button"
                     onClick={() => setNotesTab('archived')}
                     className={`px-2.5 py-1 rounded font-semibold cursor-pointer ${
-                      notesTab === 'archived' ? 'bg-[#22344f] text-white' : 'text-slate-400'
+                      notesTab === 'archived' ? 'bg-edge-33 text-white' : 'text-slate-400'
                     }`}
                   >
                     Archived
@@ -1688,7 +1701,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                   value={newNoteText}
                   onChange={(e) => setNewNoteText(e.target.value)}
                   placeholder="Add note..."
-                  className="flex-1 px-3 py-1.5 rounded-lg bg-[#0b101a] border border-[#21334c] text-white text-xs focus:outline-none focus:border-blue-500"
+                  className="flex-1 px-3 py-1.5 rounded-lg bg-surface-5 border border-edge-28 text-white text-xs focus:outline-none focus:border-blue-500"
                 />
                 <button
                   type="submit"
@@ -1719,7 +1732,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
       </div>
 
       {/* Mobile Floating Sticky Mark as Paid bar (Always sticks when scrolling on mobile/tablet) */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 p-3.5 bg-[#0a0f18]/95 backdrop-blur-md border-t border-[#1d2b40] z-40 shadow-2xl flex items-center justify-between gap-3">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 p-3.5 bg-[#0a0f18]/95 backdrop-blur-md border-t border-edge-16 z-40 shadow-2xl flex items-center justify-between gap-3">
         <div>
           <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold block">Total Payable</span>
           <span className="text-base font-black text-emerald-400 font-mono">{formatPKR(finalFee)}</span>
@@ -1738,7 +1751,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
       {/* Add Balance Modal */}
       {isAddBalanceModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="w-full max-w-sm bg-[#0f1725] border border-[#21334c] rounded-2xl p-5 shadow-2xl space-y-4">
+          <div className="w-full max-w-sm bg-surface-9 border border-edge-28 rounded-2xl p-5 shadow-2xl space-y-4">
             <h3 className="text-sm font-bold text-white">Add Credit Balance</h3>
             <p className="text-xs text-slate-400">
               Enter deposit amount to credit to this family&apos;s account.
@@ -1748,7 +1761,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
               value={addBalanceAmount}
               onChange={(e) => setAddBalanceAmount(e.target.value)}
               placeholder="e.g. 5000"
-              className="w-full px-3.5 py-2 rounded-xl bg-[#0b101a] border border-[#21334c] text-white text-xs font-mono"
+              className="w-full px-3.5 py-2 rounded-xl bg-surface-5 border border-edge-28 text-white text-xs font-mono"
             />
             <div className="flex justify-end gap-2">
               <button
@@ -1790,9 +1803,9 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
-            <div className="w-full max-w-lg bg-[#0f1725] border border-[#21334c] rounded-2xl p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="w-full max-w-lg bg-surface-9 border border-edge-28 rounded-2xl p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
               {/* Modal Header */}
-              <div className="flex items-center justify-between pb-3 border-b border-[#1d2b40]">
+              <div className="flex items-center justify-between pb-3 border-b border-edge-16">
                 <div className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-xl bg-amber-600/20 border border-amber-500/30 text-amber-400 font-bold flex items-center justify-center text-sm">
                     <Plus className="w-4 h-4 stroke-[2.5]" />
@@ -1814,7 +1827,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
               </div>
 
               {/* Student Financial Mini Summary */}
-              <div className="p-3.5 rounded-xl bg-[#090f19] border border-[#19263a] grid grid-cols-4 gap-2 text-center">
+              <div className="p-3.5 rounded-xl bg-surface-3 border border-edge-5 grid grid-cols-4 gap-2 text-center">
                 <div>
                   <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">Total Fee</span>
                   <span className="text-xs font-bold text-slate-200 font-mono">{formatPKR(cTotal)}</span>
@@ -1853,7 +1866,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                           amount: qp.amount.toString()
                         }));
                       }}
-                      className="px-2.5 py-1 rounded-lg bg-[#141e2e] hover:bg-[#1b2a40] border border-[#22354e] hover:border-amber-500/50 text-slate-300 hover:text-white text-[11px] font-medium transition-all cursor-pointer flex items-center gap-1.5"
+                      className="px-2.5 py-1 rounded-lg bg-surface-27 hover:bg-[#1b2a40] border border-[#22354e] hover:border-amber-500/50 text-slate-300 hover:text-white text-[11px] font-medium transition-all cursor-pointer flex items-center gap-1.5"
                     >
                       <span>{qp.reason}</span>
                       <span className="font-mono text-amber-400 font-bold">({formatPKR(qp.amount)})</span>
@@ -1872,7 +1885,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                     <select
                       value={chargeModal.type}
                       onChange={(e) => setChargeModal(prev => ({ ...prev, type: e.target.value as any }))}
-                      className="w-full px-3 py-2 rounded-xl bg-[#0b101a] border border-[#21334c] text-white text-xs focus:outline-none focus:border-amber-500 cursor-pointer"
+                      className="w-full px-3 py-2 rounded-xl bg-surface-5 border border-edge-28 text-white text-xs focus:outline-none focus:border-amber-500 cursor-pointer"
                     >
                       <option value="Fine">Fine (Late fee, disciplinary)</option>
                       <option value="Fund">Fund (Sports, Lab, Library, Exam)</option>
@@ -1890,7 +1903,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                     <select
                       value={chargeModal.month}
                       onChange={(e) => setChargeModal(prev => ({ ...prev, month: e.target.value }))}
-                      className="w-full px-3 py-2 rounded-xl bg-[#0b101a] border border-[#21334c] text-white text-xs focus:outline-none focus:border-amber-500 cursor-pointer"
+                      className="w-full px-3 py-2 rounded-xl bg-surface-5 border border-edge-28 text-white text-xs focus:outline-none focus:border-amber-500 cursor-pointer"
                     >
                       <option value="April 2026">April 2026</option>
                       <option value="May 2026">May 2026</option>
@@ -1912,7 +1925,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                     value={chargeModal.reason}
                     onChange={(e) => setChargeModal(prev => ({ ...prev, reason: e.target.value }))}
                     placeholder="e.g. Science Lab Maintenance, Library Replacement Book, Late Fee Fine"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0b101a] border border-[#21334c] text-white text-xs focus:outline-none focus:border-amber-500"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-surface-5 border border-edge-28 text-white text-xs focus:outline-none focus:border-amber-500"
                   />
                 </div>
 
@@ -1941,7 +1954,7 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                     value={chargeModal.amount}
                     onChange={(e) => setChargeModal(prev => ({ ...prev, amount: e.target.value }))}
                     placeholder="Enter amount in PKR (e.g. 1000)"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0b101a] border border-[#21334c] text-white text-sm font-mono font-bold focus:outline-none focus:border-amber-500"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-surface-5 border border-edge-28 text-white text-sm font-mono font-bold focus:outline-none focus:border-amber-500"
                   />
                 </div>
 
@@ -1954,15 +1967,15 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
                     value={chargeModal.note}
                     onChange={(e) => setChargeModal(prev => ({ ...prev, note: e.target.value }))}
                     placeholder="e.g. Authorized by Principal / Added per request"
-                    className="w-full px-3.5 py-2 rounded-xl bg-[#0b101a] border border-[#21334c] text-white text-xs focus:outline-none focus:border-amber-500"
+                    className="w-full px-3.5 py-2 rounded-xl bg-surface-5 border border-edge-28 text-white text-xs focus:outline-none focus:border-amber-500"
                   />
                 </div>
 
-                <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#1d2b40]">
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-edge-16">
                   <button
                     type="button"
                     onClick={() => setChargeModal(prev => ({ ...prev, isOpen: false, student: null }))}
-                    className="px-4 py-2 rounded-xl bg-[#182335] hover:bg-[#202f48] text-slate-300 text-xs font-semibold cursor-pointer transition-colors"
+                    className="px-4 py-2 rounded-xl bg-edge-3 hover:bg-[#202f48] text-slate-300 text-xs font-semibold cursor-pointer transition-colors"
                   >
                     Cancel
                   </button>
@@ -1980,7 +1993,12 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
         );
       })()}
 
-      {/* Challan Modal */}
+      {/* Challan Modal — Fix #7b: the amount handed over is the real
+          selected due (finalFee). When it is 0 there is no payable
+          amount in this flow, so `undefined` is passed and
+          FeeChallanModal's own Fix #7 "Fee not set" block takes over
+          (no sheet, printing disabled) — the old code invented
+          5,000 PKR here instead. */}
       <FeeChallanModal
         isOpen={isChallanModalOpen}
         onClose={() => setIsChallanModalOpen(false)}
@@ -1990,9 +2008,9 @@ export const StudentFeeDetailsPage: React.FC<StudentFeeDetailsPageProps> = ({
         section={primaryStudent?.section || 'A'}
         phone={guardianPhone}
         family={guardianName}
-        totalFee={finalFee > 0 ? finalFee : 5000}
+        totalFee={finalFee > 0 ? finalFee : undefined}
         totalPaid={0}
-        remainingDue={finalFee > 0 ? finalFee : 5000}
+        remainingDue={finalFee}
       />
 
       {/* Fee Card Modal */}

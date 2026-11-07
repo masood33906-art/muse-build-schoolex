@@ -18,8 +18,9 @@ import {
   Check,
   RotateCcw
 } from 'lucide-react';
-import { Student } from '../types';
+import { ClassInfo, Student } from '../types';
 import { FamilyFeeSummary, StudentFeeData, formatPKR } from '../utils/feeHelper';
+import { findClassByName, resolveClassFee } from '../utils/classExportHelper';
 import { 
   GeneratedChallan, 
   getGeneratedChallans, 
@@ -33,6 +34,7 @@ interface GenerateChallanModalProps {
   onClose: () => void;
   families: FamilyFeeSummary[];
   students: Student[];
+  classes: ClassInfo[];
   onShowToast: (message: string, type?: 'success' | 'info' | 'error') => void;
   onOpenChallanView?: (challans: GeneratedChallan[]) => void;
 }
@@ -57,11 +59,22 @@ const FEE_RANGE_OPTIONS: FeeRangeOption[] = [
   { id: '1y', label: '1 Year (Annual Advance)', advanceMonths: 12, description: 'Current due + 12 months full annual fee' },
 ];
 
+// Fix P0-4: challan date defaults are anchored to TODAY at runtime
+// (issue = today, due = +10 days, validity = +15 days — the same relative
+// offsets the wizard always used), never fixed 2026-09 constants.
+const isoPlusDays = (days: number): string => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
 export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
   isOpen,
   onClose,
   families,
   students,
+  classes,
   onShowToast,
   onOpenChallanView
 }) => {
@@ -76,10 +89,10 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedClassFilter, setSelectedClassFilter] = useState<string>('all');
 
-  // Confirmation Dates (Defaulting to current date 15 Sep 2026 / today)
-  const [issueDate, setIssueDate] = useState<string>('2026-09-15');
-  const [dueDate, setDueDate] = useState<string>('2026-09-25');
-  const [validityDate, setValidityDate] = useState<string>('2026-09-30');
+  // Confirmation Dates (default to today / today + 10d / today + 15d)
+  const [issueDate, setIssueDate] = useState<string>(() => isoPlusDays(0));
+  const [dueDate, setDueDate] = useState<string>(() => isoPlusDays(10));
+  const [validityDate, setValidityDate] = useState<string>(() => isoPlusDays(15));
   const [notes, setNotes] = useState<string>('Please deposit fee in Meezan Bank before due date.');
 
   // Generated results
@@ -98,6 +111,10 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
       setSelectedStudentIds(new Set());
       setSearchQuery('');
       setNewlyGeneratedChallans([]);
+      // Re-anchor the default dates to the day the wizard is opened.
+      setIssueDate(isoPlusDays(0));
+      setDueDate(isoPlusDays(10));
+      setValidityDate(isoPlusDays(15));
     }
   }, [isOpen]);
 
@@ -110,16 +127,27 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
     return Array.from(set).sort();
   }, [students]);
 
-  // Map student fee data
+  // Map student fee data.
+  // Fix #7b: a student's due is ALWAYS a record's own amount — the family
+  // fee summary's total split across its children, or the student's own
+  // recorded totalDue. There is no invented default: when neither record
+  // carries an amount the due is `null` ("Fee not set") and the student
+  // cannot be priced or billed by this wizard. A due of exactly 0 is a
+  // REAL due (nothing owed) and stays 0 — the old code silently replaced
+  // it with 3,500 and billed missing records at 5,000.
   const studentFeeMap = useMemo(() => {
-    const map = new Map<string, { totalDue: number; phone: string; family: string; familyId: string }>();
+    const map = new Map<string, { totalDue: number | null; phone: string; family: string; familyId: string }>();
     students.forEach(s => {
-      // Find default fee or family due
       const fam = families.find(f => f.familyId === s.familyId);
-      const studentCount = fam ? Math.max(1, fam.students.length) : 1;
-      const computedDue = fam ? Math.round(fam.totalDue / studentCount) : 5000;
+      let due: number | null = null;
+      if (fam) {
+        const studentCount = Math.max(1, fam.students.length);
+        due = Math.round(fam.totalDue / studentCount);
+      } else if (typeof s.totalDue === 'number' && Number.isFinite(s.totalDue)) {
+        due = s.totalDue;
+      }
       map.set(s.id, {
-        totalDue: computedDue > 0 ? computedDue : 3500,
+        totalDue: due,
         phone: s.phone || fam?.phone || '',
         family: s.family || fam?.familyName || 'Family',
         familyId: s.familyId || 'F0000'
@@ -162,10 +190,41 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
     return FEE_RANGE_OPTIONS.find(o => o.id === selectedFeeRange) || FEE_RANGE_OPTIONS[0];
   }, [selectedFeeRange]);
 
-  const calculateTargetAmount = useCallback((baseAmount: number) => {
+  // Fix #7b: the REAL monthly fee of a student's class, via the shared
+  // Fix #7 resolver (classId-first, then class-name match). `null` when
+  // the class fee is unset — never an invented substitute.
+  const monthlyFeeForStudent = useCallback((s: Student): number | null => {
+    const cls = (s.classId ? classes.find(c => c.id === s.classId) : undefined)
+      ?? findClassByName(classes, s.class);
+    return resolveClassFee(cls);
+  }, [classes]);
+
+  // Combined monthly fee for a group of students (e.g. a family's
+  // children): the sum of their real class fees when EVERY one resolves,
+  // otherwise undefined (caller falls back to the record's own due).
+  const monthlyFeeForStudents = useCallback((list: Student[]): number | undefined => {
+    if (list.length === 0) return undefined;
+    let sum = 0;
+    for (const s of list) {
+      const fee = monthlyFeeForStudent(s);
+      if (fee == null) return undefined;
+      sum += fee;
+    }
+    return sum;
+  }, [monthlyFeeForStudent]);
+
+  // Amount a challan will carry for a recipient, or `null` when it
+  // cannot be priced from real records ("Fee not set"). For advance
+  // ranges the monthly tuition is the class's real fee when known
+  // (a fee of 0 is real — a free class adds 0 per advance month);
+  // otherwise the recipient's own current due is the estimate. When
+  // neither exists the amount is null and generation is blocked —
+  // the old code billed an invented 4,000 (plus a 2,000/month floor)
+  // in exactly that case.
+  const calculateTargetAmount = useCallback((baseAmount: number, monthlyFee?: number | null): number | null => {
     if (activeFeeOption.advanceMonths === 0) return baseAmount;
-    // Advance estimate: Base + monthly tuition (approx base / 1.5 * advanceMonths)
-    const monthlyTuition = Math.max(2000, Math.round(baseAmount > 0 ? baseAmount : 4000));
+    const monthlyTuition = monthlyFee != null ? monthlyFee : (baseAmount > 0 ? baseAmount : null);
+    if (monthlyTuition == null) return null;
     return baseAmount + (monthlyTuition * activeFeeOption.advanceMonths);
   }, [activeFeeOption]);
 
@@ -185,7 +244,8 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
           // Select all non-already generated families in filtered list
           const next = new Set<string>();
           filteredFamilies.forEach(fam => {
-            const calculatedAmount = calculateTargetAmount(fam.totalDue);
+            const calculatedAmount = calculateTargetAmount(fam.totalDue, monthlyFeeForStudents(fam.students));
+            if (calculatedAmount == null) return; // Fee not set — cannot be priced
             const alreadyGen = isChallanAlreadyGenerated(fam.familyId, calculatedAmount);
             if (!alreadyGen) {
               next.add(fam.familyId);
@@ -198,7 +258,9 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
           const next = new Set<string>();
           filteredStudents.forEach(st => {
             const feeInfo = studentFeeMap.get(st.id);
-            const calculatedAmount = calculateTargetAmount(feeInfo?.totalDue || 4000);
+            if (feeInfo?.totalDue == null) return; // Fee not set — cannot be priced
+            const calculatedAmount = calculateTargetAmount(feeInfo.totalDue, monthlyFeeForStudent(st));
+            if (calculatedAmount == null) return; // Fee not set — cannot be priced
             const alreadyGen = isChallanAlreadyGenerated(st.id, calculatedAmount);
             if (!alreadyGen) {
               next.add(st.id);
@@ -212,10 +274,16 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, currentStep, scope, filteredFamilies, filteredStudents, calculateTargetAmount, studentFeeMap, onShowToast]);
+  }, [isOpen, currentStep, scope, filteredFamilies, filteredStudents, calculateTargetAmount, studentFeeMap, monthlyFeeForStudent, monthlyFeeForStudents, onShowToast]);
 
   // Toggle selection functions
-  const toggleFamilySelection = (familyId: string, amount: number) => {
+  const toggleFamilySelection = (familyId: string, amount: number | null) => {
+    if (amount == null) {
+      // Fix #7b: unpriceable recipient — block with the Fix #7 message
+      // pattern instead of substituting an invented amount.
+      onShowToast('Fee not set for this family — set the class fee first (Classes → Edit Class / Change Fee), then generate the challan again.', 'error');
+      return;
+    }
     const alreadyGen = isChallanAlreadyGenerated(familyId, amount);
     if (alreadyGen) {
       onShowToast(`Challan #${alreadyGen.challanNumber} already generated for this amount! It can be downloaded from Print section.`, 'error');
@@ -229,7 +297,11 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
     });
   };
 
-  const toggleStudentSelection = (studentId: string, amount: number) => {
+  const toggleStudentSelection = (studentId: string, amount: number | null) => {
+    if (amount == null) {
+      onShowToast('Fee not set for this student — set the class fee first (Classes → Edit Class / Change Fee), then generate the challan again.', 'error');
+      return;
+    }
     const alreadyGen = isChallanAlreadyGenerated(studentId, amount);
     if (alreadyGen) {
       onShowToast(`Challan #${alreadyGen.challanNumber} already generated for this student! It can be downloaded from Print section.`, 'error');
@@ -251,7 +323,8 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
       } else {
         const next = new Set<string>();
         filteredFamilies.forEach(f => {
-          const amt = calculateTargetAmount(f.totalDue);
+          const amt = calculateTargetAmount(f.totalDue, monthlyFeeForStudents(f.students));
+          if (amt == null) return; // Fee not set — cannot be priced
           if (!isChallanAlreadyGenerated(f.familyId, amt)) {
             next.add(f.familyId);
           }
@@ -265,7 +338,9 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
         const next = new Set<string>();
         filteredStudents.forEach(s => {
           const feeInfo = studentFeeMap.get(s.id);
-          const amt = calculateTargetAmount(feeInfo?.totalDue || 4000);
+          if (feeInfo?.totalDue == null) return; // Fee not set — cannot be priced
+          const amt = calculateTargetAmount(feeInfo.totalDue, monthlyFeeForStudent(s));
+          if (amt == null) return; // Fee not set — cannot be priced
           if (!isChallanAlreadyGenerated(s.id, amt)) {
             next.add(s.id);
           }
@@ -281,8 +356,8 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
       return families
         .filter(f => f.totalDue > 0)
         .map(f => {
-          const amt = calculateTargetAmount(f.totalDue);
-          const already = isChallanAlreadyGenerated(f.familyId, amt);
+          const amt = calculateTargetAmount(f.totalDue, monthlyFeeForStudents(f.students));
+          const already = amt != null ? isChallanAlreadyGenerated(f.familyId, amt) : undefined;
           return {
             targetId: f.familyId,
             targetName: f.familyName,
@@ -300,8 +375,8 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
       return families
         .filter(f => selectedFamilyIds.has(f.familyId))
         .map(f => {
-          const amt = calculateTargetAmount(f.totalDue);
-          const already = isChallanAlreadyGenerated(f.familyId, amt);
+          const amt = calculateTargetAmount(f.totalDue, monthlyFeeForStudents(f.students));
+          const already = amt != null ? isChallanAlreadyGenerated(f.familyId, amt) : undefined;
           return {
             targetId: f.familyId,
             targetName: f.familyName,
@@ -320,8 +395,13 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
         .filter(s => selectedStudentIds.has(s.id))
         .map(s => {
           const feeInfo = studentFeeMap.get(s.id);
-          const amt = calculateTargetAmount(feeInfo?.totalDue || 4000);
-          const already = isChallanAlreadyGenerated(s.id, amt);
+          // Fix #7b: the amount is the student's real due priced through
+          // the fee range — null ("Fee not set") when no record carries
+          // an amount. Never an invented substitute.
+          const amt = feeInfo?.totalDue == null
+            ? null
+            : calculateTargetAmount(feeInfo.totalDue, monthlyFeeForStudent(s));
+          const already = amt != null ? isChallanAlreadyGenerated(s.id, amt) : undefined;
           return {
             targetId: s.id,
             targetName: s.name,
@@ -336,7 +416,7 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
     }
 
     return [];
-  }, [scope, families, students, selectedFamilyIds, selectedStudentIds, calculateTargetAmount, studentFeeMap]);
+  }, [scope, families, students, selectedFamilyIds, selectedStudentIds, calculateTargetAmount, studentFeeMap, monthlyFeeForStudent, monthlyFeeForStudents]);
 
   // Execute Generation
   const handleExecuteGenerate = () => {
@@ -344,6 +424,14 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
 
     if (eligibleToGenerate.length === 0) {
       onShowToast('All selected items already have active challans generated for this amount!', 'info');
+      return;
+    }
+
+    // Fix #7b: a recipient whose amount could not be priced from real
+    // records ("Fee not set") blocks the batch with the Fix #7 message
+    // pattern — a challan with an invented amount must never be created.
+    if (eligibleToGenerate.some(item => item.amount == null)) {
+      onShowToast('Fee not set for one or more selected recipients — no amount has been filled in for them. Set the class fee first (Classes → Edit Class / Change Fee), then generate the challan again.', 'error');
       return;
     }
 
@@ -360,7 +448,9 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
     const formattedDue = formatDateStr(dueDate);
     const formattedValid = formatDateStr(validityDate);
 
-    const generated: GeneratedChallan[] = eligibleToGenerate.map(item => {
+    // Every eligible item is priced at this point (unpriced ones blocked above).
+    const pricedList = eligibleToGenerate as Array<(typeof eligibleToGenerate)[number] & { amount: number }>;
+    const generated: GeneratedChallan[] = pricedList.map(item => {
       const cleanNum = item.targetId.replace(/[^a-zA-Z0-9]/g, '');
       const challanNumber = `CHL-2026-${cleanNum.padStart(5, '0')}`;
 
@@ -399,10 +489,10 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
       id="modal-generate-challans-wizard"
     >
       <div 
-        className="w-full max-w-4xl bg-[#0f1725] border border-[#20314b] rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-100 max-h-[92vh] animate-in zoom-in-95 duration-200"
+        className="w-full max-w-4xl bg-surface-9 border border-[#20314b] rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-100 max-h-[92vh] animate-in zoom-in-95 duration-200"
       >
         {/* Top Header matching Image 1: Title on left, Next / Action on right */}
-        <div className="px-6 py-4 bg-[#141e30] border-b border-[#1f2e46] flex items-center justify-between">
+        <div className="px-6 py-4 bg-surface-29 border-b border-edge-23 flex items-center justify-between">
           <h2 className="text-base font-bold text-white tracking-tight">
             Generate Challans
           </h2>
@@ -412,7 +502,7 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
               <button
                 type="button"
                 onClick={() => setCurrentStep(prev => prev - 1)}
-                className="px-3.5 py-1.5 rounded-lg bg-[#19263a] hover:bg-[#23354f] text-slate-300 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                className="px-3.5 py-1.5 rounded-lg bg-edge-5 hover:bg-[#23354f] text-slate-300 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
                 <span>Back</span>
@@ -458,7 +548,7 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#1f2b3e] transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-edge-17 transition-colors cursor-pointer"
               id="btn-wizard-close"
             >
               <X className="w-5 h-5" />
@@ -490,7 +580,7 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
                         ? 'bg-blue-600 text-white shadow-md shadow-blue-600/40 ring-4 ring-blue-600/20'
                         : isPast
                         ? 'bg-emerald-600 text-white'
-                        : 'bg-[#182335] text-slate-400 border border-[#2b3c54]'
+                        : 'bg-edge-3 text-slate-400 border border-[#2b3c54]'
                     }`}
                   >
                     {isPast ? <Check className="w-3.5 h-3.5" /> : step.num}
@@ -528,12 +618,12 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
                   className={`p-6 rounded-2xl flex flex-col items-center text-center transition-all cursor-pointer ${
                     scope === 'full'
                       ? 'border-2 border-blue-500 bg-blue-950/20 shadow-lg shadow-blue-600/10'
-                      : 'border border-[#20314b] bg-[#141e30] hover:bg-[#182438] hover:border-slate-600'
+                      : 'border border-[#20314b] bg-surface-29 hover:bg-[#182438] hover:border-slate-600'
                   }`}
                   id="card-scope-full"
                 >
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 ${
-                    scope === 'full' ? 'bg-blue-500/20 text-blue-400' : 'bg-[#1f2e46] text-slate-400'
+                    scope === 'full' ? 'bg-blue-500/20 text-blue-400' : 'bg-edge-23 text-slate-400'
                   }`}>
                     <Building2 className="w-6 h-6" />
                   </div>
@@ -552,12 +642,12 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
                   className={`p-6 rounded-2xl flex flex-col items-center text-center transition-all cursor-pointer ${
                     scope === 'family'
                       ? 'border-2 border-blue-500 bg-blue-950/20 shadow-lg shadow-blue-600/10'
-                      : 'border border-[#20314b] bg-[#141e30] hover:bg-[#182438] hover:border-slate-600'
+                      : 'border border-[#20314b] bg-surface-29 hover:bg-[#182438] hover:border-slate-600'
                   }`}
                   id="card-scope-family"
                 >
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 ${
-                    scope === 'family' ? 'bg-blue-500/20 text-blue-400' : 'bg-[#1f2e46] text-slate-400'
+                    scope === 'family' ? 'bg-blue-500/20 text-blue-400' : 'bg-edge-23 text-slate-400'
                   }`}>
                     <Users className="w-6 h-6" />
                   </div>
@@ -576,12 +666,12 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
                   className={`p-6 rounded-2xl flex flex-col items-center text-center transition-all cursor-pointer ${
                     scope === 'student'
                       ? 'border-2 border-blue-500 bg-blue-950/20 shadow-lg shadow-blue-600/10'
-                      : 'border border-[#20314b] bg-[#141e30] hover:bg-[#182438] hover:border-slate-600'
+                      : 'border border-[#20314b] bg-surface-29 hover:bg-[#182438] hover:border-slate-600'
                   }`}
                   id="card-scope-student"
                 >
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 ${
-                    scope === 'student' ? 'bg-blue-500/20 text-blue-400' : 'bg-[#1f2e46] text-slate-400'
+                    scope === 'student' ? 'bg-blue-500/20 text-blue-400' : 'bg-edge-23 text-slate-400'
                   }`}>
                     <User className="w-6 h-6" />
                   </div>
@@ -616,7 +706,7 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
                       className={`p-4 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
                         isSelected
                           ? 'border-blue-500 bg-blue-950/30 ring-1 ring-blue-500/40'
-                          : 'border-[#20314b] bg-[#141e30] hover:bg-[#182438]'
+                          : 'border-[#20314b] bg-surface-29 hover:bg-[#182438]'
                       }`}
                     >
                       <div className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
@@ -650,7 +740,7 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
           {currentStep === 3 && (
             <div className="space-y-4 animate-in fade-in duration-150">
               {scope === 'full' ? (
-                <div className="max-w-xl mx-auto p-6 bg-[#131d2d] border border-[#22334e] rounded-2xl text-center space-y-3">
+                <div className="max-w-xl mx-auto p-6 bg-[#131d2d] border border-edge-32 rounded-2xl text-center space-y-3">
                   <div className="w-12 h-12 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center mx-auto">
                     <Building2 className="w-6 h-6" />
                   </div>
@@ -658,7 +748,7 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
                   <p className="text-xs text-slate-400">
                     All families with active outstanding dues will be automatically gathered.
                   </p>
-                  <div className="p-3 bg-[#182335] rounded-xl border border-[#26374f] text-xs flex justify-around">
+                  <div className="p-3 bg-edge-3 rounded-xl border border-[#26374f] text-xs flex justify-around">
                     <div>
                       <span className="text-slate-400 block text-[10px]">Total Families with Dues</span>
                       <strong className="text-white text-sm">{families.filter(f => f.totalDue > 0).length}</strong>
@@ -705,7 +795,7 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
 
                     <div className="flex items-center gap-2">
                       {/* Keyboard shortcut hint badge */}
-                      <span className="text-[11px] text-slate-400 flex items-center gap-1 bg-[#19263a] px-2 py-1 rounded-md border border-[#253750]">
+                      <span className="text-[11px] text-slate-400 flex items-center gap-1 bg-edge-5 px-2 py-1 rounded-md border border-[#253750]">
                         <kbd className="px-1 py-0.5 text-[9px] font-mono bg-slate-800 text-slate-200 rounded border border-slate-700">
                           Ctrl+A
                         </kbd>
@@ -748,10 +838,10 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
                               <th className="py-2.5 px-3 text-center">Status</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-[#1b273b]">
+                          <tbody className="divide-y divide-edge-8">
                             {filteredFamilies.map(fam => {
-                              const calculatedAmount = calculateTargetAmount(fam.totalDue);
-                              const alreadyGen = isChallanAlreadyGenerated(fam.familyId, calculatedAmount);
+                              const calculatedAmount = calculateTargetAmount(fam.totalDue, monthlyFeeForStudents(fam.students));
+                              const alreadyGen = calculatedAmount != null ? isChallanAlreadyGenerated(fam.familyId, calculatedAmount) : undefined;
                               const isChecked = selectedFamilyIds.has(fam.familyId);
 
                               return (
@@ -763,14 +853,14 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
                                       ? 'bg-slate-900/40 opacity-70 hover:opacity-90'
                                       : isChecked
                                       ? 'bg-blue-950/30'
-                                      : 'hover:bg-[#152033]'
+                                      : 'hover:bg-surface-35'
                                   }`}
                                 >
                                   <td className="py-2.5 px-3" onClick={(e) => e.stopPropagation()}>
                                     <input
                                       type="checkbox"
                                       checked={isChecked}
-                                      disabled={Boolean(alreadyGen)}
+                                      disabled={Boolean(alreadyGen) || calculatedAmount == null}
                                       onChange={() => toggleFamilySelection(fam.familyId, calculatedAmount)}
                                       className="rounded border-slate-700 text-blue-600 focus:ring-0 disabled:opacity-30"
                                     />
@@ -788,7 +878,11 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
                                     {fam.students.length} child{fam.students.length > 1 ? 'ren' : ''}
                                   </td>
                                   <td className="py-2.5 px-3 text-right font-bold text-red-400">
-                                    {formatPKR(calculatedAmount)}
+                                    {calculatedAmount == null ? (
+                                      <span className="text-amber-400">Fee not set</span>
+                                    ) : (
+                                      formatPKR(calculatedAmount)
+                                    )}
                                   </td>
                                   <td className="py-2.5 px-3 text-center">
                                     {alreadyGen ? (
@@ -798,6 +892,10 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
                                       >
                                         <CheckCircle2 className="w-3 h-3" />
                                         {alreadyGen.challanNumber}
+                                      </span>
+                                    ) : calculatedAmount == null ? (
+                                      <span className="text-[10px] text-amber-400 font-semibold">
+                                        Fee not set
                                       </span>
                                     ) : (
                                       <span className="text-[10px] text-slate-500">
@@ -830,11 +928,13 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
                               <th className="py-2.5 px-3 text-center">Status</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-[#1b273b]">
+                          <tbody className="divide-y divide-edge-8">
                             {filteredStudents.map(st => {
                               const feeInfo = studentFeeMap.get(st.id);
-                              const calculatedAmount = calculateTargetAmount(feeInfo?.totalDue || 4000);
-                              const alreadyGen = isChallanAlreadyGenerated(st.id, calculatedAmount);
+                              const calculatedAmount = feeInfo?.totalDue == null
+                                ? null
+                                : calculateTargetAmount(feeInfo.totalDue, monthlyFeeForStudent(st));
+                              const alreadyGen = calculatedAmount != null ? isChallanAlreadyGenerated(st.id, calculatedAmount) : undefined;
                               const isChecked = selectedStudentIds.has(st.id);
 
                               return (
@@ -846,14 +946,14 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
                                       ? 'bg-slate-900/40 opacity-70 hover:opacity-90'
                                       : isChecked
                                       ? 'bg-blue-950/30'
-                                      : 'hover:bg-[#152033]'
+                                      : 'hover:bg-surface-35'
                                   }`}
                                 >
                                   <td className="py-2.5 px-3" onClick={(e) => e.stopPropagation()}>
                                     <input
                                       type="checkbox"
                                       checked={isChecked}
-                                      disabled={Boolean(alreadyGen)}
+                                      disabled={Boolean(alreadyGen) || calculatedAmount == null}
                                       onChange={() => toggleStudentSelection(st.id, calculatedAmount)}
                                       className="rounded border-slate-700 text-blue-600 focus:ring-0 disabled:opacity-30"
                                     />
@@ -871,7 +971,11 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
                                     {st.family || 'Family'}
                                   </td>
                                   <td className="py-2.5 px-3 text-right font-bold text-red-400">
-                                    {formatPKR(calculatedAmount)}
+                                    {calculatedAmount == null ? (
+                                      <span className="text-amber-400">Fee not set</span>
+                                    ) : (
+                                      formatPKR(calculatedAmount)
+                                    )}
                                   </td>
                                   <td className="py-2.5 px-3 text-center">
                                     {alreadyGen ? (
@@ -881,6 +985,10 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
                                       >
                                         <CheckCircle2 className="w-3 h-3" />
                                         {alreadyGen.challanNumber}
+                                      </span>
+                                    ) : calculatedAmount == null ? (
+                                      <span className="text-[10px] text-amber-400 font-semibold">
+                                        Fee not set
                                       </span>
                                     ) : (
                                       <span className="text-[10px] text-slate-500">
@@ -924,7 +1032,7 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
               </div>
 
               {/* Date Pickers Grid */}
-              <div className="p-4 bg-[#141f32] border border-[#23354e] rounded-xl grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-4 bg-[#141f32] border border-edge-35 rounded-xl grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
                     <Calendar className="w-3.5 h-3.5 text-blue-400" />
@@ -970,24 +1078,24 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
 
               {/* Summary Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3 bg-[#121c2c] border border-[#1f2e46] rounded-xl text-center">
+                <div className="p-3 bg-[#121c2c] border border-edge-23 rounded-xl text-center">
                   <span className="text-[10px] text-slate-400 block uppercase">Scope</span>
                   <strong className="text-white text-xs capitalize">{scope}</strong>
                 </div>
-                <div className="p-3 bg-[#121c2c] border border-[#1f2e46] rounded-xl text-center">
+                <div className="p-3 bg-[#121c2c] border border-edge-23 rounded-xl text-center">
                   <span className="text-[10px] text-slate-400 block uppercase">Fee Range</span>
                   <strong className="text-blue-400 text-xs">{activeFeeOption.label}</strong>
                 </div>
-                <div className="p-3 bg-[#121c2c] border border-[#1f2e46] rounded-xl text-center">
+                <div className="p-3 bg-[#121c2c] border border-edge-23 rounded-xl text-center">
                   <span className="text-[10px] text-slate-400 block uppercase">Eligible Recipients</span>
                   <strong className="text-emerald-400 text-xs">
                     {confirmList.filter(c => !c.alreadyGenerated).length} of {confirmList.length}
                   </strong>
                 </div>
-                <div className="p-3 bg-[#121c2c] border border-[#1f2e46] rounded-xl text-center">
+                <div className="p-3 bg-[#121c2c] border border-edge-23 rounded-xl text-center">
                   <span className="text-[10px] text-slate-400 block uppercase">Total Batch Dues</span>
                   <strong className="text-red-400 text-xs font-mono">
-                    {formatPKR(confirmList.filter(c => !c.alreadyGenerated).reduce((a, b) => a + b.amount, 0))}
+                    {formatPKR(confirmList.filter(c => !c.alreadyGenerated).reduce((a, b) => a + (b.amount ?? 0), 0))}
                   </strong>
                 </div>
               </div>
@@ -1017,11 +1125,21 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
                           <td className="py-2 px-3 font-semibold text-white">{item.targetName}</td>
                           <td className="py-2 px-3 font-mono text-slate-400">{item.targetId}</td>
                           <td className="py-2 px-3 text-slate-300">{item.className}</td>
-                          <td className="py-2 px-3 text-right font-bold text-red-400">{formatPKR(item.amount)}</td>
+                          <td className="py-2 px-3 text-right font-bold text-red-400">
+                            {item.amount == null ? (
+                              <span className="text-amber-400">Fee not set</span>
+                            ) : (
+                              formatPKR(item.amount)
+                            )}
+                          </td>
                           <td className="py-2 px-3 text-center">
                             {item.alreadyGenerated ? (
                               <span className="text-[10px] text-amber-400 font-medium">
                                 Skipped (Already Generated)
+                              </span>
+                            ) : item.amount == null ? (
+                              <span className="text-[10px] text-amber-400 font-semibold">
+                                Blocked — Fee not set
                               </span>
                             ) : (
                               <span className="text-[10px] text-emerald-400 font-semibold">
@@ -1073,7 +1191,7 @@ export const GenerateChallanModal: React.FC<GenerateChallanModalProps> = ({
                   <button
                     type="button"
                     onClick={onClose}
-                    className="px-6 py-2.5 rounded-xl bg-[#1b273b] hover:bg-[#25354e] text-slate-200 text-xs font-semibold transition-colors cursor-pointer"
+                    className="px-6 py-2.5 rounded-xl bg-edge-8 hover:bg-[#25354e] text-slate-200 text-xs font-semibold transition-colors cursor-pointer"
                     id="btn-done-challan-wizard"
                   >
                     Done

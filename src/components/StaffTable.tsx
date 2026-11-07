@@ -53,11 +53,11 @@ export const StaffTable: React.FC<StaffTableProps> = ({
   };
 
   return (
-    <div className="bg-[#101622] border border-[#1d273a] rounded-xl overflow-hidden shadow-xl flex flex-col">
+    <div className="bg-[#101622] border border-edge-9 rounded-xl overflow-hidden shadow-xl flex flex-col">
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse min-w-[760px]">
           {/* Table Header */}
-          <thead className="bg-[#131b28] border-b border-[#1f2a3d] text-xs font-semibold text-slate-400 select-none">
+          <thead className="bg-surface-18 border-b border-[#1f2a3d] text-xs font-semibold text-slate-400 select-none">
             <tr>
               {/* Name Column */}
               <th 
@@ -102,7 +102,7 @@ export const StaffTable: React.FC<StaffTableProps> = ({
           </thead>
 
           {/* Table Body */}
-          <tbody className="divide-y divide-[#172030] text-xs">
+          <tbody className="divide-y divide-surface-34 text-xs">
             {sortedStaff.length === 0 ? (
               <tr>
                 <td colSpan={6} className="py-12 text-center text-slate-400">
@@ -196,7 +196,7 @@ export const StaffTable: React.FC<StaffTableProps> = ({
                           e.stopPropagation();
                           setOpenMenuId(isMenuOpen ? null : staff.id);
                         }}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#1e293b] transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-edge-13 transition-colors cursor-pointer"
                         id={`btn-menu-${staff.id}`}
                         title="Actions"
                       >
@@ -214,7 +214,7 @@ export const StaffTable: React.FC<StaffTableProps> = ({
                             }}
                           />
                           <div 
-                            className="absolute right-5 top-10 z-30 w-48 bg-[#141b27] border border-[#24334a] rounded-xl shadow-2xl py-1 text-xs text-left animate-in fade-in"
+                            className="absolute right-5 top-10 z-30 w-48 bg-[#141b27] border border-edge-31 rounded-xl shadow-2xl py-1 text-xs text-left animate-in fade-in"
                             onClick={(e) => e.stopPropagation()}
                           >
                             {/* View Info */}
@@ -224,7 +224,7 @@ export const StaffTable: React.FC<StaffTableProps> = ({
                                 onSelectStaff(staff);
                                 setOpenMenuId(null);
                               }}
-                              className="w-full px-3.5 py-2 text-slate-200 hover:bg-[#1c2738] flex items-center gap-2 cursor-pointer transition-colors"
+                              className="w-full px-3.5 py-2 text-slate-200 hover:bg-surface-45 flex items-center gap-2 cursor-pointer transition-colors"
                             >
                               <Eye className="w-3.5 h-3.5 text-blue-400" />
                               <span>View Staff Details</span>
@@ -237,7 +237,7 @@ export const StaffTable: React.FC<StaffTableProps> = ({
                                 onEditStaff(staff);
                                 setOpenMenuId(null);
                               }}
-                              className="w-full px-3.5 py-2 text-slate-200 hover:bg-[#1c2738] flex items-center gap-2 cursor-pointer transition-colors"
+                              className="w-full px-3.5 py-2 text-slate-200 hover:bg-surface-45 flex items-center gap-2 cursor-pointer transition-colors"
                             >
                               <Edit3 className="w-3.5 h-3.5 text-sky-400" />
                               <span>Edit Staff Info</span>
@@ -250,7 +250,7 @@ export const StaffTable: React.FC<StaffTableProps> = ({
                                 onOpenIdCardModal(staff);
                                 setOpenMenuId(null);
                               }}
-                              className="w-full px-3.5 py-2 text-slate-200 hover:bg-[#1c2738] flex items-center gap-2 cursor-pointer transition-colors"
+                              className="w-full px-3.5 py-2 text-slate-200 hover:bg-surface-45 flex items-center gap-2 cursor-pointer transition-colors"
                             >
                               <IdCard className="w-3.5 h-3.5 text-indigo-400" />
                               <span>View ID Card</span>
@@ -267,13 +267,13 @@ export const StaffTable: React.FC<StaffTableProps> = ({
                                 }
                                 setOpenMenuId(null);
                               }}
-                              className="w-full px-3.5 py-2 text-slate-200 hover:bg-[#1c2738] flex items-center gap-2 cursor-pointer transition-colors"
+                              className="w-full px-3.5 py-2 text-slate-200 hover:bg-surface-45 flex items-center gap-2 cursor-pointer transition-colors"
                             >
                               <FileText className="w-3.5 h-3.5 text-emerald-400" />
                               <span>Salary Slip</span>
                             </button>
 
-                            <div className="border-t border-[#1e2a3c] my-1" />
+                            <div className="border-t border-edge-14 my-1" />
 
                             {/* Terminate Staff */}
                             <button

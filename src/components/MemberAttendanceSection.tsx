@@ -310,7 +310,7 @@ export const MemberAttendanceSection: React.FC<MemberAttendanceSectionProps> = (
       {/* ======================================================== */}
       {/* 1. TOP MONTH SELECTOR & NAVIGATION CONTROLS              */}
       {/* ======================================================== */}
-      <div className="bg-[#121927] border border-[#1e2a3c] rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+      <div className="bg-surface-17 border border-edge-14 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-950/60 border border-blue-500/30 flex items-center justify-center text-blue-400">
             <CalendarCheck2 className="w-5 h-5" />
@@ -330,7 +330,7 @@ export const MemberAttendanceSection: React.FC<MemberAttendanceSectionProps> = (
           <button
             type="button"
             onClick={handleJumpToCurrent}
-            className="h-7 px-2.5 rounded-lg bg-[#182335] hover:bg-[#202e45] border border-[#24344d] text-slate-300 hover:text-white text-[11px] font-semibold cursor-pointer transition-colors box-border"
+            className="h-7 px-2.5 rounded-lg bg-edge-3 hover:bg-[#202e45] border border-edge-34 text-slate-300 hover:text-white text-[11px] font-semibold cursor-pointer transition-colors box-border"
             id="btn-attendance-current-month"
           >
             Sep 2026
@@ -340,7 +340,7 @@ export const MemberAttendanceSection: React.FC<MemberAttendanceSectionProps> = (
           <button
             type="button"
             onClick={handlePrevMonth}
-            className="h-7 w-7 rounded-lg bg-[#182335] hover:bg-[#202e45] border border-[#24344d] text-slate-300 hover:text-white flex items-center justify-center cursor-pointer transition-colors box-border"
+            className="h-7 w-7 rounded-lg bg-edge-3 hover:bg-[#202e45] border border-edge-34 text-slate-300 hover:text-white flex items-center justify-center cursor-pointer transition-colors box-border"
             id="btn-attendance-prev-month"
             title="Previous Month"
           >
@@ -351,7 +351,7 @@ export const MemberAttendanceSection: React.FC<MemberAttendanceSectionProps> = (
           <button
             type="button"
             onClick={handleNextMonth}
-            className="h-7 w-7 rounded-lg bg-[#182335] hover:bg-[#202e45] border border-[#24344d] text-slate-300 hover:text-white flex items-center justify-center cursor-pointer transition-colors box-border"
+            className="h-7 w-7 rounded-lg bg-edge-3 hover:bg-[#202e45] border border-edge-34 text-slate-300 hover:text-white flex items-center justify-center cursor-pointer transition-colors box-border"
             id="btn-attendance-next-month"
             title="Next Month"
           >
@@ -365,7 +365,7 @@ export const MemberAttendanceSection: React.FC<MemberAttendanceSectionProps> = (
       {/* ======================================================== */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {/* Working Days */}
-        <div className="bg-[#121927] border border-[#1e2a3c] rounded-xl p-3.5 flex flex-col justify-between">
+        <div className="bg-surface-17 border border-edge-14 rounded-xl p-3.5 flex flex-col justify-between">
           <span className="text-[11px] text-slate-400 font-medium">Working Days</span>
           <div className="flex items-baseline justify-between mt-1">
             <span className="text-xl font-bold text-white">{monthlyStats.workingDays}</span>
@@ -445,7 +445,7 @@ export const MemberAttendanceSection: React.FC<MemberAttendanceSectionProps> = (
       {/*  select data from there")                                */}
       {/* ======================================================== */}
       <div 
-        className="bg-[#101726] border border-[#202e44] rounded-2xl p-4 sm:p-5 shadow-lg"
+        className="bg-surface-13 border border-[#202e44] rounded-2xl p-4 sm:p-5 shadow-lg"
         id="panel-interactive-date-editor"
       >
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#1b2639]">
@@ -465,7 +465,7 @@ export const MemberAttendanceSection: React.FC<MemberAttendanceSectionProps> = (
             <label htmlFor="quick-date-picker" className="text-xs text-slate-400 font-medium whitespace-nowrap">
               Select Date:
             </label>
-            <div className="relative border border-[#263750] rounded-xl bg-[#141d2d] px-3 py-1.5 flex items-center gap-2">
+            <div className="relative border border-[#263750] rounded-xl bg-surface-26 px-3 py-1.5 flex items-center gap-2">
               <input
                 id="quick-date-picker"
                 type="date"
@@ -530,7 +530,7 @@ export const MemberAttendanceSection: React.FC<MemberAttendanceSectionProps> = (
                 <span>Approved Leave</span>
               </span>
             ) : (
-              <span className="px-2.5 py-1 rounded-lg bg-[#1a2334] border border-[#2a374e] text-slate-400 text-xs font-semibold">
+              <span className="px-2.5 py-1 rounded-lg bg-surface-42 border border-[#2a374e] text-slate-400 text-xs font-semibold">
                 Not Marked
               </span>
             )}
@@ -605,7 +605,7 @@ export const MemberAttendanceSection: React.FC<MemberAttendanceSectionProps> = (
               <button
                 type="button"
                 onClick={() => handleSetStatus('not_marked')}
-                className="h-8 px-2.5 rounded-xl bg-[#172030] hover:bg-[#1f2c42] border border-[#263750] text-slate-400 hover:text-slate-200 text-xs font-medium cursor-pointer transition-colors"
+                className="h-8 px-2.5 rounded-xl bg-surface-34 hover:bg-edge-19 border border-[#263750] text-slate-400 hover:text-slate-200 text-xs font-medium cursor-pointer transition-colors"
                 id="btn-mark-profile-clear"
                 title="Reset status for this date"
               >
@@ -641,7 +641,7 @@ export const MemberAttendanceSection: React.FC<MemberAttendanceSectionProps> = (
       {/* ======================================================== */}
       {/* 4. INTERACTIVE MONTHLY CALENDAR GRID                     */}
       {/* ======================================================== */}
-      <div className="bg-[#121927] border border-[#1e2a3c] rounded-2xl p-4 sm:p-5 shadow-sm">
+      <div className="bg-surface-17 border border-edge-14 rounded-2xl p-4 sm:p-5 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
           <div>
             <h4 className="text-sm font-bold text-white flex items-center gap-2">
@@ -723,7 +723,7 @@ export const MemberAttendanceSection: React.FC<MemberAttendanceSectionProps> = (
               badgeText = 'Off';
               badgeStyle = 'text-slate-600';
             } else if (d.isFuture) {
-              bgColor = 'bg-[#131b28] border-transparent text-slate-600';
+              bgColor = 'bg-surface-18 border-transparent text-slate-600';
               badgeText = '';
             }
 
@@ -766,7 +766,7 @@ export const MemberAttendanceSection: React.FC<MemberAttendanceSectionProps> = (
       {/* ======================================================== */}
       {/* 5. DETAILED LOG TABLE FOR THE MONTH                      */}
       {/* ======================================================== */}
-      <div className="bg-[#121927] border border-[#1e2a3c] rounded-2xl overflow-hidden shadow-sm">
+      <div className="bg-surface-17 border border-edge-14 rounded-2xl overflow-hidden shadow-sm">
         <div className="p-4 border-b border-[#1b2639] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h4 className="text-sm font-bold text-white">
@@ -783,7 +783,7 @@ export const MemberAttendanceSection: React.FC<MemberAttendanceSectionProps> = (
               id="select-status-filter"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-2.5 py-1.5 rounded-lg bg-[#182335] border border-[#24344d] text-xs text-white focus:outline-none cursor-pointer"
+              className="px-2.5 py-1.5 rounded-lg bg-edge-3 border border-edge-34 text-xs text-white focus:outline-none cursor-pointer"
             >
               <option value="all">All Days</option>
               <option value="present">Present</option>
@@ -797,7 +797,7 @@ export const MemberAttendanceSection: React.FC<MemberAttendanceSectionProps> = (
 
         <div className="overflow-x-auto max-h-[380px]">
           <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-[#151f30] text-slate-400 font-semibold border-b border-[#1e2c42] sticky top-0 z-10">
+            <thead className="bg-surface-31 text-slate-400 font-semibold border-b border-[#1e2c42] sticky top-0 z-10">
               <tr>
                 <th className="py-2.5 px-4">Date</th>
                 <th className="py-2.5 px-4">Day</th>
@@ -807,7 +807,7 @@ export const MemberAttendanceSection: React.FC<MemberAttendanceSectionProps> = (
                 {onUpdateStatus && <th className="py-2.5 px-4 text-right">Quick Action</th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#182335]">
+            <tbody className="divide-y divide-edge-3">
               {calendarData.days
                 .filter(d => {
                   if (statusFilter === 'all') return true;

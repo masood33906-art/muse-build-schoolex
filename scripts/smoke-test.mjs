@@ -35,6 +35,19 @@ try {
   const col = await (await fetch(`${base}/api/collections/schoollee_smoke_v1`)).json();
   check('collection GET', JSON.stringify(col.value) === '[1,2,3]');
 
+  // Fix P0-2: on a fresh DB the seed must ALSO land in collections under the
+  // app's exact storage keys, so first-run frontend hydration shows the data.
+  const allCols = await (await fetch(`${base}/api/collections`)).json();
+  const seedCounts = {
+    schoollee_offline_students_clean_v1: 117,
+    schoollee_offline_staff_clean_v1: 28,
+    schoollee_classes_clean_v1: 19,
+  };
+  for (const [key, want] of Object.entries(seedCounts)) {
+    const v = allCols.collections?.[key];
+    check(`seeded collection ${key}`, Array.isArray(v) && v.length === want, `len=${Array.isArray(v) ? v.length : 'missing'}`);
+  }
+
   const home = await fetch(`${base}/`);
   check('frontend served', home.status === 200 && (await home.text()).includes('<div id="root">') || home.status === 200);
 
@@ -54,6 +67,10 @@ try {
   check('student persists after restart (SQLite)', got.name === 'Smoke Test Student');
   const health = await (await fetch(`${base2}/api/health`)).json();
   check('health ok after restart', health.ok === true);
+  // Fix P0-2: restart must not re-seed or duplicate the collections.
+  const allCols2 = await (await fetch(`${base2}/api/collections`)).json();
+  const stu2 = allCols2.collections?.schoollee_offline_students_clean_v1;
+  check('seeded collections unchanged after restart', Array.isArray(stu2) && stu2.length === 117, `len=${Array.isArray(stu2) ? stu2.length : 'missing'}`);
 } finally {
   await h.close();
 }

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Pencil, ArrowUpDown, ArrowUp, ArrowDown, X, Users, Check } from 'lucide-react';
 import { ClassInfo, Student, ClassTimelineEvent } from '../types';
+import { resolveClassFee, studentBelongsToClass } from '../utils/classExportHelper';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
 
 interface SectionDetailsPageProps {
@@ -31,13 +32,13 @@ export const SectionDetailsPage: React.FC<SectionDetailsPageProps> = ({
   const [editedSectionName, setEditedSectionName] = useState(sectionName);
 
   // Filter students belonging to this specific class and section centrally
+  // (shared classId-first membership rule, Fix P0-3)
   const sectionStudents = useMemo(() => {
-    return students.filter(s => 
-      s.class && 
-      s.class.toLowerCase().trim() === classInfo.name.toLowerCase().trim() &&
+    return students.filter(s =>
+      studentBelongsToClass(s, classInfo) &&
       (s.section || 'A').toUpperCase() === sectionName.toUpperCase()
     );
-  }, [students, classInfo.name, sectionName]);
+  }, [students, classInfo, sectionName]);
 
   // Sort students by name
   const sortedStudents = useMemo(() => {
@@ -82,7 +83,10 @@ export const SectionDetailsPage: React.FC<SectionDetailsPageProps> = ({
       date: `${dateFormatted}, ${timeFormatted}`,
       badgeDate: badgeFormatted,
       time: timeFormatted,
-      fee: classInfo.fee || 4800,
+      // Fix P1-8: record the class's REAL fee on this rename event; when
+      // no fee is set, record 0 ("no fee recorded") — never an invented
+      // amount. This field is timeline metadata only; it bills no one.
+      fee: resolveClassFee(classInfo) ?? 0,
       author: 'Admin'
     };
 
@@ -96,8 +100,7 @@ export const SectionDetailsPage: React.FC<SectionDetailsPageProps> = ({
     // 3. Update all students belonging to this class and section
     const updatedStudents = students.map(s => {
       if (
-        s.class &&
-        s.class.toLowerCase().trim() === classInfo.name.toLowerCase().trim() &&
+        studentBelongsToClass(s, classInfo) &&
         (s.section || 'A').toUpperCase() === sectionName.toUpperCase()
       ) {
         return {
@@ -142,7 +145,7 @@ export const SectionDetailsPage: React.FC<SectionDetailsPageProps> = ({
               setEditedSectionName(sectionName);
               setIsEditSectionOpen(true);
             }}
-            className="px-4 py-2 rounded-lg bg-white hover:bg-slate-100 text-[#0c121e] text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-md hover:shadow-lg"
+            className="px-4 py-2 rounded-lg bg-white hover:bg-slate-100 text-surface-6 text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-md hover:shadow-lg"
             id="btn-edit-section"
           >
             <Pencil className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -152,7 +155,7 @@ export const SectionDetailsPage: React.FC<SectionDetailsPageProps> = ({
       </div>
 
       {/* 2. STUDENTS CARD & DATA TABLE */}
-      <div className="bg-[#0f1624] border border-[#1d273a] rounded-xl shadow-md overflow-hidden">
+      <div className="bg-[#0f1624] border border-edge-9 rounded-xl shadow-md overflow-hidden">
         {/* Card Header: "Students" */}
         <div className="px-6 py-4 border-b border-[#182336] flex items-center justify-between">
           <h2 className="text-base font-bold text-white tracking-tight">
@@ -202,12 +205,12 @@ export const SectionDetailsPage: React.FC<SectionDetailsPageProps> = ({
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-[#162132] text-xs">
+            <tbody className="divide-y divide-surface-39 text-xs">
               {sortedStudents.length > 0 ? (
                 sortedStudents.map((student) => (
                   <tr
                     key={student.id}
-                    className="hover:bg-[#141d2d] transition-colors group"
+                    className="hover:bg-surface-26 transition-colors group"
                   >
                     {/* Name + ID underneath */}
                     <td className="py-3.5 px-6">
@@ -269,8 +272,8 @@ export const SectionDetailsPage: React.FC<SectionDetailsPageProps> = ({
       {/* 3. EDIT / RENAME SECTION MODAL */}
       {isEditSectionOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#101726] border border-[#223046] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
-            <div className="px-6 py-4 border-b border-[#1b2638] flex items-center justify-between">
+          <div className="bg-surface-13 border border-edge-24 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
+            <div className="px-6 py-4 border-b border-edge-6 flex items-center justify-between">
               <h3 className="font-bold text-sm text-white">
                 Edit Section: {sectionName} ({classInfo.name})
               </h3>
@@ -292,7 +295,7 @@ export const SectionDetailsPage: React.FC<SectionDetailsPageProps> = ({
                   type="text"
                   value={editedSectionName}
                   onChange={(e) => setEditedSectionName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#141d2d] border border-[#233149] text-white text-xs uppercase focus:border-blue-500 focus:outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-26 border border-edge-26 text-white text-xs uppercase focus:border-blue-500 focus:outline-none"
                   maxLength={10}
                   required
                   autoFocus
@@ -302,11 +305,11 @@ export const SectionDetailsPage: React.FC<SectionDetailsPageProps> = ({
                 </p>
               </div>
 
-              <div className="pt-3 flex items-center justify-end gap-2.5 border-t border-[#1b2638]">
+              <div className="pt-3 flex items-center justify-end gap-2.5 border-t border-edge-6">
                 <button
                   type="button"
                   onClick={() => setIsEditSectionOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-[#141d2d] border border-[#24334a] text-slate-300 hover:text-white text-xs font-semibold cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-surface-26 border border-edge-31 text-slate-300 hover:text-white text-xs font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>

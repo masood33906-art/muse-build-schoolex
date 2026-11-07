@@ -12,13 +12,13 @@ export function groupStudentsIntoFamilies(students: Student[]): FamilyData[] {
       map.set(key, {
         familyId: student.familyId || 'F0000',
         familyName: student.family || 'Unknown Family',
-        phone: student.phone || student.emergencyContact || '03356226026',
+        phone: student.phone || student.emergencyContact || '',
         guardianCnic: student.guardianCnic || '7647646475',
         guardianOccupation: student.guardianOccupation || 'Business',
         motherName: student.motherName || '-',
         motherCnic: student.motherCnic || '-',
         motherOccupation: student.motherOccupation || 'Homemaker',
-        whatsapp: student.whatsapp || student.phone || '03356226026',
+        whatsapp: student.whatsapp || student.phone || '',
         email: student.email || 'guardian@school.edu.pk',
         address: student.address || 'House #14, Sector G-10, Islamabad',
         caste: student.caste || '-',
@@ -44,7 +44,10 @@ export function groupStudentsIntoFamilies(students: Student[]): FamilyData[] {
 
   return Array.from(map.values()).map(fam => {
     const totalDue = fam.students.reduce((sum, s) => sum + (s.totalDue ?? 0), 0);
-    const totalPaid = fam.students.reduce((sum, s) => sum + (s.totalPaid ?? 40000), 0);
+    // Fix #7b: an unrecorded totalPaid contributes 0 — the old
+    // `?? 40000` invented 40,000 PKR of payments per student (the
+    // same fabrication Fix #4b removed from FamilyDetailsView).
+    const totalPaid = fam.students.reduce((sum, s) => sum + (s.totalPaid ?? 0), 0);
     return {
       ...fam,
       totalDue,

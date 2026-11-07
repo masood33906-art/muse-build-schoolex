@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { X, Printer, Download, Award, FileSpreadsheet, FileText, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Printer, Download, Award, FileSpreadsheet, FileText, CheckCircle2, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import { Exam, calculateGrade, downloadCSV } from '../utils/examStore';
 import { SchoolSettings, getSchoolSettings } from '../utils/settingsHelper';
-import { Student } from '../types';
+import { findClassByName, studentsInClassSection } from '../utils/classExportHelper';
+import { ClassInfo, Student } from '../types';
 
 export type ExamExportType = 'marks-sheet' | 'result-sheet' | 'bulk-dmc';
 
@@ -12,6 +13,9 @@ interface ExamDetailExportModalProps {
   exportType: ExamExportType;
   exam: Exam;
   students: Student[];
+  // Class records, when the caller has them: lets enrollment matching use
+  // the stable classId (Fix P0-3) instead of the class name alone.
+  classes?: ClassInfo[];
   schoolSettings?: SchoolSettings;
 }
 
@@ -21,6 +25,7 @@ export const ExamDetailExportModal: React.FC<ExamDetailExportModalProps> = ({
   exportType,
   exam,
   students,
+  classes,
   schoolSettings
 }) => {
   const [selectedStudentIndex, setSelectedStudentIndex] = useState<number>(0);
@@ -46,27 +51,30 @@ export const ExamDetailExportModal: React.FC<ExamDetailExportModalProps> = ({
     year: 'numeric'
   });
 
-  // Filter students for this class and section
-  const enrolledStudents = students.filter(
-    s => (s.class.toLowerCase() === exam.class.toLowerCase()) &&
-         (!exam.section || s.section === exam.section || exam.section === 'A')
-  );
+  // Filter students for this class and section — the shared
+  // studentsInClassSection rule (Fix P1-4, extending the Fix P0-3 class
+  // matching): when the class records are available, the exam's class NAME
+  // is resolved to its record and students are matched by stable classId
+  // (legacy name fallback inside the helper), so a renamed class still
+  // finds its students; if the exam's class matches no record, the helper
+  // falls back to the trimmed, case-insensitive name match.
+  // Section matching is EXACT: a recorded section — including 'A' — now
+  // matches only that section. The old predicate treated section 'A' as a
+  // wildcard and exported DMCs for every section of the class. An exam
+  // with NO recorded section is a whole-class exam and matches the whole
+  // class (the creation flow always records a concrete section, so this
+  // only occurs on legacy records).
+  const examClassInfo = classes ? findClassByName(classes, exam.class) : undefined;
+  const enrolledStudents = studentsInClassSection(students, examClassInfo ?? exam.class, exam.section);
 
-  // If no enrolled students matched directly, use the ones in exam.studentMarks or fallback to first few students
-  const activeStudentList = enrolledStudents.length > 0 
-    ? enrolledStudents 
-    : Object.keys(exam.studentMarks).length > 0
-      ? (Object.values(exam.studentMarks) as any[]).map(sm => ({
-          id: sm.studentId,
-          name: sm.studentName,
-          family: sm.fatherName || 'Guardian',
-          familyId: 'F-001',
-          class: exam.class,
-          section: exam.section,
-          status: 'Active' as const,
-          rollNo: sm.rollNo
-        }))
-      : students.slice(0, 6);
+  // Fix P0-3: NO substitute data, ever. Previously, when no enrolled
+  // students matched, this export fabricated a roster from exam.studentMarks
+  // with invented fields, or fell back to the first six students in the
+  // whole school — printing official DMCs for the wrong children. An empty
+  // match now produces NO document: the modal shows a clear "No students
+  // found for this class/section" message instead (see render below).
+  const activeStudentList = enrolledStudents;
+  const noStudentsFound = activeStudentList.length === 0;
 
   const totalMaxMarks = exam.subjects.reduce((sum, s) => sum + (s.totalMarks || 100), 0);
 
@@ -129,10 +137,12 @@ export const ExamDetailExportModal: React.FC<ExamDetailExportModalProps> = ({
   });
 
   const handlePrint = () => {
+    if (noStudentsFound) return; // Fix P0-3: never print an empty/fabricated roster
     window.print();
   };
 
   const handleDownloadMarksSheetCSV = () => {
+    if (noStudentsFound) return; // Fix P0-3: no document when no students match
     let csv = `EXAM: ${exam.name},CLASS: ${exam.class} - ${exam.section},DATE: ${currentDate}\n\n`;
     csv += `Roll No,Student ID,Student Name,Father Name,${exam.subjects.map(s => `${s.name} (Max ${s.totalMarks})`).join(',')},Total Marks,Teacher Signature\n`;
 
@@ -154,7 +164,7 @@ export const ExamDetailExportModal: React.FC<ExamDetailExportModalProps> = ({
         onClick={e => e.stopPropagation()}
       >
         {/* Top Controls Bar */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#1c2a42] bg-[#121c30] print:hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-surface-47 bg-[#121c30] print:hidden">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
               {exportType === 'marks-sheet' && <FileSpreadsheet className="w-5 h-5" />}
@@ -174,7 +184,7 @@ export const ExamDetailExportModal: React.FC<ExamDetailExportModalProps> = ({
           </div>
 
           <div className="flex items-center gap-3">
-            {exportType === 'marks-sheet' && (
+            {exportType === 'marks-sheet' && !noStudentsFound && (
               <button
                 type="button"
                 onClick={handleDownloadMarksSheetCSV}
@@ -185,8 +195,8 @@ export const ExamDetailExportModal: React.FC<ExamDetailExportModalProps> = ({
               </button>
             )}
 
-            {exportType === 'bulk-dmc' && (
-              <div className="flex items-center bg-[#152238] border border-[#243754] rounded-xl p-0.5 text-xs">
+            {exportType === 'bulk-dmc' && !noStudentsFound && (
+              <div className="flex items-center bg-edge-2 border border-[#243754] rounded-xl p-0.5 text-xs">
                 <button
                   type="button"
                   onClick={() => setBulkPrintMode(true)}
@@ -208,14 +218,16 @@ export const ExamDetailExportModal: React.FC<ExamDetailExportModalProps> = ({
               </div>
             )}
 
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
-            >
-              <Printer className="w-4 h-4" />
-              Print / Save PDF
-            </button>
+            {!noStudentsFound && (
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
+              >
+                <Printer className="w-4 h-4" />
+                Print / Save PDF
+              </button>
+            )}
 
             <button
               type="button"
@@ -229,11 +241,25 @@ export const ExamDetailExportModal: React.FC<ExamDetailExportModalProps> = ({
 
         {/* Content Viewer (Scrollable) */}
         <div className="p-6 md:p-8 overflow-y-auto flex-1 bg-slate-100 text-slate-900 custom-scrollbar print:p-0 print:bg-white print:overflow-visible">
-          
+
+          {/* Fix P0-3: honest empty state — no document is produced when no
+              enrolled student matches this exam's class/section. */}
+          {noStudentsFound && (
+            <div className="max-w-xl mx-auto bg-white p-8 rounded-xl shadow-md border border-slate-200 text-center print:hidden" role="alert">
+              <AlertCircle className="w-10 h-10 text-amber-500 mx-auto mb-3" />
+              <h3 className="text-base font-bold text-slate-900">No students found for this class/section</h3>
+              <p className="text-sm text-slate-600 mt-2 leading-relaxed">
+                {exam.name} is recorded for {exam.class}{exam.section ? ` — Section ${exam.section}` : ''},
+                but no enrolled students match it, so no document was generated.
+                Check that students are assigned to this class and section, then try again.
+              </p>
+            </div>
+          )}
+
           {/* ========================================================= */}
           {/* 1. MARKS ENTRY SHEET (TEACHER BLANK ROSTER)              */}
           {/* ========================================================= */}
-          {exportType === 'marks-sheet' && (
+          {exportType === 'marks-sheet' && !noStudentsFound && (
             <div className="max-w-4xl mx-auto bg-white p-8 md:p-10 rounded-xl shadow-md border border-slate-200 print:border-0 print:shadow-none print:p-4">
               {/* Header */}
               <div className="flex items-start justify-between border-b-2 border-slate-800 pb-4 mb-4">
@@ -356,7 +382,7 @@ export const ExamDetailExportModal: React.FC<ExamDetailExportModalProps> = ({
           {/* ========================================================= */}
           {/* 2. RESULT SHEET (CONSOLIDATED GAZETTE)                     */}
           {/* ========================================================= */}
-          {exportType === 'result-sheet' && (
+          {exportType === 'result-sheet' && !noStudentsFound && (
             <div className="max-w-4xl mx-auto bg-white p-8 md:p-10 rounded-xl shadow-md border border-slate-200 print:border-0 print:shadow-none print:p-4">
               {/* School Header */}
               <div className="flex items-start justify-between border-b-2 border-slate-800 pb-4 mb-4">
@@ -524,7 +550,7 @@ export const ExamDetailExportModal: React.FC<ExamDetailExportModalProps> = ({
           {/* ========================================================= */}
           {/* 3. BULK INDIVIDUAL RESULTS (DMC / REPORT CARDS)            */}
           {/* ========================================================= */}
-          {exportType === 'bulk-dmc' && (
+          {exportType === 'bulk-dmc' && !noStudentsFound && (
             <div className="space-y-8">
               {!bulkPrintMode && (
                 <div className="max-w-2xl mx-auto flex items-center justify-between bg-white px-4 py-3 rounded-xl border border-slate-200 shadow-sm print:hidden">
@@ -762,7 +788,7 @@ export const ExamDetailExportModal: React.FC<ExamDetailExportModalProps> = ({
         </div>
 
         {/* Bottom Bar */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-[#1c2a42] bg-[#121c30] print:hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-surface-47 bg-[#121c30] print:hidden">
           <p className="text-xs text-slate-400">
             {exportType === 'bulk-dmc'
               ? `Displaying ${bulkPrintMode ? evaluatedStudents.length : 1} student result certificate(s)`
@@ -772,7 +798,7 @@ export const ExamDetailExportModal: React.FC<ExamDetailExportModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2 rounded-xl border border-[#243550] text-slate-300 hover:text-white hover:bg-[#1a2840] text-xs font-semibold transition-colors"
+              className="px-5 py-2 rounded-xl border border-edge-38 text-slate-300 hover:text-white hover:bg-edge-12 text-xs font-semibold transition-colors"
             >
               Close
             </button>

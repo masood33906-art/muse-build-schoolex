@@ -521,7 +521,7 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
     const matchedStudent = students.find(s => 
       isMatchingId(s.id, studentFee.studentId) ||
       (s.name && studentFee.studentName && s.name.trim().toLowerCase() === studentFee.studentName.trim().toLowerCase())
-    ) || (studentFee as any).originalStudent;
+    ) || studentFee.originalStudent;
 
     const studentFamilyId = matchedStudent?.familyId || studentFee.familyId || '';
     const cleanFamId = studentFamilyId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
@@ -705,7 +705,7 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
   return (
     <div className="space-y-6 animate-in fade-in duration-150" id="module-fees-root">
       {/* 1. Header with Breadcrumb & Top Buttons directly in header row */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#182335]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-edge-3">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold text-white tracking-tight">
@@ -738,7 +738,7 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
           <button
             type="button"
             onClick={() => setIsGetChallanModalOpen(true)}
-            className="px-3.5 py-2 rounded-lg bg-[#141e2e] hover:bg-[#1b283d] border border-[#23354d] text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm hover:border-emerald-500/50"
+            className="px-3.5 py-2 rounded-lg bg-surface-27 hover:bg-edge-11 border border-[#23354d] text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm hover:border-emerald-500/50"
             id="btn-fees-get-challan"
             title="Select Challans, pay price and deduct from member accounts"
           >
@@ -751,7 +751,7 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
             <button
               type="button"
               onClick={onOpenLedger}
-              className="px-3.5 py-2 rounded-lg bg-[#141e2e] hover:bg-[#1b283d] border border-[#23354d] text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm hover:border-blue-500/50"
+              className="px-3.5 py-2 rounded-lg bg-surface-27 hover:bg-edge-11 border border-[#23354d] text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm hover:border-blue-500/50"
               id="btn-fees-open-ledger"
               title="View School Ledger, Income & Expenses"
             >
@@ -776,7 +776,7 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
 
             {isPrintDropdownOpen && (
               <div 
-                className="absolute right-0 mt-1.5 w-44 bg-[#0f1725] border border-[#22334b] rounded-xl shadow-2xl z-50 py-1 text-xs animate-in fade-in zoom-in-95 duration-150"
+                className="absolute right-0 mt-1.5 w-44 bg-surface-9 border border-edge-29 rounded-xl shadow-2xl z-50 py-1 text-xs animate-in fade-in zoom-in-95 duration-150"
                 id="dropdown-fees-print-options"
               >
                 <button
@@ -786,7 +786,7 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
                     setFeeCardStudentId(undefined);
                     setIsFeeCardModalOpen(true);
                   }}
-                  className="w-full px-3.5 py-2 text-left text-slate-200 hover:bg-[#19263a] hover:text-white flex items-center gap-2.5 transition-colors cursor-pointer"
+                  className="w-full px-3.5 py-2 text-left text-slate-200 hover:bg-edge-5 hover:text-white flex items-center gap-2.5 transition-colors cursor-pointer"
                   id="btn-print-fee-card"
                 >
                   <CreditCard className="w-4 h-4 text-blue-400 shrink-0" />
@@ -823,7 +823,7 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
                       multipleChallans: allGen
                     });
                   }}
-                  className="w-full px-3.5 py-2 text-left text-slate-200 hover:bg-[#19263a] hover:text-white flex items-center gap-2.5 transition-colors cursor-pointer"
+                  className="w-full px-3.5 py-2 text-left text-slate-200 hover:bg-edge-5 hover:text-white flex items-center gap-2.5 transition-colors cursor-pointer"
                   id="btn-print-challans"
                 >
                   <FileText className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -838,7 +838,7 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
             <button
               type="button"
               onClick={() => setIsExportDropdownOpen(prev => !prev)}
-              className="px-3.5 py-2 rounded-lg bg-[#141e2e] hover:bg-[#1b283d] border border-[#23354d] text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+              className="px-3.5 py-2 rounded-lg bg-surface-27 hover:bg-edge-11 border border-[#23354d] text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
               id="btn-fees-export"
               aria-expanded={isExportDropdownOpen}
             >
@@ -849,7 +849,7 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
 
             {isExportDropdownOpen && (
               <div 
-                className="absolute right-0 mt-1.5 w-56 bg-[#0f1725] border border-[#22334b] rounded-xl shadow-2xl z-50 py-1 text-xs animate-in fade-in zoom-in-95 duration-150 divide-y divide-[#1b273b]"
+                className="absolute right-0 mt-1.5 w-56 bg-surface-9 border border-edge-29 rounded-xl shadow-2xl z-50 py-1 text-xs animate-in fade-in zoom-in-95 duration-150 divide-y divide-edge-8"
                 id="dropdown-fees-export-options"
               >
                 {/* 1. Reusable CSV */}
@@ -956,13 +956,13 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
 
       {/* 3. Centered View Switcher Buttons (Family View vs Student View) */}
       <div className="flex justify-center my-2" id="fees-view-switcher">
-        <div className="inline-flex items-center p-1 rounded-xl bg-[#131b28] border border-[#202d42] shadow-inner">
+        <div className="inline-flex items-center p-1 rounded-xl bg-surface-18 border border-edge-20 shadow-inner">
           <button
             type="button"
             onClick={() => setActiveView('family')}
             className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 cursor-pointer transition-all ${
               activeView === 'family'
-                ? 'bg-[#24334a] text-white shadow-sm ring-1 ring-blue-500/30'
+                ? 'bg-edge-31 text-white shadow-sm ring-1 ring-blue-500/30'
                 : 'text-slate-400 hover:text-white hover:bg-[#1a2536]'
             }`}
             id="btn-view-family"
@@ -975,7 +975,7 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
             onClick={() => setActiveView('student')}
             className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 cursor-pointer transition-all ${
               activeView === 'student'
-                ? 'bg-[#24334a] text-white shadow-sm ring-1 ring-blue-500/30'
+                ? 'bg-edge-31 text-white shadow-sm ring-1 ring-blue-500/30'
                 : 'text-slate-400 hover:text-white hover:bg-[#1a2536]'
             }`}
             id="btn-view-student"
@@ -996,8 +996,8 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
             onClick={() => setStatusFilter('All')}
             className={`px-3.5 py-1.5 rounded-lg flex items-center gap-2 font-semibold cursor-pointer transition-all ${
               statusFilter === 'All'
-                ? 'bg-[#182335] text-white border border-[#2e3f5b]'
-                : 'bg-[#111823] text-slate-400 hover:text-slate-200 border border-[#1b273b]'
+                ? 'bg-edge-3 text-white border border-[#2e3f5b]'
+                : 'bg-[#111823] text-slate-400 hover:text-slate-200 border border-edge-8'
             }`}
           >
             <span>All</span>
@@ -1013,7 +1013,7 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
             className={`px-3.5 py-1.5 rounded-lg flex items-center gap-2 font-semibold cursor-pointer transition-all ${
               statusFilter === 'Unpaid'
                 ? 'bg-[#2a1b1a] text-orange-300 border border-orange-500/50'
-                : 'bg-[#111823] text-slate-400 hover:text-slate-200 border border-[#1b273b]'
+                : 'bg-[#111823] text-slate-400 hover:text-slate-200 border border-edge-8'
             }`}
           >
             <span className="text-orange-400">Unpaid</span>
@@ -1029,7 +1029,7 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
             className={`px-3.5 py-1.5 rounded-lg flex items-center gap-2 font-semibold cursor-pointer transition-all ${
               statusFilter === 'Partially Paid'
                 ? 'bg-[#2e2515] text-amber-300 border border-amber-500/50'
-                : 'bg-[#111823] text-slate-400 hover:text-slate-200 border border-[#1b273b]'
+                : 'bg-[#111823] text-slate-400 hover:text-slate-200 border border-edge-8'
             }`}
           >
             <span className="text-amber-400">Partially Paid</span>
@@ -1045,7 +1045,7 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
             className={`px-3.5 py-1.5 rounded-lg flex items-center gap-2 font-semibold cursor-pointer transition-all ${
               statusFilter === 'Paid'
                 ? 'bg-[#152a1e] text-emerald-300 border border-emerald-500/50'
-                : 'bg-[#111823] text-slate-400 hover:text-slate-200 border border-[#1b273b]'
+                : 'bg-[#111823] text-slate-400 hover:text-slate-200 border border-edge-8'
             }`}
           >
             <span className="text-emerald-400">Paid</span>
@@ -1060,7 +1060,7 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
           {/* Filter By Class Select */}
           <div className="relative shrink-0 sm:w-56">
             <div className="relative">
-              <label className="absolute -top-2 left-3 px-1 text-[10px] font-semibold text-slate-400 bg-[#0b0f19] z-10">
+              <label className="absolute -top-2 left-3 px-1 text-[10px] font-semibold text-slate-400 bg-canvas z-10">
                 Filter By Class
               </label>
               <button
@@ -1081,7 +1081,7 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
                   className="fixed inset-0 z-20" 
                   onClick={() => setIsClassDropdownOpen(false)} 
                 />
-                <div className="absolute left-0 mt-1 w-full rounded-xl bg-[#131b28] border border-[#24364f] shadow-2xl z-30 py-1 max-h-56 overflow-y-auto text-xs">
+                <div className="absolute left-0 mt-1 w-full rounded-xl bg-surface-18 border border-[#24364f] shadow-2xl z-30 py-1 max-h-56 overflow-y-auto text-xs">
                   <button
                     type="button"
                     onClick={() => {
@@ -1089,7 +1089,7 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
                       setIsClassDropdownOpen(false);
                     }}
                     className={`w-full px-3 py-2 text-left hover:bg-[#1c273a] flex items-center justify-between cursor-pointer ${
-                      selectedClass === 'All' ? 'text-blue-400 font-bold bg-[#172234]' : 'text-slate-200'
+                      selectedClass === 'All' ? 'text-blue-400 font-bold bg-edge-1' : 'text-slate-200'
                     }`}
                   >
                     <span>All Classes</span>
@@ -1104,7 +1104,7 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
                         setIsClassDropdownOpen(false);
                       }}
                       className={`w-full px-3 py-2 text-left hover:bg-[#1c273a] flex items-center justify-between cursor-pointer ${
-                        selectedClass === cls ? 'text-blue-400 font-bold bg-[#172234]' : 'text-slate-200'
+                        selectedClass === cls ? 'text-blue-400 font-bold bg-edge-1' : 'text-slate-200'
                       }`}
                     >
                       <span>{cls}</span>
@@ -1763,6 +1763,7 @@ export const FeesModule: React.FC<FeesModuleProps> = ({
         onClose={() => setIsGenerateChallanModalOpen(false)}
         families={families}
         students={students}
+        classes={classes}
         onShowToast={(msg, type) => onShowToast(msg)}
         onOpenChallanView={(generatedList) => {
           if (generatedList.length > 0) {

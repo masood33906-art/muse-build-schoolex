@@ -54,7 +54,7 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
     <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 py-6 text-slate-100 animate-in fade-in duration-150" id="fee-invoice-view-root">
       
       {/* ================= 1. SCREEN VIEW HEADER & BREADCRUMBS ================= */}
-      <div className="print:hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-2 border-b border-[#182335]">
+      <div className="print:hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-2 border-b border-edge-3">
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight">
             Invoice
@@ -75,7 +75,7 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
           <button
             type="button"
             onClick={onBackToFamily}
-            className="px-3 py-2 rounded-lg bg-[#141c2b] hover:bg-[#1c273c] border border-[#233149] text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="px-3 py-2 rounded-lg bg-surface-21 hover:bg-[#1c273c] border border-edge-26 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
             title="Return to Family Fee Ledger"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
@@ -87,7 +87,7 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
             type="button"
             onClick={handleDownloadPdf}
             disabled={isGeneratingPdf}
-            className="px-3.5 py-2 rounded-lg bg-[#152033] hover:bg-[#1b2b45] border border-[#253552] text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+            className="px-3.5 py-2 rounded-lg bg-surface-35 hover:bg-[#1b2b45] border border-[#253552] text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
             title="Download PDF containing 1 Family Copy and 2 School Copies"
           >
             <CloudDownload className="w-4 h-4 text-sky-400" />
@@ -98,7 +98,7 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
           <button
             type="button"
             onClick={handlePrint}
-            className="px-4 py-2 rounded-lg bg-[#2563eb] hover:bg-blue-600 active:bg-blue-700 text-white text-xs font-semibold flex items-center gap-2 shadow-lg shadow-blue-900/30 transition-all cursor-pointer"
+            className="px-4 py-2 rounded-lg bg-accent hover:bg-blue-600 active:bg-blue-700 text-white text-xs font-semibold flex items-center gap-2 shadow-lg shadow-blue-900/30 transition-all cursor-pointer"
             id="btn-print-invoice"
           >
             <Printer className="w-4 h-4" />
@@ -108,9 +108,9 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
       </div>
 
       {/* ================= 2. ON-SCREEN DARK INVOICE CONTAINER ================= */}
-      <div className="print:hidden bg-[#0c1322] border border-[#1a2538] rounded-2xl overflow-hidden shadow-2xl mb-12">
+      <div className="print:hidden bg-[#0c1322] border border-surface-43 rounded-2xl overflow-hidden shadow-2xl mb-12">
         {/* Header section with Logo, School details and Invoice metadata */}
-        <div className="p-6 sm:p-8 border-b border-[#182335]">
+        <div className="p-6 sm:p-8 border-b border-edge-3">
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6">
             {/* School Info with Logo */}
             <div className="flex items-start gap-4">
@@ -158,7 +158,7 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
           </div>
 
           {/* Invoice From & Invoice To details */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-8 pt-6 border-t border-[#182335]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-8 pt-6 border-t border-edge-3">
             {/* Invoice From */}
             <div>
               <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 block mb-1">
@@ -205,9 +205,9 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
               </div>
 
               {/* Items Table */}
-              <div className="overflow-x-auto rounded-lg border border-[#182335]">
+              <div className="overflow-x-auto rounded-lg border border-edge-3">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-[#0f1726] border-b border-[#182335] text-slate-400">
+                  <thead className="bg-surface-10 border-b border-edge-3 text-slate-400">
                     <tr>
                       <th className="py-3 px-4 font-semibold">Purpose</th>
                       <th className="py-3 px-4 font-semibold">Month</th>
@@ -216,7 +216,7 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
                       <th className="py-3 px-4 font-semibold text-right">Fee</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#162030]">
+                  <tbody className="divide-y divide-surface-32">
                     {stGroup.items.map((item) => (
                       <tr 
                         key={item.id} 
@@ -246,7 +246,7 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
           ))}
 
           {/* Subtotal & Paid Amount Summary */}
-          <div className="pt-4 border-t border-[#182335] flex flex-col items-end gap-1.5">
+          <div className="pt-4 border-t border-edge-3 flex flex-col items-end gap-1.5">
             <div className="flex items-center gap-8 text-xs text-slate-400">
               <span className="font-semibold">Subtotal</span>
               <span className="font-medium text-slate-200 min-w-[100px] text-right">
@@ -263,7 +263,7 @@ export const FeeInvoicePage: React.FC<FeeInvoicePageProps> = ({
         </div>
 
         {/* Card Footer notice */}
-        <div className="bg-[#090e1a] border-t border-[#182335] px-6 sm:px-8 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+        <div className="bg-[#090e1a] border-t border-edge-3 px-6 sm:px-8 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
           <div className="flex items-center gap-2">
             <FileCheck className="w-4 h-4 text-emerald-500" />
             <span>Official Receipt generated with 1 Family Copy and 2 School Office Copies.</span>

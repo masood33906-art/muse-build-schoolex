@@ -504,7 +504,9 @@ const LEDGER_GRAPH_SETTINGS_KEY = 'schoollee_ledger_graph_settings_v1';
 export const LEDGER_DATE_RANGE_LABELS: Record<LedgerDateRangeOption, string> = {
   current_month: 'This Month',
   last_month: 'Last Month',
-  last_year: 'Last Year (2025)',
+  // Fix P0-4: no fixed year in the label — "last year" is computed from the
+  // current date wherever a dated label is needed (see LedgerModule).
+  last_year: 'Last Year',
   five_years: 'Past 5 Years',
   all_time: 'All Time'
 };
@@ -578,27 +580,24 @@ export function computeLedgerGraphData(
   const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const prevMonthPrefix = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
 
-  // Determine active month prefix if transactions exist
-  const latestTxMonth = transactions.length > 0 && transactions[0]?.rawDate
-    ? transactions[0].rawDate.slice(0, 7)
-    : todayMonth;
-
   const rangeTransactions = transactions.filter(t => {
     const raw = t.rawDate || '';
     if (dateRange === 'all_time') return true;
     if (dateRange === 'current_month') {
-      // Match current calendar month, Sept 2026 session month, or the latest active transaction month
-      return raw.startsWith(todayMonth) || raw.startsWith('2026-09') || raw.startsWith(latestTxMonth);
+      // Current calendar month only (Fix P0-4: previously this also matched
+      // fixed '2026-09' records and the latest transaction month, silently
+      // presenting other months' data as this month's).
+      return raw.startsWith(todayMonth);
     }
     if (dateRange === 'last_month') {
-      return raw.startsWith('2026-08') || raw.startsWith(prevMonthPrefix);
+      return raw.startsWith(prevMonthPrefix);
     }
     if (dateRange === 'last_year') {
-      return raw.startsWith('2025');
+      return raw.startsWith(String(now.getFullYear() - 1));
     }
     if (dateRange === 'five_years') {
       const year = parseInt(raw.slice(0, 4), 10);
-      return year >= 2021 && year <= 2026;
+      return year >= now.getFullYear() - 4 && year <= now.getFullYear();
     }
     return true;
   });
@@ -647,19 +646,15 @@ export function computeLedgerGraphData(
     }
   });
 
-  // If no transactions exist in range, show clean 0-value baseline dates
+  // If no transactions exist in range, show a clean 0-value baseline spread
+  // across the CURRENT month (Fix P0-4: these anchors were fixed Sep-2026
+  // dates, so an empty ledger graph was labelled with a past month's dates).
   if (dateMap.size === 0) {
-    const defaultAnchorDates = [
-      { raw: '2026-09-01', label: '01 Sep' },
-      { raw: '2026-09-05', label: '05 Sep' },
-      { raw: '2026-09-10', label: '10 Sep' },
-      { raw: '2026-09-15', label: '15 Sep' },
-      { raw: '2026-09-20', label: '20 Sep' },
-      { raw: '2026-09-25', label: '25 Sep' },
-      { raw: '2026-09-30', label: '30 Sep' }
-    ];
-    defaultAnchorDates.forEach(d => {
-      dateMap.set(d.raw, { rawDate: d.raw, label: d.label, income: 0, expense: 0 });
+    const pad2 = (n: number) => String(n).padStart(2, '0');
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    [1, 5, 10, 15, 20, 25, daysInMonth].forEach(day => {
+      const raw = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(day)}`;
+      dateMap.set(raw, { rawDate: raw, label: formatRawDateLabel(raw), income: 0, expense: 0 });
     });
   } else if (dateMap.size === 1) {
     // If only a single date has transactions, add a month-start 0 anchor so the graph renders a clear curve

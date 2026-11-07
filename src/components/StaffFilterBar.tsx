@@ -31,8 +31,8 @@ export const StaffFilterBar: React.FC<StaffFilterBarProps> = ({
           onClick={() => onTabChange('all')}
           className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
             activeTab === 'all'
-              ? 'bg-[#182030] text-white border-[#2b3952]'
-              : 'bg-transparent text-slate-400 border-transparent hover:text-slate-200 hover:bg-[#121824]'
+              ? 'bg-surface-37 text-white border-[#2b3952]'
+              : 'bg-transparent text-slate-400 border-transparent hover:text-slate-200 hover:bg-surface-16'
           }`}
           id="tab-staff-all"
         >
@@ -50,8 +50,8 @@ export const StaffFilterBar: React.FC<StaffFilterBarProps> = ({
           onClick={() => onTabChange('teachers')}
           className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
             activeTab === 'teachers'
-              ? 'bg-[#182030] text-white border-[#2b3952]'
-              : 'bg-transparent text-slate-400 border-transparent hover:text-slate-200 hover:bg-[#121824]'
+              ? 'bg-surface-37 text-white border-[#2b3952]'
+              : 'bg-transparent text-slate-400 border-transparent hover:text-slate-200 hover:bg-surface-16'
           }`}
           id="tab-staff-teachers"
         >
@@ -69,8 +69,8 @@ export const StaffFilterBar: React.FC<StaffFilterBarProps> = ({
           onClick={() => onTabChange('support')}
           className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
             activeTab === 'support'
-              ? 'bg-[#182030] text-white border-[#2b3952]'
-              : 'bg-transparent text-slate-400 border-transparent hover:text-slate-200 hover:bg-[#121824]'
+              ? 'bg-surface-37 text-white border-[#2b3952]'
+              : 'bg-transparent text-slate-400 border-transparent hover:text-slate-200 hover:bg-surface-16'
           }`}
           id="tab-staff-other"
         >
@@ -93,7 +93,7 @@ export const StaffFilterBar: React.FC<StaffFilterBarProps> = ({
             value={filters.search}
             onChange={(e) => onFilterChange({ search: e.target.value })}
             placeholder="Search by name, ID, father name or phone..."
-            className="w-full bg-[#111724] border border-[#1f293d] rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+            className="w-full bg-surface-12 border border-[#1f293d] rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
             id="input-staff-search"
           />
         </div>
@@ -105,7 +105,7 @@ export const StaffFilterBar: React.FC<StaffFilterBarProps> = ({
             <select
               value={filters.status}
               onChange={(e) => onFilterChange({ status: e.target.value as any })}
-              className="w-full appearance-none bg-[#111724] border border-[#1f293d] rounded-xl px-3 py-2 text-xs text-slate-200 font-medium focus:outline-none focus:border-blue-500 cursor-pointer"
+              className="w-full appearance-none bg-surface-12 border border-[#1f293d] rounded-xl px-3 py-2 text-xs text-slate-200 font-medium focus:outline-none focus:border-blue-500 cursor-pointer"
               id="select-staff-status"
             >
               <option value="Active">Active</option>

@@ -93,7 +93,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
         id="modal-backup-data"
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#232d42] flex items-center justify-between bg-[#171f2e]">
+        <div className="px-6 py-4 border-b border-edge-22 flex items-center justify-between bg-[#171f2e]">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
               <Database className="w-4 h-4" />
@@ -123,7 +123,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
         {/* Content */}
         <div className="p-6 space-y-5">
           {/* Data Summary Stats */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-[#182232] border border-[#26354d] rounded-xl p-3.5">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-surface-40 border border-edge-37 rounded-xl p-3.5">
             <div>
               <span className="text-[11px] text-slate-400">Total Students</span>
               <p className="text-xl font-bold text-white mt-0.5">{total}</p>
@@ -177,7 +177,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
           <div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               {/* Option 1: CSV Spreadsheet */}
-              <div className="bg-[#182232] hover:bg-[#1c2738] border border-[#26354d] hover:border-emerald-500/40 rounded-xl p-4 flex flex-col justify-between transition-all group">
+              <div className="bg-surface-40 hover:bg-surface-45 border border-edge-37 hover:border-emerald-500/40 rounded-xl p-4 flex flex-col justify-between transition-all group">
                 <div>
                   <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-2.5">
                     <FileSpreadsheet className="w-5 h-5" />
@@ -201,7 +201,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
               </div>
 
               {/* Option 2: PDF Document (Preview & Print / Save) */}
-              <div className="bg-[#182232] hover:bg-[#1c2738] border border-[#26354d] hover:border-red-500/40 rounded-xl p-4 flex flex-col justify-between transition-all group">
+              <div className="bg-surface-40 hover:bg-surface-45 border border-edge-37 hover:border-red-500/40 rounded-xl p-4 flex flex-col justify-between transition-all group">
                 <div>
                   <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 mb-2.5">
                     <FileText className="w-5 h-5" />
@@ -227,7 +227,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3.5 bg-[#171f2e] border-t border-[#232d42] flex items-center justify-between">
+        <div className="px-6 py-3.5 bg-[#171f2e] border-t border-edge-22 flex items-center justify-between">
           <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
             <Users className="w-3.5 h-3.5 text-slate-500" />
             Currently active section: <strong className="text-slate-200">{sectionLabel}</strong>

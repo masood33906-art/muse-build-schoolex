@@ -180,7 +180,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   const usagePct = Math.min(100, (usedMB / 5) * 100);
 
   const renderDataBackupCard = () => (
-    <div className="p-5 rounded-2xl bg-[#0f1726] border border-[#1e2d45] space-y-4 max-w-5xl">
+    <div className="p-5 rounded-2xl bg-surface-10 border border-edge-21 space-y-4 max-w-5xl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl bg-blue-600/15 border border-blue-500/30 text-blue-400 flex items-center justify-center">
@@ -221,7 +221,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
           <button
             type="button"
             onClick={() => restoreInputRef.current?.click()}
-            className="px-4 py-2 rounded-xl bg-[#142033] hover:bg-[#1a2c47] border border-[#233550] text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all"
+            className="px-4 py-2 rounded-xl bg-surface-33 hover:bg-[#1a2c47] border border-edge-36 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all"
             id="btn-settings-restore-backup"
           >
             <Upload className="w-4 h-4 text-amber-400" />
@@ -231,7 +231,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
       </div>
 
       {/* Storage Usage Meter */}
-      <div className="pt-2 border-t border-[#1b273b] space-y-1.5">
+      <div className="pt-2 border-t border-edge-8 space-y-1.5">
         <div className="flex items-center justify-between text-xs">
           <span className={isHighUsage ? 'text-amber-300 font-semibold flex items-center gap-1.5' : 'text-slate-300 font-medium'}>
             {isHighUsage && <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />}
@@ -239,7 +239,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
           </span>
           <span className="text-[11px] text-slate-400 font-mono">{usagePct.toFixed(0)}%</span>
         </div>
-        <div className="w-full h-2 rounded-full bg-[#090d16] border border-[#1e2d45] overflow-hidden">
+        <div className="w-full h-2 rounded-full bg-surface-2 border border-edge-21 overflow-hidden">
           <div
             className={`h-full transition-all ${isHighUsage ? 'bg-amber-400' : 'bg-blue-500'}`}
             style={{ width: `${Math.max(2, usagePct)}%` }}
@@ -250,7 +250,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
       {/* Restore Confirmation Dialog */}
       {pendingRestoreFile && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-xs">
-          <div className="bg-[#121927] border border-[#24344e] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+          <div className="bg-surface-17 border border-[#24344e] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <div className="flex items-center gap-2.5 text-amber-400">
               <AlertTriangle className="w-5 h-5 shrink-0" />
               <h3 className="text-base font-bold text-white">Restore from backup</h3>
@@ -263,7 +263,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                 type="button"
                 disabled={isRestoring}
                 onClick={() => setPendingRestoreFile(null)}
-                className="px-3.5 py-2 rounded-lg bg-[#182234] text-slate-300 text-xs font-semibold hover:bg-[#202d44] cursor-pointer"
+                className="px-3.5 py-2 rounded-lg bg-surface-41 text-slate-300 text-xs font-semibold hover:bg-surface-48 cursor-pointer"
               >
                 Cancel
               </button>
@@ -298,7 +298,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   if (activeSection === 'menu') {
     return (
       <div className="space-y-6 animate-in fade-in duration-200">
-        <div className="pb-4 border-b border-[#1c2738]">
+        <div className="pb-4 border-b border-surface-45">
           <h1 className="text-2xl font-bold text-white tracking-tight">Settings</h1>
           <BreadcrumbTrail
             items={[
@@ -313,7 +313,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
           <button
             type="button"
             onClick={() => setActiveSection('school-profile')}
-            className="p-8 rounded-2xl bg-[#0f1726] border border-[#1e2d45] hover:border-blue-500/70 hover:bg-[#131d31] transition-all flex flex-col items-center justify-center gap-5 group cursor-pointer shadow-lg hover:shadow-blue-900/20 active:scale-[0.99] min-h-[220px]"
+            className="p-8 rounded-2xl bg-surface-10 border border-edge-21 hover:border-blue-500/70 hover:bg-[#131d31] transition-all flex flex-col items-center justify-center gap-5 group cursor-pointer shadow-lg hover:shadow-blue-900/20 active:scale-[0.99] min-h-[220px]"
           >
             <div className="w-16 h-16 rounded-2xl bg-blue-600/15 border border-blue-500/30 text-blue-400 flex items-center justify-center group-hover:scale-110 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-md">
               <Building2 className="w-8 h-8" />
@@ -327,7 +327,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
           <button
             type="button"
             onClick={() => setActiveSection('bank-challan')}
-            className="p-8 rounded-2xl bg-[#0f1726] border border-[#1e2d45] hover:border-emerald-500/70 hover:bg-[#131d31] transition-all flex flex-col items-center justify-center gap-5 group cursor-pointer shadow-lg hover:shadow-emerald-900/20 active:scale-[0.99] min-h-[220px]"
+            className="p-8 rounded-2xl bg-surface-10 border border-edge-21 hover:border-emerald-500/70 hover:bg-[#131d31] transition-all flex flex-col items-center justify-center gap-5 group cursor-pointer shadow-lg hover:shadow-emerald-900/20 active:scale-[0.99] min-h-[220px]"
           >
             <div className="w-16 h-16 rounded-2xl bg-emerald-600/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center group-hover:scale-110 group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-md">
               <Landmark className="w-8 h-8" />
@@ -341,7 +341,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
           <button
             type="button"
             onClick={() => setActiveSection('templates')}
-            className="p-8 rounded-2xl bg-[#0f1726] border border-[#1e2d45] hover:border-amber-500/70 hover:bg-[#131d31] transition-all flex flex-col items-center justify-center gap-5 group cursor-pointer shadow-lg hover:shadow-amber-900/20 active:scale-[0.99] min-h-[220px]"
+            className="p-8 rounded-2xl bg-surface-10 border border-edge-21 hover:border-amber-500/70 hover:bg-[#131d31] transition-all flex flex-col items-center justify-center gap-5 group cursor-pointer shadow-lg hover:shadow-amber-900/20 active:scale-[0.99] min-h-[220px]"
           >
             <div className="w-16 h-16 rounded-2xl bg-amber-600/15 border border-amber-500/30 text-amber-400 flex items-center justify-center group-hover:scale-110 group-hover:bg-amber-600 group-hover:text-white transition-all shadow-md">
               <FileText className="w-8 h-8" />
@@ -363,7 +363,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* Clean Top Navigation Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#1c2738]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-surface-45">
         <div>
           <h1 className="text-xl font-bold text-white tracking-tight">
             {activeSection === 'school-profile' && 'School Profile'}
@@ -391,7 +391,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             <button
               type="button"
               onClick={handleResetDefaults}
-              className="px-3.5 py-2 rounded-xl bg-[#141b29] hover:bg-[#1a2436] border border-[#223046] text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer"
+              className="px-3.5 py-2 rounded-xl bg-[#141b29] hover:bg-[#1a2436] border border-edge-24 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
               <span>Reset</span>
@@ -421,10 +421,10 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
       {activeSection === 'school-profile' && (
         <div className="space-y-6 max-w-4xl">
           {/* Logo Section */}
-          <div className="p-5 rounded-2xl bg-[#0f1726] border border-[#1e2d45] space-y-4">
+          <div className="p-5 rounded-2xl bg-surface-10 border border-edge-21 space-y-4">
             <h2 className="text-sm font-bold text-white uppercase tracking-wider">School Logo</h2>
             <div className="flex flex-col sm:flex-row items-center gap-5">
-              <div className="w-24 h-24 rounded-2xl bg-[#080d17] border border-[#233550] p-1 flex items-center justify-center shrink-0">
+              <div className="w-24 h-24 rounded-2xl bg-[#080d17] border border-edge-36 p-1 flex items-center justify-center shrink-0">
                 {settings.schoolLogo ? (
                   <img src={settings.schoolLogo} alt="Logo" className="w-full h-full object-contain rounded-xl" />
                 ) : (
@@ -449,7 +449,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="px-4 py-2 bg-[#142033] hover:bg-[#1a2c47] border border-[#233550] text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-2 cursor-pointer"
+                    className="px-4 py-2 bg-surface-33 hover:bg-[#1a2c47] border border-edge-36 text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-2 cursor-pointer"
                   >
                     <Upload className="w-4 h-4 text-blue-400" />
                     <span>Upload Logo Image</span>
@@ -475,7 +475,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                       key={preset.id}
                       type="button"
                       onClick={() => handleSelectPresetLogo(preset.svg)}
-                      className="w-7 h-7 rounded-lg bg-[#142033] border border-[#233550] hover:border-blue-500 p-0.5 cursor-pointer"
+                      className="w-7 h-7 rounded-lg bg-surface-33 border border-edge-36 hover:border-blue-500 p-0.5 cursor-pointer"
                       title={preset.name}
                     >
                       <img src={preset.svg} alt={preset.name} className="w-full h-full object-contain" />
@@ -487,7 +487,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
           </div>
 
           {/* School Details */}
-          <div className="p-5 rounded-2xl bg-[#0f1726] border border-[#1e2d45] space-y-4">
+          <div className="p-5 rounded-2xl bg-surface-10 border border-edge-21 space-y-4">
             <h2 className="text-sm font-bold text-white uppercase tracking-wider">Institution Details</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div className="sm:col-span-2">
@@ -496,7 +496,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.schoolName}
                   onChange={(e) => handleFieldChange('schoolName', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -506,7 +506,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.campusName}
                   onChange={(e) => handleFieldChange('campusName', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -516,7 +516,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.session}
                   onChange={(e) => handleFieldChange('session', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -526,7 +526,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.schoolPhone}
                   onChange={(e) => handleFieldChange('schoolPhone', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -536,7 +536,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="email"
                   value={settings.schoolEmail}
                   onChange={(e) => handleFieldChange('schoolEmail', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -546,7 +546,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.schoolAddress}
                   onChange={(e) => handleFieldChange('schoolAddress', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -556,7 +556,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.principalName}
                   onChange={(e) => handleFieldChange('principalName', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -566,7 +566,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.registrationNumber}
                   onChange={(e) => handleFieldChange('registrationNumber', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -581,7 +581,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                     if (val) setBillingStartMonth(val);
                     setHasUnsavedChanges(true);
                   }}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white font-mono focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
             </div>
@@ -596,7 +596,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
       {/* ===================================================================== */}
       {activeSection === 'bank-challan' && (
         <div className="space-y-6 max-w-4xl">
-          <div className="p-5 rounded-2xl bg-[#0f1726] border border-[#1e2d45] space-y-4">
+          <div className="p-5 rounded-2xl bg-surface-10 border border-edge-21 space-y-4">
             <h2 className="text-sm font-bold text-white uppercase tracking-wider">Bank Account Information</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div className="sm:col-span-2">
@@ -604,7 +604,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                 <select
                   value={isCustomBank ? 'Custom / Other Bank' : settings.bankName}
                   onChange={handleBankSelectChange}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 >
                   {PAKISTANI_BANKS.map((b) => (
                     <option key={b} value={b}>{b}</option>
@@ -619,7 +619,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                     type="text"
                     value={customBankName}
                     onChange={handleCustomBankNameChange}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                   />
                 </div>
               )}
@@ -630,7 +630,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.accountNumber}
                   onChange={(e) => handleFieldChange('accountNumber', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white font-mono focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -640,7 +640,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.accountTitle}
                   onChange={(e) => handleFieldChange('accountTitle', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -650,7 +650,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.branchName}
                   onChange={(e) => handleFieldChange('branchName', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -660,13 +660,13 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   type="text"
                   value={settings.branchCode}
                   onChange={(e) => handleFieldChange('branchCode', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white font-mono focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
             </div>
           </div>
 
-          <div className="p-5 rounded-2xl bg-[#0f1726] border border-[#1e2d45] space-y-4">
+          <div className="p-5 rounded-2xl bg-surface-10 border border-edge-21 space-y-4">
             <h2 className="text-sm font-bold text-white uppercase tracking-wider">Challan Rules</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div>
@@ -680,7 +680,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                     if (val) setBillingStartMonth(val);
                     setHasUnsavedChanges(true);
                   }}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white font-mono focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -692,7 +692,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   max="31"
                   value={settings.challanDueDay}
                   onChange={(e) => handleFieldChange('challanDueDay', parseInt(e.target.value, 10) || 10)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white font-mono focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -703,7 +703,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   min="0"
                   value={settings.lateFineAmount}
                   onChange={(e) => handleFieldChange('lateFineAmount', parseInt(e.target.value, 10) || 0)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white font-mono focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -714,7 +714,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   value={settings.iban}
                   onChange={(e) => handleFieldChange('iban', e.target.value)}
                   placeholder="e.g. PK36MEZN0002140103492811"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#090d16] border border-[#21334c] text-white font-mono focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-2 border border-edge-28 text-white font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
             </div>

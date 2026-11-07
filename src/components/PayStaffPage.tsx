@@ -510,7 +510,7 @@ export const PayStaffPage: React.FC<PayStaffPageProps> = ({
             <button
               type="button"
               onClick={onBackToStaff}
-              className="px-3 py-1.5 rounded-lg bg-[#141c2b] hover:bg-[#1a2538] border border-[#223046] text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
+              className="px-3 py-1.5 rounded-lg bg-surface-21 hover:bg-surface-43 border border-edge-24 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Back to Staff Directory</span>
@@ -531,7 +531,7 @@ export const PayStaffPage: React.FC<PayStaffPageProps> = ({
       </div>
 
       {/* Salary Accrual Policy Information Banner */}
-      <div className="mb-5 bg-[#101827] border border-[#1e2d45] rounded-xl p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+      <div className="mb-5 bg-[#101827] border border-edge-21 rounded-xl p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
         <div className="flex items-start sm:items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-400 flex items-center justify-center shrink-0">
             <Clock className="w-4 h-4" />
@@ -603,7 +603,7 @@ export const PayStaffPage: React.FC<PayStaffPageProps> = ({
                 aria-checked={showPaid}
                 onClick={() => setShowPaid(prev => !prev)}
                 className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                  showPaid ? 'bg-emerald-600' : 'bg-[#1e293b]'
+                  showPaid ? 'bg-emerald-600' : 'bg-edge-13'
                 }`}
               >
                 <span
@@ -623,14 +623,14 @@ export const PayStaffPage: React.FC<PayStaffPageProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search staff by name, ID, or role..."
-              className="w-full bg-[#101725] border border-[#1f2b3e] text-slate-100 placeholder-slate-500 text-xs rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:border-slate-400 transition-colors"
+              className="w-full bg-surface-11 border border-edge-17 text-slate-100 placeholder-slate-500 text-xs rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:border-slate-400 transition-colors"
             />
           </div>
 
           {/* Table Container */}
-          <div className="overflow-x-auto border border-[#172030] rounded-xl">
+          <div className="overflow-x-auto border border-surface-34 rounded-xl">
             <table className="w-full text-left border-collapse min-w-[1040px]">
-              <thead className="bg-[#0e1420] border-b border-[#1b2536] text-[11px] font-semibold text-slate-300">
+              <thead className="bg-surface-7 border-b border-[#1b2536] text-[11px] font-semibold text-slate-300">
                 <tr>
                   {/* Select All Checkbox */}
                   <th className="py-3 px-3.5 w-10 text-center">
@@ -639,7 +639,7 @@ export const PayStaffPage: React.FC<PayStaffPageProps> = ({
                       checked={allFilteredSelected}
                       onChange={handleToggleSelectAll}
                       disabled={payableFilteredStaff.length === 0}
-                      className="w-4 h-4 rounded border-[#2c3b52] bg-[#121927] text-emerald-600 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-emerald-600 disabled:opacity-40"
+                      className="w-4 h-4 rounded border-[#2c3b52] bg-surface-17 text-emerald-600 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-emerald-600 disabled:opacity-40"
                     />
                   </th>
 
@@ -708,8 +708,8 @@ export const PayStaffPage: React.FC<PayStaffPageProps> = ({
                     return (
                       <tr 
                         key={staff.id} 
-                        className={`transition-colors hover:bg-[#101725] ${
-                          isChecked ? 'bg-[#0f1726]/60' : ''
+                        className={`transition-colors hover:bg-surface-11 ${
+                          isChecked ? 'bg-surface-10/60' : ''
                         }`}
                       >
                         {/* Checkbox */}
@@ -726,7 +726,7 @@ export const PayStaffPage: React.FC<PayStaffPageProps> = ({
                                 ? 'All accrued months are already paid'
                                 : 'Select staff member for salary payout'
                             }
-                            className="w-4 h-4 rounded border-[#2c3b52] bg-[#121927] text-emerald-600 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-emerald-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="w-4 h-4 rounded border-[#2c3b52] bg-surface-17 text-emerald-600 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-emerald-600 disabled:opacity-30 disabled:cursor-not-allowed"
                           />
                         </td>
 
@@ -848,7 +848,7 @@ export const PayStaffPage: React.FC<PayStaffPageProps> = ({
                             disabled={!isEligibleAndOwed}
                             value={rowState.payment}
                             onChange={(e) => handlePaymentChange(staff.id, parseInt(e.target.value, 10))}
-                            className="w-28 bg-[#101725] border border-[#1f2c42] rounded-lg px-2.5 py-1.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-slate-400 disabled:opacity-40"
+                            className="w-28 bg-surface-11 border border-edge-19 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-slate-400 disabled:opacity-40"
                           />
                           {isEligibleAndOwed && (
                             <div className="text-[10px] text-slate-400 mt-0.5 font-mono">
@@ -865,7 +865,7 @@ export const PayStaffPage: React.FC<PayStaffPageProps> = ({
                             value={rowState.reason}
                             onChange={(e) => handleReasonChange(staff.id, e.target.value)}
                             placeholder="Reason (Optional)"
-                            className="w-28 sm:w-32 bg-[#101725] border border-[#1f2c42] rounded-lg px-2.5 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-slate-400 disabled:opacity-40"
+                            className="w-28 sm:w-32 bg-surface-11 border border-edge-19 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-slate-400 disabled:opacity-40"
                           />
                         </td>
 
@@ -879,7 +879,7 @@ export const PayStaffPage: React.FC<PayStaffPageProps> = ({
                                 value={rowState.loanDeduction || ''}
                                 onChange={(e) => handleLoanDeductionChange(staff.id, parseInt(e.target.value, 10))}
                                 placeholder="0"
-                                className="w-24 bg-[#101725] border border-[#1f2c42] rounded-lg px-2.5 py-1 text-xs text-slate-100 font-mono focus:outline-none focus:border-slate-400 disabled:opacity-40"
+                                className="w-24 bg-surface-11 border border-edge-19 rounded-lg px-2.5 py-1 text-xs text-slate-100 font-mono focus:outline-none focus:border-slate-400 disabled:opacity-40"
                               />
                               <div className="text-[10px] text-slate-400 mt-1 font-medium whitespace-nowrap">
                                 Balance: {staff.loanBalance?.toLocaleString()} PKR
@@ -986,7 +986,7 @@ export const PayStaffPage: React.FC<PayStaffPageProps> = ({
                     type="date"
                     value={paymentDate}
                     onChange={(e) => setPaymentDate(e.target.value)}
-                    className="w-full bg-[#101725] border border-[#1f2b3e] text-slate-100 text-xs rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-slate-400 cursor-pointer"
+                    className="w-full bg-surface-11 border border-edge-17 text-slate-100 text-xs rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-slate-400 cursor-pointer"
                   />
                   <Calendar className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
@@ -1002,13 +1002,13 @@ export const PayStaffPage: React.FC<PayStaffPageProps> = ({
                 <select
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="w-full bg-[#101725] border border-[#1f2b3e] text-slate-100 text-xs rounded-xl px-3.5 py-2.5 pr-8 appearance-none focus:outline-none focus:border-slate-400 cursor-pointer"
+                  className="w-full bg-surface-11 border border-edge-17 text-slate-100 text-xs rounded-xl px-3.5 py-2.5 pr-8 appearance-none focus:outline-none focus:border-slate-400 cursor-pointer"
                 >
-                  <option value="Cash" className="bg-[#101725]">Cash</option>
-                  <option value="Bank Transfer" className="bg-[#101725]">Bank Transfer</option>
-                  <option value="Cheque" className="bg-[#101725]">Cheque</option>
-                  <option value="EasyPaisa" className="bg-[#101725]">EasyPaisa</option>
-                  <option value="JazzCash" className="bg-[#101725]">JazzCash</option>
+                  <option value="Cash" className="bg-surface-11">Cash</option>
+                  <option value="Bank Transfer" className="bg-surface-11">Bank Transfer</option>
+                  <option value="Cheque" className="bg-surface-11">Cheque</option>
+                  <option value="EasyPaisa" className="bg-surface-11">EasyPaisa</option>
+                  <option value="JazzCash" className="bg-surface-11">JazzCash</option>
                 </select>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
@@ -1021,7 +1021,7 @@ export const PayStaffPage: React.FC<PayStaffPageProps> = ({
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="Note (Optional)"
-                className="w-full bg-[#101725] border border-[#1f2b3e] text-slate-100 placeholder-slate-500 text-xs rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-slate-400"
+                className="w-full bg-surface-11 border border-edge-17 text-slate-100 placeholder-slate-500 text-xs rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-slate-400"
               />
             </div>
 
@@ -1062,7 +1062,7 @@ export const PayStaffPage: React.FC<PayStaffPageProps> = ({
             const netSinglePayable = Math.max(0, (modalRow?.payment || 0) - (modalRow?.loanDeduction || 0));
 
             return (
-              <div className="bg-[#111827] border border-[#24344d] rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl text-slate-100">
+              <div className="bg-[#111827] border border-edge-34 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl text-slate-100">
                 {/* Modal Header */}
                 <div className="px-5 py-4 border-b border-[#1f2d42] flex items-center justify-between bg-[#151f32]">
                   <div className="flex items-center gap-2.5">
@@ -1178,7 +1178,7 @@ export const PayStaffPage: React.FC<PayStaffPageProps> = ({
                 </div>
 
                 {/* Modal Footer */}
-                <div className="px-5 py-3.5 border-t border-[#1f2d42] bg-[#141c2c] flex items-center justify-end gap-2.5">
+                <div className="px-5 py-3.5 border-t border-[#1f2d42] bg-surface-23 flex items-center justify-end gap-2.5">
                   <button
                     type="button"
                     onClick={() => setActiveMonthModalStaffId(null)}

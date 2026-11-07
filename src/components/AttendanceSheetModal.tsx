@@ -22,6 +22,7 @@ import {
   generateWeeklyAttendancePdf,
   WeekDayInfo 
 } from '../utils/attendanceHelper';
+import { countStudentsInClass, findClassByName, studentBelongsToClass } from '../utils/classExportHelper';
 
 export type AttendanceSheetScope = 'single_section' | 'class_sections' | 'all_entities';
 
@@ -101,18 +102,25 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
     return `${weekDays[0].displayDate} - ${weekDays[weekDays.length - 1].displayDate} (${weekDays[0].date.slice(0, 4)})`;
   }, [weekDays]);
 
+  // The ClassInfo record behind the selected class NAME (Fix P0-3): roster
+  // membership is decided by the shared classId-first rule, so attendance
+  // lists agree with the classes table even after a class is renamed.
+  const selectedClassInfo = selectedClass ? findClassByName(classes, selectedClass) : undefined;
+  const matchesSelectedClass = (s: Student): boolean =>
+    selectedClassInfo
+      ? studentBelongsToClass(s, selectedClassInfo)
+      : !!s.class && s.class.toLowerCase().trim() === selectedClass.toLowerCase().trim();
+
   // Available sections for the currently selected class
   const availableSections = useMemo(() => {
     if (!selectedClass) return [];
-    const targetClass = classes.find(
-      c => c.name.toLowerCase().trim() === selectedClass.toLowerCase().trim()
-    );
+    const targetClass = findClassByName(classes, selectedClass);
     if (targetClass && targetClass.sections && targetClass.sections.length > 0) {
       return targetClass.sections;
     }
     const secs = Array.from(new Set(
       allStudents
-        .filter(s => s.class && s.class.toLowerCase().trim() === selectedClass.toLowerCase().trim())
+        .filter(s => targetClass ? studentBelongsToClass(s, targetClass) : (s.class && s.class.toLowerCase().trim() === selectedClass.toLowerCase().trim()))
         .map(s => s.section)
         .filter(Boolean)
     ));
@@ -125,21 +133,19 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
       return allStaff;
     }
 
-    // Student scope
+    // Student scope (shared classId-first membership, Fix P0-3)
     if (scope === 'single_section') {
       return allStudents.filter(
-        s => s.class?.toLowerCase().trim() === selectedClass.toLowerCase().trim() &&
+        s => matchesSelectedClass(s) &&
              s.section?.toLowerCase().trim() === selectedSection.toLowerCase().trim()
       );
     }
     if (scope === 'class_sections') {
-      return allStudents.filter(
-        s => s.class?.toLowerCase().trim() === selectedClass.toLowerCase().trim()
-      );
+      return allStudents.filter(s => matchesSelectedClass(s));
     }
     // all_entities
     return [...allStudents].sort((a, b) => (a.class || '').localeCompare(b.class || ''));
-  }, [entityType, scope, selectedClass, selectedSection, allStudents, allStaff]);
+  }, [entityType, scope, selectedClass, selectedSection, allStudents, allStaff, selectedClassInfo]);
 
   // Human readable scope label
   const scopeLabel = useMemo(() => {
@@ -184,7 +190,7 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
       className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto"
       id="modal-generate-attendance-sheet"
     >
-      <div className={`bg-[#0f172a] border border-[#223249] rounded-2xl w-full shadow-2xl overflow-hidden transition-all duration-200 flex flex-col ${
+      <div className={`bg-surface-15 border border-[#223249] rounded-2xl w-full shadow-2xl overflow-hidden transition-all duration-200 flex flex-col ${
         isPreviewMode ? 'max-w-7xl max-h-[94vh]' : 'max-w-xl'
       }`}>
         {/* ======================================================== */}
@@ -193,7 +199,7 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
         {!isPreviewMode ? (
           <div>
             {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-[#1e293b] flex items-center justify-between">
+            <div className="px-6 py-4 border-b border-edge-13 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
                   <FileText className="w-4 h-4" />
@@ -208,7 +214,7 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-[#1e293b] flex items-center justify-center transition-colors cursor-pointer"
+                className="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-edge-13 flex items-center justify-center transition-colors cursor-pointer"
                 id="btn-close-attendance-config"
               >
                 <X className="w-4 h-4" />
@@ -232,7 +238,7 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
                   type="date"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#141e30] border border-[#24354f] text-white text-xs focus:border-blue-500 focus:outline-none transition-colors"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-29 border border-[#24354f] text-white text-xs focus:border-blue-500 focus:outline-none transition-colors"
                   required
                   id="input-attendance-sheet-date"
                 />
@@ -253,7 +259,7 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
                     className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
                       entityType === 'student'
                         ? 'bg-blue-600 border-blue-500 text-white shadow-sm'
-                        : 'bg-[#141e30] border-[#22334b] text-slate-400 hover:text-white'
+                        : 'bg-surface-29 border-edge-29 text-slate-400 hover:text-white'
                     }`}
                   >
                     <Users className="w-3.5 h-3.5" />
@@ -269,7 +275,7 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
                     className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
                       entityType === 'staff'
                         ? 'bg-blue-600 border-blue-500 text-white shadow-sm'
-                        : 'bg-[#141e30] border-[#22334b] text-slate-400 hover:text-white'
+                        : 'bg-surface-29 border-edge-29 text-slate-400 hover:text-white'
                     }`}
                   >
                     <UserCheck className="w-3.5 h-3.5" />
@@ -293,7 +299,7 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
                         className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                           scope === 'single_section'
                             ? 'bg-blue-950/40 border-blue-500/50 ring-1 ring-blue-500/30'
-                            : 'bg-[#141e30] border-[#22334b] hover:border-slate-600'
+                            : 'bg-surface-29 border-edge-29 hover:border-slate-600'
                         }`}
                       >
                         <input
@@ -317,7 +323,7 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
                         className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                           scope === 'class_sections'
                             ? 'bg-blue-950/40 border-blue-500/50 ring-1 ring-blue-500/30'
-                            : 'bg-[#141e30] border-[#22334b] hover:border-slate-600'
+                            : 'bg-surface-29 border-edge-29 hover:border-slate-600'
                         }`}
                       >
                         <input
@@ -343,7 +349,7 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
                     className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                       scope === 'all_entities'
                         ? 'bg-blue-950/40 border-blue-500/50 ring-1 ring-blue-500/30'
-                        : 'bg-[#141e30] border-[#22334b] hover:border-slate-600'
+                        : 'bg-surface-29 border-edge-29 hover:border-slate-600'
                     }`}
                   >
                     <input
@@ -368,7 +374,7 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
 
               {/* 4. Dynamic Dropdowns according to scope */}
               {scope === 'single_section' && entityType === 'student' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-xl bg-[#121927] border border-[#202c40] animate-in fade-in duration-150">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-xl bg-surface-17 border border-edge-18 animate-in fade-in duration-150">
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-300 mb-1.5">
                       Select Class *
@@ -381,7 +387,7 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
                         const clsObj = classes.find(c => c.name === nextCls);
                         setSelectedSection(clsObj?.sections?.[0] || '');
                       }}
-                      className="w-full px-3 py-2 rounded-xl bg-[#172236] border border-[#263753] text-white text-xs focus:border-blue-500 focus:outline-none cursor-pointer"
+                      className="w-full px-3 py-2 rounded-xl bg-[#172236] border border-edge-39 text-white text-xs focus:border-blue-500 focus:outline-none cursor-pointer"
                       id="select-sheet-class"
                     >
                       {classes.length === 0 ? (
@@ -389,7 +395,7 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
                       ) : (
                         classes.map((c) => (
                           <option key={c.id} value={c.name}>
-                            {c.name} ({c.studentsCount} students)
+                            {c.name} ({countStudentsInClass(allStudents, c)} students)
                           </option>
                         ))
                       )}
@@ -403,7 +409,7 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
                     <select
                       value={selectedSection}
                       onChange={(e) => setSelectedSection(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-[#172236] border border-[#263753] text-white text-xs focus:border-blue-500 focus:outline-none cursor-pointer"
+                      className="w-full px-3 py-2 rounded-xl bg-[#172236] border border-edge-39 text-white text-xs focus:border-blue-500 focus:outline-none cursor-pointer"
                       id="select-sheet-section"
                     >
                       {availableSections.length === 0 ? (
@@ -421,14 +427,14 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
               )}
 
               {scope === 'class_sections' && entityType === 'student' && (
-                <div className="p-4 rounded-xl bg-[#121927] border border-[#202c40] animate-in fade-in duration-150">
+                <div className="p-4 rounded-xl bg-surface-17 border border-edge-18 animate-in fade-in duration-150">
                   <label className="block text-[11px] font-semibold text-slate-300 mb-1.5">
                     Select Class *
                   </label>
                   <select
                     value={selectedClass}
                     onChange={(e) => setSelectedClass(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-[#172236] border border-[#263753] text-white text-xs focus:border-blue-500 focus:outline-none cursor-pointer"
+                    className="w-full px-3 py-2 rounded-xl bg-[#172236] border border-edge-39 text-white text-xs focus:border-blue-500 focus:outline-none cursor-pointer"
                     id="select-sheet-class-all"
                   >
                     {classes.length === 0 ? (
@@ -436,7 +442,7 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
                     ) : (
                       classes.map((c) => (
                         <option key={c.id} value={c.name}>
-                          {c.name} ({c.sections.length} sections • {c.studentsCount} students)
+                          {c.name} ({c.sections.length} sections • {countStudentsInClass(allStudents, c)} students)
                         </option>
                       ))
                     )}
@@ -452,11 +458,11 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
             </div>
 
             {/* Modal Footer */}
-            <div className="px-6 py-4 border-t border-[#1e293b] flex items-center justify-end gap-2.5">
+            <div className="px-6 py-4 border-t border-edge-13 flex items-center justify-end gap-2.5">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl bg-[#151f30] hover:bg-[#1d2b42] border border-[#25364e] text-slate-300 hover:text-white text-xs font-semibold cursor-pointer transition-colors"
+                className="px-4 py-2 rounded-xl bg-surface-31 hover:bg-[#1d2b42] border border-[#25364e] text-slate-300 hover:text-white text-xs font-semibold cursor-pointer transition-colors"
                 id="btn-cancel-attendance-popup"
               >
                 Cancel
@@ -478,12 +484,12 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
           /* ======================================================== */
           <div className="flex flex-col h-full max-h-[94vh]">
             {/* Top Toolbar (Excluded from print) */}
-            <div className="px-6 py-3.5 border-b border-[#1e293b] bg-[#111928] flex items-center justify-between gap-3 shrink-0 print:hidden">
+            <div className="px-6 py-3.5 border-b border-edge-13 bg-[#111928] flex items-center justify-between gap-3 shrink-0 print:hidden">
               <div className="flex items-center gap-2.5">
                 <button
                   type="button"
                   onClick={() => setIsPreviewMode(false)}
-                  className="px-3 py-1.5 rounded-lg bg-[#182335] hover:bg-[#202e45] text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors border border-[#23334c]"
+                  className="px-3 py-1.5 rounded-lg bg-edge-3 hover:bg-[#202e45] text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors border border-[#23334c]"
                   id="btn-back-to-sheet-config"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
@@ -512,7 +518,7 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
                 <button
                   type="button"
                   onClick={handleDownloadPdf}
-                  className="h-7.5 px-2.5 rounded-lg bg-[#182335] hover:bg-[#202e45] border border-[#24344d] text-slate-200 hover:text-white text-[11px] font-semibold flex items-center gap-1.5 cursor-pointer transition-colors box-border"
+                  className="h-7.5 px-2.5 rounded-lg bg-edge-3 hover:bg-[#202e45] border border-edge-34 text-slate-200 hover:text-white text-[11px] font-semibold flex items-center gap-1.5 cursor-pointer transition-colors box-border"
                   id="btn-download-pdf-direct"
                   title="Download clean generated PDF document"
                 >
@@ -524,7 +530,7 @@ export const AttendanceSheetModal: React.FC<AttendanceSheetModalProps> = ({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="h-7.5 w-7.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#182335] border border-[#24344d] flex items-center justify-center transition-colors cursor-pointer box-border"
+                  className="h-7.5 w-7.5 rounded-lg text-slate-400 hover:text-white hover:bg-edge-3 border border-edge-34 flex items-center justify-center transition-colors cursor-pointer box-border"
                   id="btn-close-attendance-preview"
                   title="Close preview"
                 >

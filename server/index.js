@@ -26,6 +26,22 @@ const ENTITIES = {
 };
 const num = (v) => (v === undefined || v === null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
 
+// Fix P0-2: the frontend never calls the relational API — its only backend
+// contact is the /api/collections mirror (src/utils/storage.ts hydration),
+// and production (non-DEMO) initial state is empty arrays. So the relational
+// seed alone could never appear on screen on a fresh install. seed-data.json
+// was generated FROM the frontend's own archived initial data
+// (scripts/generate-seed.mjs) and is verified deep-equal to it, so the same
+// arrays can be written verbatim into `collections` under the app's exact
+// storage keys (src/App.tsx) and first-run hydration delivers them.
+// Safety: per-key insert-if-absent ONLY, inside this fresh-database branch —
+// an existing collection (real user data) is never overwritten.
+const SEED_COLLECTION_KEYS = {
+  students: 'schoollee_offline_students_clean_v1',
+  staff: 'schoollee_offline_staff_clean_v1',
+  classes: 'schoollee_classes_clean_v1',
+};
+
 export function seedIfEmpty(db) {
   const seedPath = path.join(__dirname, 'seed-data.json');
   if (!fs.existsSync(seedPath)) return { seeded: false };
@@ -37,7 +53,17 @@ export function seedIfEmpty(db) {
     const cfg = ENTITIES[key];
     for (const rec of seed[key] || []) { upsert(db, cfg, rec); n++; }
   }
-  return { seeded: true, records: n };
+  let collectionsSeeded = 0;
+  for (const [entity, key] of Object.entries(SEED_COLLECTION_KEYS)) {
+    const records = seed[entity];
+    if (!Array.isArray(records) || records.length === 0) continue;
+    const existing = db.prepare('SELECT key FROM collections WHERE key = ?').get(key);
+    if (existing) continue; // real user data lives here — never clobber it
+    db.prepare('INSERT INTO collections(key, value, updated_at) VALUES (?,?,?)')
+      .run(key, JSON.stringify(records), now());
+    collectionsSeeded++;
+  }
+  return { seeded: true, records: n, collectionsSeeded };
 }
 
 function upsert(db, cfg, rec) {

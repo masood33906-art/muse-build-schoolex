@@ -16,10 +16,11 @@ import {
 } from '../utils/settingsHelper';
 import { Exam, getStoredExams } from '../utils/examStore';
 import { generateSingleIdCard, DEFAULT_SCHOOL } from '../utils/pdfGenerator';
-import { generateSingleStaffIdCard, generateMonthlyIndividualSlipsCombinedPdf } from '../utils/staffPdfGenerator';
+import { generateSingleStaffIdCard, generateMonthlyIndividualSlipsCombinedPdf, getSalarySlipTheme } from '../utils/staffPdfGenerator';
 import { generateSingleRollNumberSlipPDF, RollSlipData } from '../utils/rollSlipPdfGenerator';
 import { generateFeeCardPdf, buildStudentFeeCardData, formatOrBlank } from '../utils/feeCardHelper';
 import { generateWeeklyAttendancePdf, getWeekDays, calculateWeeklyAttendance, loadAttendance } from '../utils/attendanceHelper';
+import { localISODate } from '../utils/dates';
 
 // Modals for functional use
 import { IdCardModal } from './IdCardModal';
@@ -223,7 +224,9 @@ export const TemplatesSubmodule: React.FC<TemplatesSubmoduleProps> = ({
       { id: 'sub-5', name: 'Islamiat', totalMarks: 50, passingMarks: 17, startDate: '2026-09-22' }
     ],
     tags: ['Midterm'],
-    createdAt: '15 Sep 2026',
+    // Preview sample only — dated today so the sample never masquerades as a
+    // fixed historical record (Fix P0-4).
+    createdAt: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
     createdTimestamp: Date.now(),
     createdBy: 'Administrator',
     resultsCount: 0,
@@ -354,7 +357,7 @@ export const TemplatesSubmodule: React.FC<TemplatesSubmoduleProps> = ({
           break;
 
         case 'attendance-register': {
-          const weekDays = getWeekDays('2026-09-15');
+          const weekDays = getWeekDays(localISODate());
           const targetStudents = students.length > 0 ? students.slice(0, 15) : [sampleStudent];
           const { memberSummaries, totals } = calculateWeeklyAttendance(targetStudents, 'student', weekDays, allAttendance);
           generateWeeklyAttendancePdf(
@@ -387,7 +390,7 @@ export const TemplatesSubmodule: React.FC<TemplatesSubmoduleProps> = ({
         {/* ========================================================================= */}
         {/* LEFT SIDE: Name of each document                                          */}
         {/* ========================================================================= */}
-        <div className="md:col-span-4 lg:col-span-3 space-y-2 bg-[#0f1726] border border-[#1e2d45] rounded-2xl p-3 shadow-lg">
+        <div className="md:col-span-4 lg:col-span-3 space-y-2 bg-surface-10 border border-edge-21 rounded-2xl p-3 shadow-lg">
           <div className="px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-[#1c293d]">
             Documents
           </div>
@@ -404,7 +407,7 @@ export const TemplatesSubmodule: React.FC<TemplatesSubmoduleProps> = ({
                   className={`w-full text-left px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer flex items-center justify-between ${
                     isSelected
                       ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
-                      : 'text-slate-300 hover:text-white hover:bg-[#142033]'
+                      : 'text-slate-300 hover:text-white hover:bg-surface-33'
                   }`}
                 >
                   <div className="min-w-0 pr-2">
@@ -423,7 +426,7 @@ export const TemplatesSubmodule: React.FC<TemplatesSubmoduleProps> = ({
         {/* ========================================================================= */}
         {/* RIGHT SIDE: Template Selector & Live Document Preview                     */}
         {/* ========================================================================= */}
-        <div className="md:col-span-8 lg:col-span-9 bg-[#0f1726] border border-[#1e2d45] rounded-2xl p-5 shadow-lg space-y-5">
+        <div className="md:col-span-8 lg:col-span-9 bg-surface-10 border border-edge-21 rounded-2xl p-5 shadow-lg space-y-5">
           
           {/* Top Bar of the Preview Pane */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#1c293d]">
@@ -436,7 +439,7 @@ export const TemplatesSubmodule: React.FC<TemplatesSubmoduleProps> = ({
               <button
                 type="button"
                 onClick={handlePrint}
-                className="px-3.5 py-2 rounded-xl bg-[#142033] hover:bg-[#1a2c47] border border-[#233550] text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-3.5 py-2 rounded-xl bg-surface-33 hover:bg-[#1a2c47] border border-edge-36 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
                 title="Print Document"
               >
                 <Printer className="w-3.5 h-3.5 text-slate-400" />
@@ -446,7 +449,7 @@ export const TemplatesSubmodule: React.FC<TemplatesSubmoduleProps> = ({
               <button
                 type="button"
                 onClick={handleDownloadPdf}
-                className="px-3.5 py-2 rounded-xl bg-[#142033] hover:bg-[#1a2c47] border border-[#233550] text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-3.5 py-2 rounded-xl bg-surface-33 hover:bg-[#1a2c47] border border-edge-36 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
                 title="Download PDF"
               >
                 <Download className="w-3.5 h-3.5 text-slate-400" />
@@ -465,7 +468,7 @@ export const TemplatesSubmodule: React.FC<TemplatesSubmoduleProps> = ({
           </div>
 
           {/* Template Style Switcher (Changes reflect across the entire system) */}
-          <div className="bg-[#121c2e] border border-[#1f314d] rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="bg-surface-22 border border-[#1f314d] rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
                 <Palette className="w-4 h-4" />
@@ -489,7 +492,7 @@ export const TemplatesSubmodule: React.FC<TemplatesSubmoduleProps> = ({
                     className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
                       isActive
                         ? 'bg-blue-600/20 border-blue-500 text-white shadow-sm'
-                        : 'bg-[#0b121e] border-[#1e2d45] text-slate-400 hover:text-white hover:border-slate-600'
+                        : 'bg-[#0b121e] border-edge-21 text-slate-400 hover:text-white hover:border-slate-600'
                     }`}
                   >
                     {isActive && <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />}
@@ -500,7 +503,13 @@ export const TemplatesSubmodule: React.FC<TemplatesSubmoduleProps> = ({
             </div>
           </div>
 
-          {/* Document Preview Box - Big, Readable, High Fidelity */}
+          {/* Preview truthfulness note (Fix P1-3): previews are illustrative
+              approximations rendered as web markup, not the PDFs themselves */}
+          <p className="text-[11px] leading-relaxed text-slate-500">
+            Preview is an illustrative approximation of the printed document — layout and spacing in the final PDF may differ slightly. Use <span className="font-semibold text-slate-400">Download PDF</span> to see the exact output.
+          </p>
+
+          {/* Document Preview Box - Big, Readable */}
           <div className="p-4 sm:p-8 bg-[#070b13] border border-[#1a2638] rounded-xl overflow-x-auto flex justify-center">
             {selectedDocId === 'roll-number-slip' && (
               <RollNumberSlipPreview 
@@ -600,6 +609,11 @@ export const TemplatesSubmodule: React.FC<TemplatesSubmoduleProps> = ({
         schoolSettings={school}
         challanNumber="CH-2026-0891"
         feeRange="Monthly Tuition Fee"
+        // Fix P1-8: explicit SAMPLE amount for this template preview
+        // (matches the static preview breakdown: 4,500 tuition + 300
+        // exam fund). Demo data only — FeeChallanModal no longer invents
+        // an amount when a caller provides none.
+        totalFee={4800}
       />
 
       <FeeCardModal
@@ -625,6 +639,7 @@ export const TemplatesSubmodule: React.FC<TemplatesSubmoduleProps> = ({
         exportType="bulk-dmc"
         exam={sampleExam}
         students={students.length > 0 ? students : [sampleStudent]}
+        classes={classes}
         schoolSettings={school}
       />
 
@@ -641,7 +656,12 @@ export const TemplatesSubmodule: React.FC<TemplatesSubmoduleProps> = ({
 };
 
 /* ========================================================================= */
-/* HIGH-FIDELITY, LARGE READABLE DOCUMENT PREVIEW COMPONENTS                 */
+/* LARGE READABLE DOCUMENT PREVIEW COMPONENTS                                */
+/* NOTE (Fix P1-3): these are hand-built approximations of the printed PDFs  */
+/* (except the roll-number slip, which shares its real card component). The  */
+/* salary-slip preview resolves its design through the shared                */
+/* getSalarySlipTheme mapping (Fix P1-2); the rest branch on their template  */
+/* setting directly. The Templates pane labels previews as approximations.   */
 /* ========================================================================= */
 
 /**
@@ -686,8 +706,8 @@ function StudentIdCardPreview({
     return (
       <div className="flex flex-col sm:flex-row items-center gap-6 justify-center">
         {/* Classic Front */}
-        <div className="w-72 h-[420px] rounded-2xl bg-[#f8fafc] text-slate-900 border-2 border-[#1e3a8a] shadow-2xl flex flex-col justify-between overflow-hidden font-sans">
-          <div className="bg-[#1e3a8a] text-white px-4 py-3 text-center border-b-4 border-amber-500">
+        <div className="w-72 h-[420px] rounded-2xl bg-[#f8fafc] text-slate-900 border-2 border-accent-deep shadow-2xl flex flex-col justify-between overflow-hidden font-sans">
+          <div className="bg-accent-deep text-white px-4 py-3 text-center border-b-4 border-amber-500">
             <h2 className="text-xs font-black uppercase tracking-wider">
               {school.schoolName || 'DEMO SCHOOL'}
             </h2>
@@ -697,13 +717,13 @@ function StudentIdCardPreview({
           </div>
 
           <div className="flex flex-col items-center my-auto px-4">
-            <div className="w-24 h-24 rounded-full bg-blue-50 border-2 border-[#1e3a8a] p-1 flex items-center justify-center shadow-md">
-              <div className="w-full h-full rounded-full bg-[#1e3a8a] flex items-center justify-center text-white text-3xl font-black">
+            <div className="w-24 h-24 rounded-full bg-blue-50 border-2 border-accent-deep p-1 flex items-center justify-center shadow-md">
+              <div className="w-full h-full rounded-full bg-accent-deep flex items-center justify-center text-white text-3xl font-black">
                 {student.name.charAt(0)}
               </div>
             </div>
             <h3 className="text-base font-black text-slate-900 mt-3 text-center">{student.name}</h3>
-            <span className="text-xs font-bold text-[#1e3a8a] bg-blue-100 px-3 py-0.5 rounded-full mt-1 border border-blue-300">
+            <span className="text-xs font-bold text-accent-deep bg-blue-100 px-3 py-0.5 rounded-full mt-1 border border-blue-300">
               {student.class} — Section {student.section || 'A'}
             </span>
           </div>
@@ -725,14 +745,14 @@ function StudentIdCardPreview({
 
           <div className="px-5 py-2.5 bg-slate-100 border-t border-slate-200 flex items-center justify-between">
             <span className="text-[9px] font-mono font-bold text-slate-600">ID: {student.id}</span>
-            <Barcode className="w-16 h-5 text-[#1e3a8a]" />
+            <Barcode className="w-16 h-5 text-accent-deep" />
           </div>
         </div>
 
         {/* Classic Back */}
-        <div className="w-72 h-[420px] rounded-2xl bg-[#f8fafc] text-slate-900 p-5 border-2 border-[#1e3a8a] shadow-2xl flex flex-col justify-between font-sans">
-          <div className="text-center border-b-2 border-[#1e3a8a] pb-2">
-            <span className="text-[10px] font-black text-[#1e3a8a] uppercase tracking-widest">TERMS &amp; CONDITIONS</span>
+        <div className="w-72 h-[420px] rounded-2xl bg-[#f8fafc] text-slate-900 p-5 border-2 border-accent-deep shadow-2xl flex flex-col justify-between font-sans">
+          <div className="text-center border-b-2 border-accent-deep pb-2">
+            <span className="text-[10px] font-black text-accent-deep uppercase tracking-widest">TERMS &amp; CONDITIONS</span>
           </div>
 
           <div className="space-y-2 text-[10px] text-slate-700 leading-relaxed my-auto">
@@ -741,7 +761,7 @@ function StudentIdCardPreview({
             <p>• Students must wear this card on campus and during official assessments.</p>
             <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-center space-y-0.5 mt-3">
               <span className="text-[9px] text-slate-500 font-bold block uppercase">Emergency Contact</span>
-              <p className="font-mono text-xs font-bold text-[#1e3a8a]">{school.schoolPhone || '+92 42 35889012'}</p>
+              <p className="font-mono text-xs font-bold text-accent-deep">{school.schoolPhone || '+92 42 35889012'}</p>
               <p className="text-[9px] text-slate-600">{school.schoolAddress || 'Main Campus'}</p>
             </div>
           </div>
@@ -751,7 +771,7 @@ function StudentIdCardPreview({
               <div className="w-20 border-b border-slate-500 mb-1" />
               <span className="text-[9px] text-slate-600 font-bold">Principal Sign</span>
             </div>
-            <div className="w-12 h-12 rounded-full border border-[#1e3a8a] flex items-center justify-center text-[8px] text-[#1e3a8a] font-bold">
+            <div className="w-12 h-12 rounded-full border border-accent-deep flex items-center justify-center text-[8px] text-accent-deep font-bold">
               SEAL
             </div>
           </div>
@@ -854,8 +874,8 @@ function StaffIdCardPreview({
   if (isClassic) {
     return (
       <div className="flex flex-col sm:flex-row items-center gap-6 justify-center">
-        <div className="w-72 h-[420px] rounded-2xl bg-[#f8fafc] text-slate-900 border-2 border-[#1e293b] shadow-2xl flex flex-col justify-between overflow-hidden font-sans">
-          <div className="bg-[#1e293b] text-white px-4 py-3 text-center border-b-4 border-amber-500">
+        <div className="w-72 h-[420px] rounded-2xl bg-[#f8fafc] text-slate-900 border-2 border-edge-13 shadow-2xl flex flex-col justify-between overflow-hidden font-sans">
+          <div className="bg-edge-13 text-white px-4 py-3 text-center border-b-4 border-amber-500">
             <h2 className="text-xs font-black uppercase tracking-wider">
               {school.schoolName || 'DEMO SCHOOL'}
             </h2>
@@ -865,8 +885,8 @@ function StaffIdCardPreview({
           </div>
 
           <div className="flex flex-col items-center my-auto px-4">
-            <div className="w-24 h-24 rounded-full bg-slate-100 border-2 border-[#1e293b] p-1 flex items-center justify-center shadow-md">
-              <div className="w-full h-full rounded-full bg-[#1e293b] flex items-center justify-center text-white text-3xl font-black">
+            <div className="w-24 h-24 rounded-full bg-slate-100 border-2 border-edge-13 p-1 flex items-center justify-center shadow-md">
+              <div className="w-full h-full rounded-full bg-edge-13 flex items-center justify-center text-white text-3xl font-black">
                 {staff.name.charAt(0)}
               </div>
             </div>
@@ -1070,10 +1090,10 @@ function StudentFeeCardPreview({
 
   return (
     <div className="w-full max-w-3xl bg-white text-slate-900 rounded-xl p-5 shadow-2xl overflow-x-auto border border-slate-300">
-      <div className={isMinimalTemplate ? "border border-slate-900 p-4 relative" : "border-2 border-[#1b365d] p-3.5 relative"}>
-        <div className={isMinimalTemplate ? "p-1" : "border border-[#1b365d] p-3.5"}>
+      <div className={isMinimalTemplate ? "border border-slate-900 p-4 relative" : "border-2 border-doc-deep p-3.5 relative"}>
+        <div className={isMinimalTemplate ? "p-1" : "border border-doc-deep p-3.5"}>
           {/* Top Header Row */}
-          <div className={`flex items-center justify-between text-[11px] font-bold mb-1 ${isMinimalTemplate ? 'text-slate-900' : 'text-[#1b365d]'}`}>
+          <div className={`flex items-center justify-between text-[11px] font-bold mb-1 ${isMinimalTemplate ? 'text-slate-900' : 'text-doc-deep'}`}>
             <span>School NO- {cardData.schoolNo}</span>
             <div className={`${isMinimalTemplate ? 'bg-slate-900' : 'bg-[#dc2626]'} text-white px-5 py-0.5 rounded-full text-xs font-black tracking-wider uppercase`}>
               FEE CARD
@@ -1082,7 +1102,7 @@ function StudentFeeCardPreview({
           </div>
 
           {/* UDISE */}
-          <div className={`text-center text-[10px] font-bold mb-1 ${isMinimalTemplate ? 'text-slate-600' : 'text-[#1b365d]'}`}>
+          <div className={`text-center text-[10px] font-bold mb-1 ${isMinimalTemplate ? 'text-slate-600' : 'text-doc-deep'}`}>
             UDISE- {cardData.udiseNo}
           </div>
 
@@ -1102,7 +1122,7 @@ function StudentFeeCardPreview({
 
           {/* Session Pill */}
           <div className="flex justify-center my-2">
-            <div className={`px-6 py-0.5 border rounded-full text-[10px] font-bold ${isMinimalTemplate ? 'border-slate-900 text-slate-900' : 'border-[#1b365d] text-[#1b365d]'}`}>
+            <div className={`px-6 py-0.5 border rounded-full text-[10px] font-bold ${isMinimalTemplate ? 'border-slate-900 text-slate-900' : 'border-doc-deep text-doc-deep'}`}>
               Session : {cardData.academicSession}
             </div>
           </div>
@@ -1130,7 +1150,7 @@ function StudentFeeCardPreview({
           {/* 12-Month Table */}
           <div className="mt-3 overflow-x-auto">
             <table className={`w-full text-left text-[10px] border-collapse border ${isMinimalTemplate ? 'border-slate-900' : 'border-[#2b5b84]'}`}>
-              <thead className={`${isMinimalTemplate ? 'bg-slate-100 text-slate-900' : 'bg-[#d6e6f5] text-[#1b365d]'} font-bold uppercase text-[9px]`}>
+              <thead className={`${isMinimalTemplate ? 'bg-slate-100 text-slate-900' : 'bg-[#d6e6f5] text-doc-deep'} font-bold uppercase text-[9px]`}>
                 <tr>
                   <th className="p-1.5 border border-slate-400">MONTH</th>
                   <th className="p-1.5 border border-slate-400 text-center">ADMISSION</th>
@@ -1174,7 +1194,9 @@ function StaffSalarySlipPreview({
   school: SchoolSettings;
   staff: StaffMember;
 }) {
-  const isMinimalClassic = school.staffSalarySlipTemplate === 'minimal-classic';
+  // Template interpretation comes from the shared salary-slip theme
+  // (Fix P1-2) — the same mapping both PDF generators consume.
+  const isMinimalClassic = getSalarySlipTheme(school.staffSalarySlipTemplate).isMinimalClassic;
 
   return (
     <div className={`w-full max-w-2xl bg-white text-black p-6 font-sans shadow-2xl space-y-4 ${

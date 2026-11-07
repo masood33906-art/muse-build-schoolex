@@ -15,6 +15,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { ClassInfo, ClassTimelineEvent, Student } from '../types';
+import { resolveClassFee, studentBelongsToClass, studentsAfterClassRename, studentsInClass, validateClassFeeInput } from '../utils/classExportHelper';
 import { SectionDetailsPage } from './SectionDetailsPage';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
 import { SecurityDeleteModal } from './SecurityDeleteModal';
@@ -62,15 +63,22 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
     onExecute: () => void;
   } | null>(null);
 
-  // Form states for class edit and fee change
+  // Form states for class edit and fee change.
+  // Fix P1-8: fee state is raw text and starts from the class's REAL fee
+  // (empty when no fee is set) — never an invented default. 0 is a real
+  // fee (free class) and round-trips as "0".
+  const resolvedFee = resolveClassFee(classInfo);
+  const feeInputString = resolvedFee === null ? '' : String(resolvedFee);
   const [editName, setEditName] = useState(classInfo.name);
-  const [editFee, setEditFee] = useState(classInfo.fee || 4800);
-  const [feeChangeValue, setFeeChangeValue] = useState(classInfo.fee || 4800);
+  const [editFee, setEditFee] = useState(feeInputString);
+  const [editFeeError, setEditFeeError] = useState('');
+  const [feeChangeValue, setFeeChangeValue] = useState(feeInputString);
+  const [feeChangeError, setFeeChangeError] = useState('');
 
-  // Centralized filter: students belonging to this class
-  const classStudents = (students || []).filter(
-    s => s.class && s.class.toLowerCase().trim() === classInfo.name.toLowerCase().trim()
-  );
+  // Centralized filter: students belonging to this class — the shared
+  // classId-first rule (Fix P0-3), so this roster always agrees with the
+  // classes table, attendance and exports.
+  const classStudents = studentsInClass(students || [], classInfo);
 
   // Duplicate name check for editing class name
   const isDuplicateEditName = Boolean(
@@ -80,7 +88,9 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
     )
   );
 
-  const totalClassStudents = classStudents.length > 0 ? classStudents.length : classInfo.studentsCount;
+  // Live count only (Fix P0-1): 0 is a valid total; never fall back to the
+  // legacy stored studentsCount, which is never updated.
+  const totalClassStudents = classStudents.length;
 
   // If a section is clicked, render the Section Details Page (Matching image.png)
   if (selectedSection) {
@@ -108,84 +118,46 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
     return (s.name.slice(0, 2)).toUpperCase();
   });
 
-  const displayAvatars = studentInitials.length >= 3 
-    ? studentInitials.slice(0, 3) 
-    : ['A(', 'I(', 'J('];
+  // Fix P0-4: avatar bubbles show ONLY real students' initials. A class
+  // with fewer than 3 students shows just those students — never invented
+  // placeholder initials.
+  const displayAvatars = studentInitials.slice(0, 3);
 
   const extraStudentsCount = Math.max(0, totalClassStudents - displayAvatars.length);
 
-  // Get centralized count of students in a given section
+  // Get centralized count of students in a given section.
+  // Each section gets its OWN live count (Fix P0-1): the previous code assigned
+  // the whole stored class count to section "A" whenever the live count was 0.
   const getSectionStudentCount = (sectionName: string): number => {
-    const matchingInDb = classStudents.filter(
+    return classStudents.filter(
       s => (s.section || 'A').toUpperCase() === sectionName.toUpperCase()
-    );
-    if (matchingInDb.length > 0) {
-      return matchingInDb.length;
-    }
-    // If newly created class or fallback count
-    return sectionName === 'A' ? (classInfo.studentsCount || 0) : 0;
+    ).length;
   };
 
-  // Base timeline events with accurate times
-  const defaultTimeline: ClassTimelineEvent[] = [
-    {
-      id: 'TL-1',
-      type: 'session_started',
-      title: 'Session started',
-      description: 'Session created by Admin',
-      date: '08 Oct 2025',
-      badgeDate: '08 Oct',
-      time: '09:30 AM',
-      fee: 3000,
-      author: 'Admin'
-    },
-    {
-      id: 'TL-2',
-      type: 'class_created',
-      title: `Class "${classInfo.name}" created`,
-      description: 'Created by Admin',
-      date: '08 Apr 2026',
-      badgeDate: '08 Apr',
-      time: '11:15 AM',
-      fee: 3000,
-      author: 'Admin'
-    },
-    {
-      id: 'TL-3',
-      type: 'session_started',
-      title: 'Session started',
-      description: 'Session created by Demo school',
-      date: '24 Jul 2026',
-      badgeDate: '24 Jul',
-      time: '02:45 PM',
-      fee: 3000,
-      author: 'Demo school'
-    },
-    {
-      id: 'TL-4',
-      type: 'fee_changed',
-      title: `Fee changed to ${classInfo.fee || 4800}`,
-      description: 'Effective from 01 Aug 2026 at 04:20 PM',
-      date: '01 Aug 2026',
-      badgeDate: '01 Aug',
-      time: '04:20 PM',
-      fee: classInfo.fee || 4800
-    },
-    {
-      id: 'TL-5',
-      type: 'fee_changed',
-      title: `Fee changed to ${classInfo.fee || 4800}`,
-      description: 'Effective from 12 Aug 2026 at 04:52 PM',
-      date: '12 Aug 2026',
-      badgeDate: '12 Aug',
-      time: '04:52 PM',
-      fee: classInfo.fee || 4800
-    }
-  ];
+  // Fix P0-4: the timeline shows ONLY events recorded on this class. The
+  // previous hardcoded "default timeline" (session starts, fee changes and
+  // dates in Oct 2025 – Aug 2026) was identical fabricated history for every
+  // class. When a class has no recorded events, the only honest derived
+  // entry is its creation, from its own recorded createdAt; with neither,
+  // the timeline is empty and the UI shows an empty state.
+  const derivedTimeline: ClassTimelineEvent[] = classInfo.createdAt
+    ? [
+        {
+          id: 'TL-CREATED',
+          type: 'class_created',
+          title: `Class "${classInfo.name}" created`,
+          description: 'Created by Admin',
+          date: classInfo.createdAt,
+          badgeDate: classInfo.createdAt.split(' ').slice(0, 2).join(' '),
+          fee: classInfo.fee,
+          author: 'Admin'
+        }
+      ]
+    : [];
 
   const timelineEvents: ClassTimelineEvent[] = classInfo.timeline && classInfo.timeline.length > 0
     ? classInfo.timeline
-    : defaultTimeline;
+    : derivedTimeline;
 
   // Handler: Save Class Name / Base Details
   const handleSaveEditClass = (e: React.FormEvent) => {
@@ -194,11 +166,28 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
     if (!trimmed) return;
     if (isDuplicateEditName) return;
 
+    // Fix P1-8: fee is required and validated at edit — invalid input
+    // blocks the save with a visible message instead of silently keeping
+    // or inventing a fee.
+    const feeCheck = validateClassFeeInput(editFee);
+    if ('error' in feeCheck) {
+      setEditFeeError(feeCheck.error);
+      return;
+    }
+    setEditFeeError('');
+
     const updated: ClassInfo = {
       ...classInfo,
       name: trimmed,
-      fee: Number(editFee) || classInfo.fee || 4800
+      fee: feeCheck.fee
     };
+    // Fix P0-3: renaming from this page must not orphan students either —
+    // same shared rename cascade as the ClassesModule edit modal.
+    if (onUpdateStudents && trimmed !== classInfo.name) {
+      const roster = students || [];
+      const nextStudents = studentsAfterClassRename(roster, classInfo, trimmed);
+      if (nextStudents !== roster) onUpdateStudents(nextStudents);
+    }
     onUpdateClass(updated);
     setIsEditModalOpen(false);
   };
@@ -206,8 +195,16 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
   // Handler: Change Fee and immediately record checkpoint in timeline with accurate timestamp
   const handleSaveFeeChange = (e: React.FormEvent) => {
     e.preventDefault();
-    const newFeeNumber = Number(feeChangeValue);
-    if (!newFeeNumber || newFeeNumber <= 0) return;
+    // Fix P1-8: validated like every other fee entry — empty, non-numeric
+    // or negative input blocks with a visible message. 0 is accepted:
+    // it makes the class free (the old guard silently rejected it).
+    const feeCheck = validateClassFeeInput(feeChangeValue);
+    if ('error' in feeCheck) {
+      setFeeChangeError(feeCheck.error);
+      return;
+    }
+    setFeeChangeError('');
+    const newFeeNumber = feeCheck.fee;
 
     const now = new Date();
     const timeFormatted = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -270,7 +267,7 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
     }
 
     const enrolled = (students || []).filter(
-      s => s.class && s.class.toLowerCase().trim() === classInfo.name.toLowerCase().trim() &&
+      s => studentBelongsToClass(s, classInfo) &&
            s.section && s.section.toLowerCase().trim() === secName.toLowerCase().trim()
     ).length;
 
@@ -313,8 +310,7 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
     if (onUpdateStudents && removedSections.length > 0) {
       const updatedStudents = students.map(s => {
         if (
-          s.class &&
-          s.class.toLowerCase().trim() === classInfo.name.toLowerCase().trim() &&
+          studentBelongsToClass(s, classInfo) &&
           s.section &&
           removedSections.some(rs => rs.toLowerCase() === s.section.toLowerCase())
         ) {
@@ -337,7 +333,7 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
             <h1 className="text-2xl font-bold text-white tracking-tight">
               {classInfo.name}
             </h1>
-            <div className="w-6 h-6 rounded-md bg-[#162030] flex items-center justify-center text-slate-400">
+            <div className="w-6 h-6 rounded-md bg-surface-32 flex items-center justify-center text-slate-400">
               <Video className="w-3.5 h-3.5" />
             </div>
           </div>
@@ -357,7 +353,7 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
           <button
             type="button"
             onClick={() => setIsMergeSectionsOpen(true)}
-            className="px-3.5 py-1.5 rounded-lg bg-[#141c2b] hover:bg-[#1a2538] border border-[#223046] text-xs font-semibold text-slate-200 hover:text-white transition-all cursor-pointer shadow-sm"
+            className="px-3.5 py-1.5 rounded-lg bg-surface-21 hover:bg-surface-43 border border-edge-24 text-xs font-semibold text-slate-200 hover:text-white transition-all cursor-pointer shadow-sm"
             id="btn-merge-sections"
           >
             Merge Sections
@@ -366,7 +362,7 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
           <button
             type="button"
             onClick={handleOpenManageSections}
-            className="px-3.5 py-1.5 rounded-lg bg-[#141c2b] hover:bg-[#1a2538] border border-[#223046] text-xs font-semibold text-slate-200 hover:text-white transition-all cursor-pointer shadow-sm flex items-center gap-1.5"
+            className="px-3.5 py-1.5 rounded-lg bg-surface-21 hover:bg-surface-43 border border-edge-24 text-xs font-semibold text-slate-200 hover:text-white transition-all cursor-pointer shadow-sm flex items-center gap-1.5"
             id="btn-manage-sections"
           >
             <Layers className="w-3.5 h-3.5 text-blue-400" />
@@ -376,10 +372,11 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
           <button
             type="button"
             onClick={() => {
-              setFeeChangeValue(classInfo.fee || 4800);
+              setFeeChangeValue(feeInputString);
+              setFeeChangeError('');
               setIsChangeFeeOpen(true);
             }}
-            className="px-3.5 py-1.5 rounded-lg bg-[#141c2b] hover:bg-[#1a2538] border border-[#223046] text-xs font-semibold text-slate-200 hover:text-white transition-all cursor-pointer shadow-sm"
+            className="px-3.5 py-1.5 rounded-lg bg-surface-21 hover:bg-surface-43 border border-edge-24 text-xs font-semibold text-slate-200 hover:text-white transition-all cursor-pointer shadow-sm"
             id="btn-change-fee"
           >
             Change Fee
@@ -390,10 +387,11 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
             type="button"
             onClick={() => {
               setEditName(classInfo.name);
-              setEditFee(classInfo.fee || 4800);
+              setEditFee(feeInputString);
+              setEditFeeError('');
               setIsEditModalOpen(true);
             }}
-            className="px-3.5 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-[#0c121e] text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md hover:shadow-lg"
+            className="px-3.5 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-surface-6 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md hover:shadow-lg"
             id="btn-edit-class-header"
           >
             <Pencil className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -405,42 +403,46 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
       {/* 2. THREE DATA CARDS (fee per student, created at, latest session) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Card 1: Fee */}
-        <div className="bg-[#121927] border border-[#1d273a] rounded-xl p-5 relative overflow-hidden flex items-center justify-between shadow-md">
+        <div className="bg-surface-17 border border-edge-9 rounded-xl p-5 relative overflow-hidden flex items-center justify-between shadow-md">
           <div>
             <div className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-              {(classInfo.fee || 4800).toLocaleString()} PKR
+              {resolvedFee !== null ? (
+                <>{resolvedFee.toLocaleString()} PKR</>
+              ) : (
+                <span className="text-amber-400">Fee not set</span>
+              )}
             </div>
             <div className="text-xs text-slate-400 font-medium mt-1">
               Fee
             </div>
           </div>
 
-          <div className="w-12 h-12 rounded-xl bg-[#2a2215] border border-[#523e1c] flex items-center justify-center text-[#f59e0b] shrink-0 shadow-inner">
+          <div className="w-12 h-12 rounded-xl bg-[#2a2215] border border-[#523e1c] flex items-center justify-center text-warning shrink-0 shadow-inner">
             <Coins className="w-6 h-6" />
           </div>
         </div>
 
         {/* Card 2: Created At */}
-        <div className="bg-[#121927] border border-[#1d273a] rounded-xl p-5 relative overflow-hidden flex items-center justify-between shadow-md">
+        <div className="bg-surface-17 border border-edge-9 rounded-xl p-5 relative overflow-hidden flex items-center justify-between shadow-md">
           <div>
             <div className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-              {classInfo.createdAt || '08 Apr 2026'}
+              {classInfo.createdAt || 'Not recorded'}
             </div>
             <div className="text-xs text-slate-400 font-medium mt-1">
               Created At
             </div>
           </div>
 
-          <div className="w-12 h-12 rounded-xl bg-[#142820] border border-[#1d4d38] flex items-center justify-center text-[#10b981] shrink-0 shadow-inner">
+          <div className="w-12 h-12 rounded-xl bg-[#142820] border border-[#1d4d38] flex items-center justify-center text-success shrink-0 shadow-inner">
             <Calendar className="w-6 h-6" />
           </div>
         </div>
 
         {/* Card 3: Latest Session */}
-        <div className="bg-[#121927] border border-[#1d273a] rounded-xl p-5 relative overflow-hidden flex items-center justify-between shadow-md">
+        <div className="bg-surface-17 border border-edge-9 rounded-xl p-5 relative overflow-hidden flex items-center justify-between shadow-md">
           <div>
             <div className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-              {classInfo.latestSession || 'Jul 2026'}
+              {classInfo.latestSession || 'Not recorded'}
             </div>
             <div className="text-xs text-slate-400 font-medium mt-1">
               Latest Session
@@ -473,7 +475,7 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
               <div
                 key={sectionName}
                 onClick={() => setSelectedSection(sectionName)}
-                className="bg-[#121927] hover:bg-[#152033] border border-[#1d273a] hover:border-blue-500/50 rounded-xl p-5 flex items-center justify-between transition-all cursor-pointer shadow-md group relative"
+                className="bg-surface-17 hover:bg-surface-35 border border-edge-9 hover:border-blue-500/50 rounded-xl p-5 flex items-center justify-between transition-all cursor-pointer shadow-md group relative"
                 title={`Click to view Section ${sectionName} students`}
                 id={`section-card-${sectionName}`}
               >
@@ -488,7 +490,7 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
                   </div>
 
                   <div className="text-[11px] text-slate-400 mt-0.5">
-                    Session: {classInfo.createdAt || '24 Jul 2026'}
+                    Session: {classInfo.createdAt || 'Not recorded'}
                   </div>
                 </div>
 
@@ -505,14 +507,14 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
                     return (
                       <div
                         key={idx}
-                        className={`w-7 h-7 rounded-full ${colors[idx % colors.length]} flex items-center justify-center text-[10px] font-bold ring-2 ring-[#121927] shadow-sm`}
+                        className={`w-7 h-7 rounded-full ${colors[idx % colors.length]} flex items-center justify-center text-[10px] font-bold ring-2 ring-surface-17 shadow-sm`}
                       >
                         {initials}
                       </div>
                     );
                   })}
                   {extraStudentsCount > 0 && (
-                    <div className="w-7 h-7 rounded-full bg-[#1b283d] text-blue-300 border border-[#2b3e5c] flex items-center justify-center text-[10px] font-bold ring-2 ring-[#121927]">
+                    <div className="w-7 h-7 rounded-full bg-edge-11 text-blue-300 border border-[#2b3e5c] flex items-center justify-center text-[10px] font-bold ring-2 ring-surface-17">
                       +{extraStudentsCount}
                     </div>
                   )}
@@ -524,7 +526,7 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
       </div>
 
       {/* 4. FEES PROPAGATION TIMELINE / CHECKPOINTS WITH ACCURATE TIME */}
-      <div className="bg-[#121927] border border-[#1d273a] rounded-xl p-5 shadow-md">
+      <div className="bg-surface-17 border border-edge-9 rounded-xl p-5 shadow-md">
         <div className="flex items-center justify-between mb-5">
           <div>
             <h2 className="text-sm font-bold text-white tracking-tight">
@@ -538,10 +540,11 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
           <button
             type="button"
             onClick={() => {
-              setFeeChangeValue(classInfo.fee || 4800);
+              setFeeChangeValue(feeInputString);
+              setFeeChangeError('');
               setIsChangeFeeOpen(true);
             }}
-            className="px-3 py-1.5 rounded-lg bg-[#162030] hover:bg-[#1e2c44] border border-[#24344d] text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+            className="px-3 py-1.5 rounded-lg bg-surface-32 hover:bg-[#1e2c44] border border-edge-34 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
             id="btn-update-fee-timeline"
           >
             <Coins className="w-3.5 h-3.5 text-amber-400" />
@@ -551,6 +554,12 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
 
         {/* Timeline Checkpoints */}
         <div className="space-y-4">
+          {timelineEvents.length === 0 && (
+            <div className="bg-[#0e1422] border border-edge-4 rounded-xl p-6 text-center">
+              <p className="text-xs font-semibold text-slate-300">No activity recorded yet</p>
+              <p className="text-[11px] text-slate-500 mt-1">Events such as fee changes will appear here once they happen for this class.</p>
+            </div>
+          )}
           {timelineEvents.map((item, index) => {
             const isClassCreated = item.type === 'class_created';
             const isSession = item.type === 'session_started';
@@ -568,7 +577,7 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
             return (
               <div
                 key={item.id || index}
-                className="bg-[#0e1422] border border-[#1b2537] rounded-xl p-4 flex items-start justify-between gap-4 hover:border-[#2b3a52] transition-colors"
+                className="bg-[#0e1422] border border-edge-4 rounded-xl p-4 flex items-start justify-between gap-4 hover:border-[#2b3a52] transition-colors"
               >
                 <div className="flex items-start gap-3.5">
                   {/* Node Icon */}
@@ -593,7 +602,7 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
                     {/* Fee & Author */}
                     <div className="flex items-center gap-3 mt-2 text-[11px]">
                       <span className={`font-semibold ${isFeeChanged ? 'text-amber-400' : isSectionUpgraded ? 'text-purple-400' : 'text-emerald-400'}`}>
-                        Fee: {item.fee?.toLocaleString()} PKR
+                        {typeof item.fee === 'number' ? `Fee: ${item.fee.toLocaleString()} PKR` : 'Fee not set'}
                       </span>
 
                       {item.author && (
@@ -611,7 +620,7 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
                   <div className="px-2.5 py-1 rounded-md bg-[#162133] border border-[#22324b] text-[11px] font-semibold text-amber-300">
                     {item.badgeDate || item.date}
                   </div>
-                  <div className="flex items-center gap-1 text-[11px] text-slate-300 font-mono bg-[#121927] px-2 py-0.5 rounded border border-[#1d273a]">
+                  <div className="flex items-center gap-1 text-[11px] text-slate-300 font-mono bg-surface-17 px-2 py-0.5 rounded border border-edge-9">
                     <Clock className="w-3 h-3 text-slate-400" />
                     <span>{item.time || '10:00 AM'}</span>
                   </div>
@@ -650,8 +659,8 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
       {/* 1. Edit Class Modal */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#101726] border border-[#223046] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
-            <div className="px-6 py-4 border-b border-[#1b2638] flex items-center justify-between">
+          <div className="bg-surface-13 border border-edge-24 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
+            <div className="px-6 py-4 border-b border-edge-6 flex items-center justify-between">
               <h3 className="font-bold text-sm text-white">Edit Class: {classInfo.name}</h3>
               <button
                 type="button"
@@ -671,10 +680,10 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
                   type="text"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 rounded-xl bg-[#141d2d] border text-xs focus:outline-none transition-all ${
+                  className={`w-full px-3.5 py-2.5 rounded-xl bg-surface-26 border text-xs focus:outline-none transition-all ${
                     isDuplicateEditName
                       ? 'border-rose-500 focus:border-rose-500 text-rose-100 bg-rose-950/20 ring-1 ring-rose-500/30'
-                      : 'border-[#233149] text-white focus:border-blue-500'
+                      : 'border-edge-26 text-white focus:border-blue-500'
                   }`}
                   required
                 />
@@ -688,23 +697,34 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  Fee per Student (PKR)
+                  Fee per Student (PKR) *
                 </label>
                 <input
                   type="number"
                   value={editFee}
-                  onChange={(e) => setEditFee(Number(e.target.value))}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#141d2d] border border-[#233149] text-white text-xs focus:border-blue-500 focus:outline-none"
+                  onChange={(e) => { setEditFee(e.target.value); setEditFeeError(''); }}
+                  className={`w-full px-3.5 py-2.5 rounded-xl bg-surface-26 border text-white text-xs focus:outline-none ${
+                    editFeeError
+                      ? 'border-rose-500 focus:border-rose-500 text-rose-100 bg-rose-950/20 ring-1 ring-rose-500/30'
+                      : 'border-edge-26 focus:border-blue-500'
+                  }`}
                   min="0"
                   step="100"
+                  required
                 />
+                {editFeeError && (
+                  <div className="flex items-center gap-1.5 mt-2 text-xs font-semibold text-rose-400 animate-in fade-in slide-in-from-top-1 duration-150" id="error-edit-fee-details">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                    <span>{editFeeError}</span>
+                  </div>
+                )}
               </div>
 
-              <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-[#1b2638]">
+              <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-edge-6">
                 <button
                   type="button"
                   onClick={() => setIsEditModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-[#141d2d] border border-[#24334a] text-slate-300 hover:text-white text-xs font-semibold cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-surface-26 border border-edge-31 text-slate-300 hover:text-white text-xs font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -728,8 +748,8 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
       {/* 2. Change Fee Modal */}
       {isChangeFeeOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#101726] border border-[#223046] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
-            <div className="px-6 py-4 border-b border-[#1b2638] flex items-center justify-between">
+          <div className="bg-surface-13 border border-edge-24 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
+            <div className="px-6 py-4 border-b border-edge-6 flex items-center justify-between">
               <h3 className="font-bold text-sm text-white">Change Fee - {classInfo.name}</h3>
               <button
                 type="button"
@@ -748,12 +768,23 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
                 <input
                   type="number"
                   value={feeChangeValue}
-                  onChange={(e) => setFeeChangeValue(Number(e.target.value))}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#141d2d] border border-[#233149] text-white text-xs focus:border-blue-500 focus:outline-none"
+                  onChange={(e) => { setFeeChangeValue(e.target.value); setFeeChangeError(''); }}
+                  className={`w-full px-3.5 py-2.5 rounded-xl bg-surface-26 border text-white text-xs focus:outline-none ${
+                    feeChangeError
+                      ? 'border-rose-500 focus:border-rose-500 text-rose-100 bg-rose-950/20 ring-1 ring-rose-500/30'
+                      : 'border-edge-26 focus:border-blue-500'
+                  }`}
                   min="0"
                   step="100"
                   required
                 />
+                {feeChangeError && (
+                  <div className="flex items-center gap-1.5 mt-2 text-xs font-semibold text-rose-400 animate-in fade-in slide-in-from-top-1 duration-150" id="error-change-fee">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                    <span>{feeChangeError}</span>
+                  </div>
+                )}
+                <p className="text-[11px] text-slate-500 mt-1.5">Enter 0 to make this class free.</p>
               </div>
 
               <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/25 text-[11px] text-blue-300 space-y-1">
@@ -766,11 +797,11 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
                 </p>
               </div>
 
-              <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-[#1b2638]">
+              <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-edge-6">
                 <button
                   type="button"
                   onClick={() => setIsChangeFeeOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-[#141d2d] border border-[#24334a] text-slate-300 hover:text-white text-xs font-semibold cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-surface-26 border border-edge-31 text-slate-300 hover:text-white text-xs font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -789,8 +820,8 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
       {/* 3. Merge Sections Modal */}
       {isMergeSectionsOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#101726] border border-[#223046] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
-            <div className="px-6 py-4 border-b border-[#1b2638] flex items-center justify-between">
+          <div className="bg-surface-13 border border-edge-24 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
+            <div className="px-6 py-4 border-b border-edge-6 flex items-center justify-between">
               <h3 className="font-bold text-sm text-white">Merge Sections</h3>
               <button
                 type="button"
@@ -811,7 +842,7 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
                   Target Destination Section
                 </label>
                 <select
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#141d2d] border border-[#233149] text-white text-xs focus:border-blue-500 focus:outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-26 border border-edge-26 text-white text-xs focus:border-blue-500 focus:outline-none"
                   defaultValue={classInfo.sections[0]}
                 >
                   {classInfo.sections.map(s => (
@@ -820,11 +851,11 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
                 </select>
               </div>
 
-              <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-[#1b2638]">
+              <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-edge-6">
                 <button
                   type="button"
                   onClick={() => setIsMergeSectionsOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-[#141d2d] border border-[#24334a] text-slate-300 hover:text-white text-xs font-semibold cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-surface-26 border border-edge-31 text-slate-300 hover:text-white text-xs font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -840,7 +871,7 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
                     onUpdateClass(updated);
                     if (onUpdateStudents) {
                       const updatedStudents = students.map(s => {
-                        if (s.class && s.class.toLowerCase().trim() === classInfo.name.toLowerCase().trim()) {
+                        if (studentBelongsToClass(s, classInfo)) {
                           return { ...s, section: primarySec };
                         }
                         return s;
@@ -862,8 +893,8 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
       {/* 4. Manage Sections Modal */}
       {isManageSectionsOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#101726] border border-[#223046] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95" id="modal-manage-sections">
-            <div className="px-6 py-4 border-b border-[#1b2638] flex items-center justify-between">
+          <div className="bg-surface-13 border border-edge-24 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95" id="modal-manage-sections">
+            <div className="px-6 py-4 border-b border-edge-6 flex items-center justify-between">
               <div>
                 <h3 className="font-bold text-sm text-white">Manage Sections - {classInfo.name}</h3>
                 <p className="text-[11px] text-slate-400 mt-0.5">Add or remove sections for this class</p>
@@ -889,7 +920,7 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
                     return (
                       <div
                         key={sec}
-                        className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#141d2d] border border-[#233149]"
+                        className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-surface-26 border border-edge-26"
                       >
                         <div className="flex items-center gap-2.5">
                           <div className="w-7 h-7 rounded-lg bg-blue-950/60 border border-blue-800/40 flex items-center justify-center text-blue-400 font-bold text-xs">
@@ -923,7 +954,7 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
               </div>
 
               {/* Add New Section */}
-              <div className="pt-2 border-t border-[#1b2638] space-y-2.5">
+              <div className="pt-2 border-t border-edge-6 space-y-2.5">
                 <label className="block text-xs font-semibold text-slate-300">
                   Add New Section
                 </label>
@@ -937,10 +968,10 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
                     }}
                     placeholder="e.g. C, Evening, Rose"
                     maxLength={12}
-                    className={`flex-1 px-3.5 py-2 rounded-xl bg-[#141d2d] border text-xs text-white focus:outline-none transition-colors ${
+                    className={`flex-1 px-3.5 py-2 rounded-xl bg-surface-26 border text-xs text-white focus:outline-none transition-colors ${
                       manageSectionError
                         ? 'border-rose-500 bg-rose-950/20'
-                        : 'border-[#233149] focus:border-blue-500'
+                        : 'border-edge-26 focus:border-blue-500'
                     }`}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
@@ -972,7 +1003,7 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
                           key={letter}
                           type="button"
                           onClick={() => handleAddManageSection(letter)}
-                          className="px-2 py-0.5 rounded-md bg-[#162030] hover:bg-blue-600/20 border border-[#233149] hover:border-blue-500/50 text-[11px] font-semibold text-slate-300 hover:text-blue-300 transition-colors cursor-pointer flex items-center gap-1"
+                          className="px-2 py-0.5 rounded-md bg-surface-32 hover:bg-blue-600/20 border border-edge-26 hover:border-blue-500/50 text-[11px] font-semibold text-slate-300 hover:text-blue-300 transition-colors cursor-pointer flex items-center gap-1"
                         >
                           <Plus className="w-2.5 h-2.5" />
                           <span>Section {letter}</span>
@@ -1009,11 +1040,11 @@ export const ClassDetailsPage: React.FC<ClassDetailsPageProps> = ({
                 );
               })()}
 
-              <div className="pt-3 flex items-center justify-end gap-2.5 border-t border-[#1b2638]">
+              <div className="pt-3 flex items-center justify-end gap-2.5 border-t border-edge-6">
                 <button
                   type="button"
                   onClick={() => setIsManageSectionsOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-[#141d2d] border border-[#24334a] text-slate-300 hover:text-white text-xs font-semibold cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-surface-26 border border-edge-31 text-slate-300 hover:text-white text-xs font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>

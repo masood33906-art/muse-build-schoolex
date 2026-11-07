@@ -84,14 +84,13 @@ export const StudentTable: React.FC<StudentTableProps> = ({
     existingClasses.forEach(cName => {
       const trimmed = cName.trim();
       if (trimmed && !map.has(trimmed)) {
-        const secsFromStudents = Array.from(
-          new Set(
-            students
-              .filter(s => s.class.trim().toLowerCase() === trimmed.toLowerCase() && s.section?.trim())
-              .map(s => s.section.trim())
-          )
-        );
-        map.set(trimmed, secsFromStudents);
+        const secsSet = new Set<string>();
+        students.forEach(s => {
+          if (s.class.trim().toLowerCase() === trimmed.toLowerCase() && s.section?.trim()) {
+            secsSet.add(s.section.trim());
+          }
+        });
+        map.set(trimmed, Array.from(secsSet));
       }
     });
     return map;
@@ -201,13 +200,13 @@ export const StudentTable: React.FC<StudentTableProps> = ({
   };
 
   return (
-    <div className="bg-[#111724] border border-[#20293d] rounded-xl overflow-hidden shadow-xl flex flex-col">
+    <div className="bg-surface-12 border border-[#20293d] rounded-xl overflow-hidden shadow-xl flex flex-col">
       {/* ========================================================================= */}
       {/* SELECTED ENTRIES TOP BAR (Appears when 1 or more students are selected)   */}
       {/* ========================================================================= */}
       {selectedIds.size > 0 && (
         <div 
-          className="bg-[#152238] border-b border-blue-500/40 px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-150"
+          className="bg-edge-2 border-b border-blue-500/40 px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-150"
           id="student-entry-selection-topbar"
         >
           {/* Left: Selection Count & Details */}
@@ -282,7 +281,7 @@ export const StudentTable: React.FC<StudentTableProps> = ({
       >
         <table className="w-full text-left border-collapse min-w-[760px]">
           {/* Sticky Table Header */}
-          <thead className="sticky top-0 z-20 bg-[#161c2b] border-b border-[#232d42] text-xs font-semibold text-slate-400 tracking-wider select-none shadow-sm">
+          <thead className="sticky top-0 z-20 bg-[#161c2b] border-b border-edge-22 text-xs font-semibold text-slate-400 tracking-wider select-none shadow-sm">
             <tr>
               <th className="py-3.5 pl-4 pr-2 w-10">
                 <input
@@ -406,7 +405,7 @@ export const StudentTable: React.FC<StudentTableProps> = ({
                         <img
                           src={getStudentAvatar(student)}
                           alt={student.name}
-                          className="w-9 h-9 rounded-full object-cover border border-white/20 shrink-0 shadow-sm bg-[#0e1420]"
+                          className="w-9 h-9 rounded-full object-cover border border-white/20 shrink-0 shadow-sm bg-surface-7"
                         />
                         <div className="flex flex-col">
                           <button
@@ -505,7 +504,7 @@ export const StudentTable: React.FC<StudentTableProps> = ({
                             className="fixed inset-0 z-30"
                             onClick={() => setActiveMenuId(null)}
                           />
-                          <div className="absolute right-4 top-12 z-40 w-48 bg-[#182232] border border-[#26354d] rounded-xl shadow-2xl py-1 text-xs text-slate-300 text-left animate-in fade-in zoom-in-95 duration-100">
+                          <div className="absolute right-4 top-12 z-40 w-48 bg-surface-40 border border-edge-37 rounded-xl shadow-2xl py-1 text-xs text-slate-300 text-left animate-in fade-in zoom-in-95 duration-100">
                             <button
                               type="button"
                               onClick={() => {
@@ -563,7 +562,7 @@ export const StudentTable: React.FC<StudentTableProps> = ({
                               )}
                             </button>
 
-                            <div className="border-t border-[#26354d] my-1" />
+                            <div className="border-t border-edge-37 my-1" />
 
                             <button
                               type="button"
@@ -626,7 +625,7 @@ export const StudentTable: React.FC<StudentTableProps> = ({
             {/* Body */}
             <form onSubmit={handleConfirmUpgrade} className="p-5 space-y-4 text-xs">
               {/* Selected Students Preview */}
-              <div className="bg-[#0e1420] border border-[#1f2b40] rounded-xl p-3 space-y-2">
+              <div className="bg-surface-7 border border-[#1f2b40] rounded-xl p-3 space-y-2">
                 <div className="flex items-center justify-between text-[11px] text-slate-400 font-semibold">
                   <span>Selected Students ({upgradeTargetStudents.length})</span>
                   <span>Current → Upgraded</span>
@@ -635,7 +634,7 @@ export const StudentTable: React.FC<StudentTableProps> = ({
                   {upgradeTargetStudents.map(st => (
                     <div
                       key={st.id}
-                      className="flex items-center justify-between gap-2 py-1 px-2 rounded-lg bg-[#141c2c] border border-[#1f2b42]"
+                      className="flex items-center justify-between gap-2 py-1 px-2 rounded-lg bg-surface-23 border border-[#1f2b42]"
                     >
                       <div className="truncate">
                         <span className="font-semibold text-white">{st.name}</span>
@@ -739,7 +738,7 @@ export const StudentTable: React.FC<StudentTableProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsUpgradeModalOpen(false)}
-                  className="px-4 py-2 rounded-lg bg-[#182234] hover:bg-[#1f2c42] text-slate-300 font-semibold cursor-pointer transition-colors"
+                  className="px-4 py-2 rounded-lg bg-surface-41 hover:bg-edge-19 text-slate-300 font-semibold cursor-pointer transition-colors"
                 >
                   Cancel
                 </button>

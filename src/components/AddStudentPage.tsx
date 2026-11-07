@@ -14,6 +14,7 @@ import {
   PlusCircle
 } from 'lucide-react';
 import { Student, ClassInfo } from '../types';
+import { withClassIdFromName } from '../utils/classExportHelper';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
 import { 
   BOY_AVATAR_URL, 
@@ -391,7 +392,8 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
       ? formData.photo 
       : getDefaultAvatarByGender(formData.gender);
 
-    onSave({
+    // Fix P0-3: stamp the stable classId of the selected class at save time.
+    onSave(withClassIdFromName({
       id: formData.id!.trim(),
       name: formData.name!.trim(),
       family: formData.family!.trim(),
@@ -406,7 +408,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
       admissionDate: formData.admissionDate || new Date().toISOString().slice(0, 10),
       isNewAdmission: editingStudent ? editingStudent.isNewAdmission : true,
       photo: finalPhoto
-    });
+    }, classes));
   };
 
   return (
@@ -494,7 +496,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
         {/* ========================================================================= */}
         {/* SECTION 1: PERSONAL INFORMATION (WITH GENDER SELECTION TRIGGERING DP)     */}
         {/* ========================================================================= */}
-        <div className="bg-[#121824] border border-[#212b3e] rounded-2xl p-6 shadow-xl space-y-4">
+        <div className="bg-surface-16 border border-[#212b3e] rounded-2xl p-6 shadow-xl space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-[#212d42]">
             <User className="w-4 h-4 text-emerald-400" />
             <h2 className="text-sm font-bold text-white">Personal Information</h2>
@@ -516,8 +518,8 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
                   }
                 }}
                 placeholder="e.g. Ayesha Khan"
-                className={`w-full bg-[#162032] text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border ${
-                  errors.name ? 'border-rose-500' : 'border-[#283852]'
+                className={`w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border ${
+                  errors.name ? 'border-rose-500' : 'border-edge-40'
                 } focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors`}
                 id="input-student-name"
               />
@@ -538,7 +540,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
                   className={`py-2 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                     formData.gender === 'Male'
                       ? 'bg-blue-600/25 border-blue-500 text-blue-300 shadow-md ring-1 ring-blue-500/50'
-                      : 'bg-[#162032] border-[#283852] text-slate-400 hover:text-white hover:border-slate-600'
+                      : 'bg-surface-36 border-edge-40 text-slate-400 hover:text-white hover:border-slate-600'
                   }`}
                   id="btn-gender-male"
                 >
@@ -552,7 +554,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
                   className={`py-2 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                     formData.gender === 'Female'
                       ? 'bg-pink-600/25 border-pink-500 text-pink-300 shadow-md ring-1 ring-pink-500/50'
-                      : 'bg-[#162032] border-[#283852] text-slate-400 hover:text-white hover:border-slate-600'
+                      : 'bg-surface-36 border-edge-40 text-slate-400 hover:text-white hover:border-slate-600'
                   }`}
                   id="btn-gender-female"
                 >
@@ -571,7 +573,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
                 <select
                   value={formData.bloodGroup || 'B+'}
                   onChange={(e) => setFormData({ ...formData, bloodGroup: e.target.value })}
-                  className="w-full appearance-none bg-[#162032] border border-[#283852] text-slate-100 text-sm rounded-lg px-3.5 py-2.5 pr-10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors cursor-pointer"
+                  className="w-full appearance-none bg-surface-36 border border-edge-40 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 pr-10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors cursor-pointer"
                   id="input-student-blood-group"
                 >
                   {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(bg => (
@@ -591,7 +593,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
                 <select
                   value={formData.status || 'Active'}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                  className="w-full appearance-none bg-[#162032] border border-[#283852] text-slate-100 text-sm rounded-lg px-3.5 py-2.5 pr-10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors cursor-pointer"
+                  className="w-full appearance-none bg-surface-36 border border-edge-40 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 pr-10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors cursor-pointer"
                   id="input-student-status"
                 >
                   <option value="Active">Active</option>
@@ -610,7 +612,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
                 type="date"
                 value={formData.admissionDate || ''}
                 onChange={(e) => setFormData({ ...formData, admissionDate: e.target.value })}
-                className="w-full bg-[#162032] border border-[#283852] text-slate-100 text-sm rounded-lg px-3.5 py-2.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                className="w-full bg-surface-36 border border-edge-40 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
                 id="input-student-admission-date"
               />
             </div>
@@ -620,7 +622,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
         {/* ========================================================================= */}
         {/* SECTION 2: ACADEMIC DETAILS & STRICT UNIQUE STUDENT ID ENFORCEMENT       */}
         {/* ========================================================================= */}
-        <div className="bg-[#121824] border border-[#212b3e] rounded-2xl p-6 shadow-xl space-y-4">
+        <div className="bg-surface-16 border border-[#212b3e] rounded-2xl p-6 shadow-xl space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-[#212d42]">
             <div className="flex items-center gap-2">
               <School className="w-4 h-4 text-purple-400" />
@@ -680,10 +682,10 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
                   }
                 }}
                 placeholder="e.g. S-00101"
-                className={`w-full bg-[#162032] text-slate-100 text-sm rounded-lg px-3.5 py-2.5 font-mono border ${
+                className={`w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 font-mono border ${
                   duplicateStudentConflict || errors.id 
                     ? 'border-rose-500 ring-1 ring-rose-500/50 bg-rose-950/20' 
-                    : 'border-[#283852]'
+                    : 'border-edge-40'
                 } focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors`}
                 id="input-student-id"
               />
@@ -726,8 +728,8 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
                       });
                     }
                   }}
-                  className={`w-full appearance-none bg-[#162032] border ${
-                    errors.class ? 'border-rose-500' : 'border-[#283852]'
+                  className={`w-full appearance-none bg-surface-36 border ${
+                    errors.class ? 'border-rose-500' : 'border-edge-40'
                   } text-slate-100 text-sm rounded-lg px-3.5 py-2.5 pr-10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors cursor-pointer`}
                   id="input-student-class"
                 >
@@ -758,8 +760,8 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
                       setErrors(prev => { const n = { ...prev }; delete n.section; return n; });
                     }
                   }}
-                  className={`w-full appearance-none bg-[#162032] border ${
-                    errors.section ? 'border-rose-500' : 'border-[#283852]'
+                  className={`w-full appearance-none bg-surface-36 border ${
+                    errors.section ? 'border-rose-500' : 'border-edge-40'
                   } text-slate-100 text-sm rounded-lg px-3.5 py-2.5 pr-10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors cursor-pointer`}
                   id="input-student-section"
                 >
@@ -781,7 +783,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
         {/* ========================================================================= */}
         {/* SECTION 3: GUARDIAN & FAMILY (DROPDOWN OR NEW + DUPLICATE CONFLICT NOTICE) */}
         {/* ========================================================================= */}
-        <div className="bg-[#121824] border border-[#212b3e] rounded-2xl p-6 shadow-xl space-y-4">
+        <div className="bg-surface-16 border border-[#212b3e] rounded-2xl p-6 shadow-xl space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#212d42]">
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-sky-400" />
@@ -789,7 +791,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
             </div>
 
             {/* Mode Toggle: Existing Family vs New Family */}
-            <div className="flex items-center bg-[#151e30] border border-[#22314a] rounded-lg p-0.5 text-xs">
+            <div className="flex items-center bg-surface-30 border border-[#22314a] rounded-lg p-0.5 text-xs">
               <button
                 type="button"
                 onClick={() => setFamilyMode('existing')}
@@ -829,7 +831,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
                 <select
                   value={selectedExistingFamilyCode}
                   onChange={(e) => handleSelectExistingFamily(e.target.value)}
-                  className="w-full appearance-none bg-[#162032] border border-[#283852] text-slate-100 text-sm rounded-lg px-3.5 py-2.5 pr-10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors cursor-pointer"
+                  className="w-full appearance-none bg-surface-36 border border-edge-40 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 pr-10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors cursor-pointer"
                   id="select-existing-family"
                 >
                   {existingFamilies.length === 0 ? (
@@ -876,8 +878,8 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
                   }
                 }}
                 placeholder="e.g. Tariq Mehmood"
-                className={`w-full bg-[#162032] text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border ${
-                  errors.family ? 'border-rose-500' : 'border-[#283852]'
+                className={`w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border ${
+                  errors.family ? 'border-rose-500' : 'border-edge-40'
                 } focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors`}
                 id="input-student-family"
               />
@@ -906,10 +908,10 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
                   }
                 }}
                 placeholder="e.g. F-0080"
-                className={`w-full bg-[#162032] text-slate-100 text-sm rounded-lg px-3.5 py-2.5 font-mono border ${
+                className={`w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 font-mono border ${
                   duplicateFamilyCodeConflict || errors.familyId
                     ? 'border-rose-500 ring-1 ring-rose-500/50 bg-rose-950/20'
-                    : 'border-[#283852]'
+                    : 'border-edge-40'
                 } focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors`}
                 id="input-student-family-id"
               />
@@ -934,8 +936,8 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
                     }
                   }}
                   placeholder="+92 300 1234567"
-                  className={`w-full bg-[#162032] text-slate-100 text-sm rounded-lg pl-9 pr-3.5 py-2.5 border ${
-                    errors.emergencyContact ? 'border-rose-500 ring-1 ring-rose-500/50' : 'border-[#283852]'
+                  className={`w-full bg-surface-36 text-slate-100 text-sm rounded-lg pl-9 pr-3.5 py-2.5 border ${
+                    errors.emergencyContact ? 'border-rose-500 ring-1 ring-rose-500/50' : 'border-edge-40'
                   } focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors`}
                   id="input-student-emergency-phone"
                   required
@@ -978,7 +980,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
                   <button
                     type="button"
                     onClick={handleSwitchToNewFamily}
-                    className="px-3 py-1.5 rounded-lg bg-[#141b2b] hover:bg-[#1a2538] border border-[#2a3a55] text-slate-200 text-xs font-semibold cursor-pointer transition-colors"
+                    className="px-3 py-1.5 rounded-lg bg-[#141b2b] hover:bg-surface-43 border border-[#2a3a55] text-slate-200 text-xs font-semibold cursor-pointer transition-colors"
                   >
                     Generate New Unique Family Code
                   </button>
@@ -989,7 +991,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
         </div>
 
         {/* Bottom Actions Bar */}
-        <div className="bg-[#121824] border border-[#212b3e] rounded-2xl p-4 shadow-xl flex items-center justify-end">
+        <div className="bg-surface-16 border border-[#212b3e] rounded-2xl p-4 shadow-xl flex items-center justify-end">
           <button
             type="submit"
             disabled={!!duplicateStudentConflict || !!duplicateFamilyCodeConflict}

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   ArrowLeft, 
   IdCard, 
@@ -43,6 +43,10 @@ import {
 import { Student, AttendanceRecord, AttendanceStatus, HolidayRecord } from '../types';
 import { getAvatarColor, getInitials } from '../data/initialStudents';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
+import { listPayments } from '../utils/paymentStore';
+import { loadAllLedgerItems } from '../utils/studentFeeLedgerHelper';
+import { getSchoolSettings } from '../utils/settingsHelper';
+import { monthKeyOf, monthLabelFromKey } from '../utils/dates';
 
 export interface FamilyData {
   familyId: string;
@@ -112,17 +116,20 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
 
   // Form states for modals
   const [formFamilyName, setFormFamilyName] = useState(family.familyName);
-  const [formGuardianCnic, setFormGuardianCnic] = useState(family.guardianCnic || '7647646475');
-  const [formPhone, setFormPhone] = useState(family.phone || '03356226026');
-  const [formWhatsapp, setFormWhatsapp] = useState(family.whatsapp || family.phone || '03356226026');
-  const [formEmail, setFormEmail] = useState(family.email || 'dfghgfd456@gmail.com');
-  const [formAddress, setFormAddress] = useState(family.address || 'House #14, Sector G-10, Islamabad');
-  const [formOccupation, setFormOccupation] = useState(family.guardianOccupation || 'Business');
+  // Fix P0-4: edit-form fields start from the family's REAL values only —
+  // never fabricated defaults (a made-up phone/CNIC/email/address would be
+  // saved back as if it were the family's own data).
+  const [formGuardianCnic, setFormGuardianCnic] = useState(family.guardianCnic || '');
+  const [formPhone, setFormPhone] = useState(family.phone || '');
+  const [formWhatsapp, setFormWhatsapp] = useState(family.whatsapp || family.phone || '');
+  const [formEmail, setFormEmail] = useState(family.email || '');
+  const [formAddress, setFormAddress] = useState(family.address || '');
+  const [formOccupation, setFormOccupation] = useState(family.guardianOccupation || '');
   const [formMotherName, setFormMotherName] = useState(family.motherName || '-');
   const [formMotherCnic, setFormMotherCnic] = useState(family.motherCnic || '-');
-  const [formMotherOccupation, setFormMotherOccupation] = useState(family.motherOccupation || 'Homemaker');
+  const [formMotherOccupation, setFormMotherOccupation] = useState(family.motherOccupation || '');
   const [formCaste, setFormCaste] = useState(family.caste || '-');
-  const [formReligion, setFormReligion] = useState(family.religion || 'Islam');
+  const [formReligion, setFormReligion] = useState(family.religion || '');
 
   // Fine form
   const [fineTitle, setFineTitle] = useState('Late Fee Clearance');
@@ -154,7 +161,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
   // Financial aggregates
   const financialTotals = useMemo(() => {
     const totalDue = family.students.reduce((sum, s) => sum + (s.totalDue ?? 0), 0);
-    const totalPaid = family.students.reduce((sum, s) => sum + (s.totalPaid ?? 40000), 0);
+    const totalPaid = family.students.reduce((sum, s) => sum + (s.totalPaid ?? 0), 0);
     return {
       totalDueFormatted: `${totalDue.toLocaleString()} PKR`,
       totalPaidFormatted: `${totalPaid.toLocaleString()} PKR`,
@@ -165,6 +172,124 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
 
   // Display name format: e.g. "gulzar, (F0080)"
   const displayName = `${family.familyName}, (${family.familyId})`;
+
+  // Fix P0-4: the Fee Timeline and Transactions tabs below render this
+  // family's REAL records — its children's fee-ledger items and its recorded
+  // payments from the payment store — or an honest empty state. (Previously
+  // both tabs showed hardcoded rows: a flat 10,000 PKR × children "bills
+  // history" with fixed receipt numbers/dates and invented transaction
+  // rows, identical for every family.)
+  const [feeDataVersion, setFeeDataVersion] = useState(0);
+  useEffect(() => {
+    const refresh = () => setFeeDataVersion(v => v + 1);
+    window.addEventListener('feeDataUpdated', refresh);
+    window.addEventListener('ledgerTransactionsUpdated', refresh);
+    return () => {
+      window.removeEventListener('feeDataUpdated', refresh);
+      window.removeEventListener('ledgerTransactionsUpdated', refresh);
+    };
+  }, []);
+
+  const fmtRecordDate = (iso: string) => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime())
+      ? iso
+      : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
+  // Real bills: the family's children's fee-ledger items, grouped by
+  // month + charge type, newest month first.
+  const familyFeeTimeline = useMemo(() => {
+    const ledgers = loadAllLedgerItems();
+    interface TimelineGroup {
+      key: string; monthKey: string; month: string; type: string;
+      total: number; paid: number; allPaid: boolean; anyPaid: boolean; childIds: Set<string>;
+    }
+    const groups = new Map<string, TimelineGroup>();
+    family.students.forEach(s => {
+      (ledgers[s.id] || []).forEach(item => {
+        const key = `${item.monthKey}|${item.type}`;
+        const g = groups.get(key) || {
+          key, monthKey: item.monthKey, month: item.month, type: item.type,
+          total: 0, paid: 0, allPaid: true, anyPaid: false, childIds: new Set<string>()
+        };
+        g.total += item.total;
+        g.paid += item.paidAmount;
+        if (item.status !== 'Paid') g.allPaid = false;
+        if (item.paidAmount > 0) g.anyPaid = true;
+        g.childIds.add(s.id);
+        groups.set(key, g);
+      });
+    });
+    return Array.from(groups.values())
+      .sort((a, b) => b.monthKey.localeCompare(a.monthKey))
+      .map(g => ({
+        key: g.key,
+        title: `${g.month} — ${g.type === 'Monthly Fee' ? 'Tuition Fee' : g.type} (All Children)`,
+        detail: `${g.childIds.size} child${g.childIds.size === 1 ? '' : 'ren'} • Paid ${g.paid.toLocaleString()} of ${g.total.toLocaleString()} PKR`,
+        amount: `${g.total.toLocaleString()} PKR`,
+        status: g.allPaid ? 'Paid' : g.anyPaid ? 'Partially Paid' : 'Unpaid'
+      }));
+    // feeDataVersion re-runs this after payments are recorded elsewhere.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [family.students, feeDataVersion]);
+
+  // Real transactions: payments recorded for this family (or any of its
+  // children) in the payment store, newest first. Voided payments excluded.
+  const familyTransactions = useMemo(() => {
+    const childIds = new Set(family.students.map(s => s.id));
+    const nameOf = (id: string) => family.students.find(s => s.id === id)?.name || id;
+    return listPayments()
+      .filter(p => !p.voidedAt && (p.familyId === family.familyId || p.studentIds.some(id => childIds.has(id))))
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .map(p => ({
+        id: p.receiptNo || p.id,
+        desc: p.note || `Fee payment — ${p.studentIds.map(nameOf).join(', ')}`,
+        children: p.studentIds.map(nameOf).join(', '),
+        method: p.method as string,
+        date: fmtRecordDate(p.date),
+        amt: `${p.amount.toLocaleString()} PKR`
+      }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [family, feeDataVersion]);
+
+  // Real per-family records for the Fines / Observations / Documents tabs
+  // (Fix #4b): these live on the children's own records — Add Fine, Add
+  // Observation and Upload Document all write to a child's finesList /
+  // observationsList / documentsList — so the family tabs aggregate those
+  // real lists across all children instead of rendering fixed sample rows.
+  const familyFines = useMemo(() => {
+    return family.students.flatMap(s =>
+      (s.finesList || []).map(f => ({ ...f, studentName: s.name, studentId: s.id }))
+    );
+  }, [family.students]);
+
+  const familyObservations = useMemo(() => {
+    return family.students.flatMap(s =>
+      (s.observationsList || []).map(o => ({ ...o, studentName: s.name }))
+    );
+  }, [family.students]);
+
+  const familyDocuments = useMemo(() => {
+    return family.students.flatMap(s =>
+      (s.documentsList || []).map(d => ({ ...d, studentName: s.name }))
+    );
+  }, [family.students]);
+
+  // Consolidated voucher dates (Fix P0-4): issued on the day it is generated;
+  // due on the school settings' challan due-day of this month (or next month
+  // if that day has already passed) — never fixed 'Sep 2026' constants.
+  // The voucher's letterhead and bank details come from the school's own
+  // settings record (Fix #4b) — never a hardcoded school identity.
+  const voucherSchool = getSchoolSettings();
+  const voucherIssueDate = new Date();
+  const voucherDueDate = (() => {
+    const dueDay = Math.min(28, Math.max(1, getSchoolSettings().challanDueDay || 10));
+    const due = new Date(voucherIssueDate.getFullYear(), voucherIssueDate.getMonth(), dueDay);
+    if (due <= voucherIssueDate) due.setMonth(due.getMonth() + 1);
+    return due;
+  })();
+  const fmtVoucherDate = (d: Date) => d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 
   const handleSaveFamily = (e: React.FormEvent) => {
     e.preventDefault();
@@ -310,7 +435,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
       {/* ======================================================== */}
       {/* 2. FAMILY IDENTITY BANNER & ACTIONS                    */}
       {/* ======================================================== */}
-      <div className="bg-[#101726] border border-[#1b273b] rounded-2xl p-5 mb-5 shadow-xl">
+      <div className="bg-surface-13 border border-edge-8 rounded-2xl p-5 mb-5 shadow-xl">
         <div className="flex flex-col gap-4">
           
           {/* Top Row: Picture/Logo + Name + Family ID */}
@@ -339,13 +464,13 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
           </div>
 
           {/* Action Features Row (Directly matching style of student profile action bar) */}
-          <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-[#182335]">
+          <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-edge-3">
             
             {/* 1. Edit Family */}
             <button
               type="button"
               onClick={() => setIsEditFamilyOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-[#141d2d] hover:bg-[#1a263a] border border-[#22334c] text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+              className="px-3 py-1.5 rounded-lg bg-surface-26 hover:bg-surface-44 border border-edge-30 text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
               id="btn-feature-edit-family"
             >
               <Edit3 className="w-3.5 h-3.5 text-slate-400" />
@@ -356,10 +481,10 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsWhatsAppOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-[#0e271c] hover:bg-[#123525] border border-[#25D366]/40 text-[#25D366] text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+              className="px-3 py-1.5 rounded-lg bg-[#0e271c] hover:bg-[#123525] border border-whatsapp/40 text-whatsapp text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
               id="btn-feature-send-whatsapp"
             >
-              <MessageCircle className="w-3.5 h-3.5 text-[#25D366]" />
+              <MessageCircle className="w-3.5 h-3.5 text-whatsapp" />
               <span>Send WhatsApp</span>
             </button>
 
@@ -367,7 +492,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsAddFineOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-[#141d2d] hover:bg-[#1a263a] border border-[#22334c] text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+              className="px-3 py-1.5 rounded-lg bg-surface-26 hover:bg-surface-44 border border-edge-30 text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
               id="btn-feature-add-fine"
             >
               <AlertCircle className="w-3.5 h-3.5 text-slate-400" />
@@ -378,7 +503,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsAddRecurringOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-[#141d2d] hover:bg-[#1a263a] border border-[#22334c] text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+              className="px-3 py-1.5 rounded-lg bg-surface-26 hover:bg-surface-44 border border-edge-30 text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
               id="btn-feature-add-recurring"
             >
               <Calendar className="w-3.5 h-3.5 text-slate-400" />
@@ -389,7 +514,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsUploadDocOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-[#141d2d] hover:bg-[#1a263a] border border-[#22334c] text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+              className="px-3 py-1.5 rounded-lg bg-surface-26 hover:bg-surface-44 border border-edge-30 text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
               id="btn-feature-upload-doc"
             >
               <UploadCloud className="w-3.5 h-3.5 text-slate-400" />
@@ -400,7 +525,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsPrintVoucherOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-[#141d2d] hover:bg-[#1a263a] border border-[#22334c] text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+              className="px-3 py-1.5 rounded-lg bg-surface-26 hover:bg-surface-44 border border-edge-30 text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
               id="btn-feature-print-voucher"
             >
               <Printer className="w-3.5 h-3.5 text-slate-400" />
@@ -411,7 +536,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsLetterPadOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-[#141d2d] hover:bg-[#1a263a] border border-[#22334c] text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+              className="px-3 py-1.5 rounded-lg bg-surface-26 hover:bg-surface-44 border border-edge-30 text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
               id="btn-feature-letter-pad"
             >
               <FileText className="w-3.5 h-3.5 text-slate-400" />
@@ -422,7 +547,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsAddObservationOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-[#141d2d] hover:bg-[#1a263a] border border-[#22334c] text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm ml-auto"
+              className="px-3 py-1.5 rounded-lg bg-surface-26 hover:bg-surface-44 border border-edge-30 text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm ml-auto"
               id="btn-feature-add-observation"
             >
               <BookOpen className="w-3.5 h-3.5 text-slate-400" />
@@ -440,7 +565,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
         
         {/* Total Due Card */}
         <div 
-          className="bg-[#101726] border border-[#1b273b] rounded-2xl p-4 sm:p-5 flex items-center justify-between shadow-lg"
+          className="bg-surface-13 border border-edge-8 rounded-2xl p-4 sm:p-5 flex items-center justify-between shadow-lg"
           id="kpi-card-total-due"
         >
           <div>
@@ -458,7 +583,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
 
         {/* Total Paid Card */}
         <div 
-          className="bg-[#101726] border border-[#1b273b] rounded-2xl p-4 sm:p-5 flex items-center justify-between shadow-lg"
+          className="bg-surface-13 border border-edge-8 rounded-2xl p-4 sm:p-5 flex items-center justify-between shadow-lg"
           id="kpi-card-total-paid"
         >
           <div>
@@ -479,15 +604,15 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
       {/* ======================================================== */}
       {/* 4. NAVIGATION TABS BAR                                   */}
       {/* ======================================================== */}
-      <div className="bg-[#101726] border border-[#1b273b] rounded-2xl p-1.5 mb-5 flex items-center overflow-x-auto gap-1 shadow-md">
+      <div className="bg-surface-13 border border-edge-8 rounded-2xl p-1.5 mb-5 flex items-center overflow-x-auto gap-1 shadow-md">
         
         <button
           type="button"
           onClick={() => setActiveTab('family-info')}
           className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'family-info'
-              ? 'bg-[#1a273e] text-white shadow-sm border border-[#2c3f61]'
-              : 'text-slate-400 hover:text-white hover:bg-[#141d2d]'
+              ? 'bg-surface-46 text-white shadow-sm border border-edge-42'
+              : 'text-slate-400 hover:text-white hover:bg-surface-26'
           }`}
           id="tab-family-info"
         >
@@ -499,8 +624,8 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
           onClick={() => setActiveTab('enrolled-students')}
           className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
             activeTab === 'enrolled-students'
-              ? 'bg-[#1a273e] text-white shadow-sm border border-[#2c3f61]'
-              : 'text-slate-400 hover:text-white hover:bg-[#141d2d]'
+              ? 'bg-surface-46 text-white shadow-sm border border-edge-42'
+              : 'text-slate-400 hover:text-white hover:bg-surface-26'
           }`}
           id="tab-enrolled-students"
         >
@@ -515,8 +640,8 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
           onClick={() => setActiveTab('fee-timeline')}
           className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'fee-timeline'
-              ? 'bg-[#1a273e] text-white shadow-sm border border-[#2c3f61]'
-              : 'text-slate-400 hover:text-white hover:bg-[#141d2d]'
+              ? 'bg-surface-46 text-white shadow-sm border border-edge-42'
+              : 'text-slate-400 hover:text-white hover:bg-surface-26'
           }`}
           id="tab-fee-timeline"
         >
@@ -528,8 +653,8 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
           onClick={() => setActiveTab('transactions')}
           className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'transactions'
-              ? 'bg-[#1a273e] text-white shadow-sm border border-[#2c3f61]'
-              : 'text-slate-400 hover:text-white hover:bg-[#141d2d]'
+              ? 'bg-surface-46 text-white shadow-sm border border-edge-42'
+              : 'text-slate-400 hover:text-white hover:bg-surface-26'
           }`}
           id="tab-transactions"
         >
@@ -541,8 +666,8 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
           onClick={() => setActiveTab('fines')}
           className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'fines'
-              ? 'bg-[#1a273e] text-white shadow-sm border border-[#2c3f61]'
-              : 'text-slate-400 hover:text-white hover:bg-[#141d2d]'
+              ? 'bg-surface-46 text-white shadow-sm border border-edge-42'
+              : 'text-slate-400 hover:text-white hover:bg-surface-26'
           }`}
           id="tab-fines"
         >
@@ -554,8 +679,8 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
           onClick={() => setActiveTab('recurring-payments')}
           className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'recurring-payments'
-              ? 'bg-[#1a273e] text-white shadow-sm border border-[#2c3f61]'
-              : 'text-slate-400 hover:text-white hover:bg-[#141d2d]'
+              ? 'bg-surface-46 text-white shadow-sm border border-edge-42'
+              : 'text-slate-400 hover:text-white hover:bg-surface-26'
           }`}
           id="tab-recurring-payments"
         >
@@ -567,8 +692,8 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
           onClick={() => setActiveTab('attendance')}
           className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'attendance'
-              ? 'bg-[#1a273e] text-white shadow-sm border border-[#2c3f61]'
-              : 'text-slate-400 hover:text-white hover:bg-[#141d2d]'
+              ? 'bg-surface-46 text-white shadow-sm border border-edge-42'
+              : 'text-slate-400 hover:text-white hover:bg-surface-26'
           }`}
           id="tab-attendance"
         >
@@ -580,8 +705,8 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
           onClick={() => setActiveTab('observations')}
           className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'observations'
-              ? 'bg-[#1a273e] text-white shadow-sm border border-[#2c3f61]'
-              : 'text-slate-400 hover:text-white hover:bg-[#141d2d]'
+              ? 'bg-surface-46 text-white shadow-sm border border-edge-42'
+              : 'text-slate-400 hover:text-white hover:bg-surface-26'
           }`}
           id="tab-observations"
         >
@@ -593,8 +718,8 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
           onClick={() => setActiveTab('documents')}
           className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'documents'
-              ? 'bg-[#1a273e] text-white shadow-sm border border-[#2c3f61]'
-              : 'text-slate-400 hover:text-white hover:bg-[#141d2d]'
+              ? 'bg-surface-46 text-white shadow-sm border border-edge-42'
+              : 'text-slate-400 hover:text-white hover:bg-surface-26'
           }`}
           id="tab-documents"
         >
@@ -613,18 +738,18 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
           
           {/* CONTAINER 1: ABOUT GUARDIAN */}
           <div 
-            className="bg-[#101726] border border-[#1b273b] rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col"
+            className="bg-surface-13 border border-edge-8 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col"
             id="container-about-guardian"
           >
             {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-[#182335] mb-3.5">
+            <div className="flex items-center justify-between pb-3 border-b border-edge-3 mb-3.5">
               <h3 className="text-sm font-bold text-white">
                 About Guardian
               </h3>
               <button
                 type="button"
                 onClick={() => setIsEditFamilyOpen(true)}
-                className="px-2.5 py-1 rounded-lg bg-[#141e2f] hover:bg-[#1c2a42] border border-[#22344f] text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-surface-28 hover:bg-surface-47 border border-edge-33 text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
                 id="btn-edit-about-guardian"
               >
                 <Edit3 className="w-3.5 h-3.5 text-slate-400" />
@@ -637,7 +762,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsPrintVoucherOpen(true)}
-                className="flex-1 py-1.5 px-2.5 rounded-lg bg-[#141e2f] hover:bg-[#1b2940] border border-[#22334e] text-slate-200 text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                className="flex-1 py-1.5 px-2.5 rounded-lg bg-surface-28 hover:bg-[#1b2940] border border-edge-32 text-slate-200 text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
                 id="btn-guardian-voucher"
               >
                 <FileText className="w-3.5 h-3.5 text-slate-400" />
@@ -646,7 +771,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsLetterPadOpen(true)}
-                className="flex-1 py-1.5 px-2.5 rounded-lg bg-[#141e2f] hover:bg-[#1b2940] border border-[#22334e] text-slate-200 text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                className="flex-1 py-1.5 px-2.5 rounded-lg bg-surface-28 hover:bg-[#1b2940] border border-edge-32 text-slate-200 text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
                 id="btn-guardian-letter"
               >
                 <FileBadge className="w-3.5 h-3.5 text-slate-400" />
@@ -656,7 +781,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
 
             {/* Information Rows */}
             <div className="space-y-2.5 text-xs">
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <Users className="w-3.5 h-3.5 text-slate-500" />
                   <span>Family ID</span>
@@ -664,7 +789,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                 <span className="text-purple-400 font-mono font-medium">{family.familyId}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <User className="w-3.5 h-3.5 text-slate-500" />
                   <span>Guardian Name</span>
@@ -672,31 +797,31 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium capitalize">{family.familyName}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <CreditCard className="w-3.5 h-3.5 text-slate-500" />
                   <span>Guardian CNIC</span>
                 </div>
-                <span className="text-slate-200 font-medium font-mono">{family.guardianCnic || '7647646475'}</span>
+                <span className="text-slate-200 font-medium font-mono">{family.guardianCnic || 'Not recorded'}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <ShieldCheck className="w-3.5 h-3.5 text-slate-500" />
                   <span>Guardian Occupation</span>
                 </div>
-                <span className="text-slate-200 font-medium">{family.guardianOccupation || 'lbr'}</span>
+                <span className="text-slate-200 font-medium">{family.guardianOccupation || 'Not recorded'}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <Heart className="w-3.5 h-3.5 text-slate-500" />
                   <span>Religion</span>
                 </div>
-                <span className="text-slate-200 font-medium">{family.religion || 'Islam'}</span>
+                <span className="text-slate-200 font-medium">{family.religion || 'Not recorded'}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <User className="w-3.5 h-3.5 text-slate-500" />
                   <span>Caste</span>
@@ -704,12 +829,12 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium">{family.caste || '-'}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <Phone className="w-3.5 h-3.5 text-slate-500" />
                   <span>Emergency Contact</span>
                 </div>
-                <span className="text-slate-200 font-medium font-mono">{family.phone || '03356226026'}</span>
+                <span className="text-slate-200 font-medium font-mono">{family.phone || 'Not recorded'}</span>
               </div>
 
               <div className="flex items-center justify-between py-1.5">
@@ -717,25 +842,25 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                   <FileText className="w-3.5 h-3.5 text-slate-500" />
                   <span>Note</span>
                 </div>
-                <span className="text-slate-200 font-medium">{family.notes || 'Verified Household'}</span>
+                <span className="text-slate-200 font-medium">{family.notes || 'Not recorded'}</span>
               </div>
             </div>
           </div>
 
           {/* CONTAINER 2: MOTHER & HOUSEHOLD */}
           <div 
-            className="bg-[#101726] border border-[#1b273b] rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col"
+            className="bg-surface-13 border border-edge-8 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col"
             id="container-mother-household"
           >
             {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-[#182335] mb-4">
+            <div className="flex items-center justify-between pb-3 border-b border-edge-3 mb-4">
               <h3 className="text-sm font-bold text-white">
                 Mother & Household
               </h3>
               <button
                 type="button"
                 onClick={() => setIsEditFamilyOpen(true)}
-                className="px-2.5 py-1 rounded-lg bg-[#141e2f] hover:bg-[#1c2a42] border border-[#22344f] text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-surface-28 hover:bg-surface-47 border border-edge-33 text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
                 id="btn-edit-mother"
               >
                 <Edit3 className="w-3.5 h-3.5 text-slate-400" />
@@ -745,7 +870,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
 
             {/* Information Rows */}
             <div className="space-y-3 text-xs">
-              <div className="flex items-center justify-between py-2 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-2 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <User className="w-3.5 h-3.5 text-slate-500" />
                   <span>Mother Name</span>
@@ -753,7 +878,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium">{family.motherName || '-'}</span>
               </div>
 
-              <div className="flex items-center justify-between py-2 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-2 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <CreditCard className="w-3.5 h-3.5 text-slate-500" />
                   <span>Mother CNIC</span>
@@ -761,15 +886,15 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium font-mono">{family.motherCnic || '-'}</span>
               </div>
 
-              <div className="flex items-center justify-between py-2 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-2 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <ShieldCheck className="w-3.5 h-3.5 text-slate-500" />
                   <span>Mother Occupation</span>
                 </div>
-                <span className="text-slate-200 font-medium">{family.motherOccupation || 'Homemaker'}</span>
+                <span className="text-slate-200 font-medium">{family.motherOccupation || 'Not recorded'}</span>
               </div>
 
-              <div className="flex items-center justify-between py-2 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-2 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <GraduationCap className="w-3.5 h-3.5 text-slate-500" />
                   <span>Enrolled Children</span>
@@ -782,25 +907,25 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                   <Calendar className="w-3.5 h-3.5 text-slate-500" />
                   <span>Account Established</span>
                 </div>
-                <span className="text-slate-200 font-medium">{family.students[0]?.admissionDate || '15/06/2026'}</span>
+                <span className="text-slate-200 font-medium">{family.students[0]?.admissionDate || 'Not recorded'}</span>
               </div>
             </div>
           </div>
 
           {/* CONTAINER 3: CONTACT & RESIDENCE */}
           <div 
-            className="bg-[#101726] border border-[#1b273b] rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col"
+            className="bg-surface-13 border border-edge-8 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col"
             id="container-contact-residence"
           >
             {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-[#182335] mb-4">
+            <div className="flex items-center justify-between pb-3 border-b border-edge-3 mb-4">
               <h3 className="text-sm font-bold text-white">
                 Contact & Residence
               </h3>
               <button
                 type="button"
                 onClick={() => setIsEditFamilyOpen(true)}
-                className="px-2.5 py-1 rounded-lg bg-[#141e2f] hover:bg-[#1c2a42] border border-[#22344f] text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-surface-28 hover:bg-surface-47 border border-edge-33 text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
                 id="btn-edit-contact"
               >
                 <Edit3 className="w-3.5 h-3.5 text-slate-400" />
@@ -810,31 +935,31 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
 
             {/* Information Rows */}
             <div className="space-y-2.5 text-xs">
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <Phone className="w-3.5 h-3.5 text-slate-500" />
                   <span>Phone Number</span>
                 </div>
-                <span className="text-slate-200 font-medium font-mono">{family.phone || '03356226026'}</span>
+                <span className="text-slate-200 font-medium font-mono">{family.phone || 'Not recorded'}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
-                  <MessageCircle className="w-3.5 h-3.5 text-[#25D366]" />
+                  <MessageCircle className="w-3.5 h-3.5 text-whatsapp" />
                   <span>Whatsapp</span>
                 </div>
-                <span className="text-slate-200 font-medium font-mono">{family.whatsapp || family.phone || '03356226026'}</span>
+                <span className="text-slate-200 font-medium font-mono">{family.whatsapp || family.phone || 'Not recorded'}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <Mail className="w-3.5 h-3.5 text-slate-500" />
                   <span>Email</span>
                 </div>
-                <span className="text-slate-200 font-medium">{family.email || 'dfghgfd456@gmail.com'}</span>
+                <span className="text-slate-200 font-medium">{family.email || 'Not recorded'}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <MapPin className="w-3.5 h-3.5 text-slate-500" />
                   <span>Address</span>
@@ -849,7 +974,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                   <Building2 className="w-3.5 h-3.5 text-slate-500" />
                   <span>City / Region</span>
                 </div>
-                <span className="text-slate-200 font-medium">Islamabad</span>
+                <span className="text-slate-200 font-medium">Not recorded</span>
               </div>
             </div>
           </div>
@@ -859,8 +984,8 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
 
       {/* TAB 2: ENROLLED STUDENTS */}
       {activeTab === 'enrolled-students' && (
-        <div className="bg-[#101726] border border-[#1b273b] rounded-2xl p-6 shadow-xl">
-          <div className="flex items-center justify-between pb-4 border-b border-[#182335] mb-5">
+        <div className="bg-surface-13 border border-edge-8 rounded-2xl p-6 shadow-xl">
+          <div className="flex items-center justify-between pb-4 border-b border-edge-3 mb-5">
             <div>
               <h3 className="text-base font-bold text-white">Enrolled Students in this Family</h3>
               <p className="text-slate-400 text-xs mt-0.5">
@@ -879,7 +1004,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                 <div
                   key={student.id}
                   onClick={() => onSelectStudent(student)}
-                  className="bg-[#141d2d] hover:bg-[#182336] border border-[#1f2b3e] hover:border-purple-500/50 rounded-xl p-4 transition-all duration-150 cursor-pointer group shadow-sm flex items-start justify-between gap-3"
+                  className="bg-surface-26 hover:bg-[#182336] border border-edge-17 hover:border-purple-500/50 rounded-xl p-4 transition-all duration-150 cursor-pointer group shadow-sm flex items-start justify-between gap-3"
                   id={`family-student-card-${student.id}`}
                 >
                   <div className="flex items-center gap-3.5">
@@ -913,7 +1038,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                           {student.status || 'Active'}
                         </span>
                         <span className="text-[11px] text-slate-400">
-                          Fee: {student.classFee || '10,000 PKR'}
+                          Fee: {student.classFee || 'Not set'}
                         </span>
                       </div>
                     </div>
@@ -923,7 +1048,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                     <button
                       type="button"
                       onClick={() => onOpenIdCardModal(student)}
-                      className="p-2 rounded-lg bg-[#1a2538] hover:bg-purple-600/20 text-slate-300 hover:text-purple-300 border border-[#27354d] text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                      className="p-2 rounded-lg bg-surface-43 hover:bg-purple-600/20 text-slate-300 hover:text-purple-300 border border-[#27354d] text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
                       title="View ID Card"
                     >
                       <IdCard className="w-3.5 h-3.5" />
@@ -947,8 +1072,8 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
 
       {/* TAB 3: FEE TIMELINE */}
       {activeTab === 'fee-timeline' && (
-        <div className="bg-[#101726] border border-[#1b273b] rounded-2xl p-6 shadow-xl text-xs">
-          <div className="flex items-center justify-between pb-4 border-b border-[#182335] mb-5">
+        <div className="bg-surface-13 border border-edge-8 rounded-2xl p-6 shadow-xl text-xs">
+          <div className="flex items-center justify-between pb-4 border-b border-edge-3 mb-5">
             <div>
               <h3 className="text-base font-bold text-white">Family Consolidated Fee Timeline</h3>
               <p className="text-slate-400 text-xs mt-0.5">Consolidated invoices and scheduled installments across all registered children</p>
@@ -964,25 +1089,32 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
           </div>
 
           <div className="space-y-3">
-            {[
-              { title: 'September 2026 Tuition Fee (All Children)', due: `${(10000 * family.students.length).toLocaleString()} PKR`, status: 'Paid', date: '05 Sep 2026', receipt: 'FAM-8841' },
-              { title: 'August 2026 Tuition Fee', due: `${(10000 * family.students.length).toLocaleString()} PKR`, status: 'Paid', date: '04 Aug 2026', receipt: 'FAM-7622' },
-              { title: 'July 2026 Tuition Fee', due: `${(10000 * family.students.length).toLocaleString()} PKR`, status: 'Paid', date: '02 Jul 2026', receipt: 'FAM-6910' },
-              { title: 'Registration & Annual Admission Charges', due: `${(10000 * family.students.length).toLocaleString()} PKR`, status: 'Paid', date: '15 Jun 2026', receipt: 'FAM-5401' }
-            ].map((f, i) => (
-              <div key={i} className="p-4 rounded-xl bg-[#141d2d] border border-[#1f2b3e] flex items-center justify-between">
+            {familyFeeTimeline.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 bg-surface-17 rounded-xl border border-edge-10">
+                <Coins className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+                <p className="text-sm font-semibold text-slate-200">No bills recorded yet</p>
+                <p className="text-xs text-slate-500 mt-1">Fee bills for this family's children will appear here once they have been generated.</p>
+              </div>
+            ) : familyFeeTimeline.map((f) => (
+              <div key={f.key} className="p-4 rounded-xl bg-surface-26 border border-edge-17 flex items-center justify-between">
                 <div className="flex items-center gap-3.5">
                   <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold">
                     <Coins className="w-4 h-4" />
                   </div>
                   <div>
                     <h4 className="font-semibold text-slate-100">{f.title}</h4>
-                    <p className="text-[11px] text-slate-400 mt-0.5">Cleared on {f.date} • Reference: {f.receipt}</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">{f.detail}</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className="font-bold text-white block text-sm">{f.due}</span>
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
+                  <span className="font-bold text-white block text-sm">{f.amount}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                    f.status === 'Paid'
+                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                      : f.status === 'Partially Paid'
+                      ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                      : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+                  }`}>
                     {f.status}
                   </span>
                 </div>
@@ -994,15 +1126,22 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
 
       {/* TAB 4: TRANSACTIONS */}
       {activeTab === 'transactions' && (
-        <div className="bg-[#101726] border border-[#1b273b] rounded-2xl p-6 shadow-xl text-xs">
+        <div className="bg-surface-13 border border-edge-8 rounded-2xl p-6 shadow-xl text-xs">
           <h3 className="text-base font-bold text-white mb-1">Family Financial Transactions Ledger</h3>
           <p className="text-slate-400 text-xs mb-4">Complete audit trail of all receipts, bank deposits, and cash vouchers</p>
 
+          {familyTransactions.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 bg-surface-17 rounded-xl border border-edge-10">
+              <FileText className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-slate-200">No transactions recorded yet</p>
+              <p className="text-xs text-slate-500 mt-1">Payments recorded for this family will appear here with their real receipt numbers, dates and amounts.</p>
+            </div>
+          ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-[#1b273b] text-slate-400 font-semibold uppercase text-[10px] tracking-wider bg-[#0c121e]">
-                  <th className="py-3 px-4">Transaction ID</th>
+                <tr className="border-b border-edge-8 text-slate-400 font-semibold uppercase text-[10px] tracking-wider bg-surface-6">
+                  <th className="py-3 px-4">Receipt No</th>
                   <th className="py-3 px-4">Description</th>
                   <th className="py-3 px-4">Children</th>
                   <th className="py-3 px-4">Method</th>
@@ -1010,17 +1149,12 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                   <th className="py-3 px-4 text-right">Amount</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#172234]">
-                {[
-                  { id: 'TXN-FAM-991', desc: 'Monthly Tuition Clearance', method: 'Cash Deposit', date: '05 Sep 2026', amt: '20,000 PKR' },
-                  { id: 'TXN-FAM-882', desc: 'August Monthly Fee Clearance', method: 'Bank Transfer (Meezan)', date: '04 Aug 2026', amt: '20,000 PKR' },
-                  { id: 'TXN-FAM-774', desc: 'July Tuition & Laboratory Fee', method: 'Online Portal', date: '02 Jul 2026', amt: '20,000 PKR' },
-                  { id: 'TXN-FAM-660', desc: 'Annual Admission & Registration', method: 'Bank Voucher', date: '15 Jun 2026', amt: '20,000 PKR' }
-                ].map((t) => (
+              <tbody className="divide-y divide-edge-1">
+                {familyTransactions.map((t) => (
                   <tr key={t.id} className="hover:bg-[#151e2f] transition-colors">
                     <td className="py-3 px-4 font-mono text-purple-400">{t.id}</td>
                     <td className="py-3 px-4 text-slate-200 font-medium">{t.desc}</td>
-                    <td className="py-3 px-4 text-slate-300">{family.students.map(s => s.name).join(', ')}</td>
+                    <td className="py-3 px-4 text-slate-300">{t.children}</td>
                     <td className="py-3 px-4 text-slate-400">{t.method}</td>
                     <td className="py-3 px-4 text-slate-400">{t.date}</td>
                     <td className="py-3 px-4 text-right font-bold text-white">{t.amt}</td>
@@ -1029,13 +1163,14 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
               </tbody>
             </table>
           </div>
+          )}
         </div>
       )}
 
       {/* TAB 5: FINES */}
       {activeTab === 'fines' && (
-        <div className="bg-[#101726] border border-[#1b273b] rounded-2xl p-6 shadow-xl text-xs">
-          <div className="flex items-center justify-between pb-4 border-b border-[#182335] mb-5">
+        <div className="bg-surface-13 border border-edge-8 rounded-2xl p-6 shadow-xl text-xs">
+          <div className="flex items-center justify-between pb-4 border-b border-edge-3 mb-5">
             <div>
               <h3 className="text-base font-bold text-white">Disciplinary & Administrative Fines</h3>
               <p className="text-slate-400 text-xs mt-0.5">Records of charges, late fee surcharges, and clearance status</p>
@@ -1050,18 +1185,41 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
             </button>
           </div>
 
-          <div className="p-8 text-center text-slate-400 bg-[#121927] rounded-xl border border-[#1e2739]">
-            <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
-            <p className="text-sm font-semibold text-slate-200">No Outstanding Fines</p>
-            <p className="text-xs text-slate-500 mt-1">This family has cleared all administrative charges on time.</p>
-          </div>
+          {familyFines.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 bg-surface-17 rounded-xl border border-edge-10">
+              <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-slate-200">No fines recorded</p>
+              <p className="text-xs text-slate-500 mt-1">No disciplinary or administrative fines have been recorded for this family's children.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {familyFines.map((f) => (
+                <div key={`${f.studentId}-${f.id}`} className="p-4 rounded-xl bg-surface-26 border border-edge-17 flex items-center justify-between">
+                  <div>
+                    <h4 className="font-semibold text-slate-100">{f.title}</h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">{f.studentName} • Issued: {fmtRecordDate(f.date)} • ID: {f.id}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-bold text-white block text-sm">{f.amount.toLocaleString()} PKR</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                      f.status === 'Paid'
+                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                        : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+                    }`}>
+                      {f.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
       {/* TAB 6: RECURRING PAYMENTS */}
       {activeTab === 'recurring-payments' && (
-        <div className="bg-[#101726] border border-[#1b273b] rounded-2xl p-6 shadow-xl text-xs">
-          <div className="flex items-center justify-between pb-4 border-b border-[#182335] mb-5">
+        <div className="bg-surface-13 border border-edge-8 rounded-2xl p-6 shadow-xl text-xs">
+          <div className="flex items-center justify-between pb-4 border-b border-edge-3 mb-5">
             <div>
               <h3 className="text-base font-bold text-white">Automated Recurring Charges</h3>
               <p className="text-slate-400 text-xs mt-0.5">Subscriptions for transport, food catering, laboratory, and sports clubs</p>
@@ -1076,30 +1234,18 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
             </button>
           </div>
 
-          <div className="p-4 rounded-xl bg-[#141d2d] border border-[#1f2b3e] flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center font-bold">
-                <Repeat className="w-4 h-4" />
-              </div>
-              <div>
-                <h4 className="font-semibold text-slate-100">School Van Transport Service</h4>
-                <p className="text-[11px] text-slate-400 mt-0.5">Route #4 • Covers all {family.students.length} children • 1st of every month</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <span className="font-bold text-white block text-sm">6,000 PKR / mo</span>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold">
-                Active
-              </span>
-            </div>
+          <div className="p-8 text-center text-slate-400 bg-surface-17 rounded-xl border border-edge-10">
+            <Repeat className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+            <p className="text-sm font-semibold text-slate-200">No recurring charges recorded</p>
+            <p className="text-xs text-slate-500 mt-1">No transport, catering, or club subscriptions have been recorded for this family. Monthly fee bills that have been generated appear under Fee Timeline.</p>
           </div>
         </div>
       )}
 
       {/* TAB 7: ATTENDANCE */}
       {activeTab === 'attendance' && (
-        <div className="bg-[#101726] border border-[#1b273b] rounded-2xl p-6 shadow-xl text-xs">
-          <div className="flex items-center justify-between pb-4 border-b border-[#182335] mb-5">
+        <div className="bg-surface-13 border border-edge-8 rounded-2xl p-6 shadow-xl text-xs">
+          <div className="flex items-center justify-between pb-4 border-b border-edge-3 mb-5">
             <div>
               <h3 className="text-base font-bold text-white">Family Attendance Overview</h3>
               <p className="text-slate-400 text-xs mt-0.5">Attendance rates and status across all registered children</p>
@@ -1114,7 +1260,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
               const rate = Math.round((presents / totalDays) * 100);
 
               return (
-                <div key={student.id} className="p-4 rounded-xl bg-[#141d2d] border border-[#1f2b3e] flex items-center justify-between">
+                <div key={student.id} className="p-4 rounded-xl bg-surface-26 border border-edge-17 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-blue-900/40 text-blue-300 font-bold flex items-center justify-center text-xs">
                       {getInitials(student.name)}
@@ -1126,7 +1272,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right">
-                      <span className="font-bold text-emerald-400 text-sm">96%</span>
+                      <span className="font-bold text-emerald-400 text-sm">{rate}%</span>
                       <span className="text-[10px] text-slate-400 block">Attendance Rate</span>
                     </div>
                     <button
@@ -1146,8 +1292,8 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
 
       {/* TAB 8: OBSERVATIONS */}
       {activeTab === 'observations' && (
-        <div className="bg-[#101726] border border-[#1b273b] rounded-2xl p-6 shadow-xl text-xs">
-          <div className="flex items-center justify-between pb-4 border-b border-[#182335] mb-5">
+        <div className="bg-surface-13 border border-edge-8 rounded-2xl p-6 shadow-xl text-xs">
+          <div className="flex items-center justify-between pb-4 border-b border-edge-3 mb-5">
             <div>
               <h3 className="text-base font-bold text-white">Family & Parent Meeting Observations</h3>
               <p className="text-slate-400 text-xs mt-0.5">Official notes from guardian meetings, academic consultations, and phone interactions</p>
@@ -1162,27 +1308,35 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
             </button>
           </div>
 
-          <div className="space-y-3">
-            <div className="p-4 rounded-xl bg-[#141d2d] border border-[#1f2b3e]">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-bold text-slate-200">Parent-Teacher Conference Observation</span>
-                <span className="text-[11px] text-slate-500">10 Sep 2026</span>
-              </div>
-              <p className="text-slate-300 leading-relaxed">
-                Guardian {family.familyName} visited the campus to review first-quarter results for all children. Expressed deep appreciation for faculty dedication and verified updated residential contact information.
-              </p>
-              <p className="text-[11px] text-slate-500 mt-2 italic">Recorded by: Administration Office</p>
+          {familyObservations.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 bg-surface-17 rounded-xl border border-edge-10">
+              <BookOpen className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-slate-200">No observations recorded yet</p>
+              <p className="text-xs text-slate-500 mt-1">Notes from guardian meetings, academic consultations, and phone interactions will appear here once recorded.</p>
             </div>
-          </div>
+          ) : (
+            <div className="space-y-3">
+              {familyObservations.map((o) => (
+                <div key={o.id} className="p-4 rounded-xl bg-surface-26 border border-edge-17">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-bold text-slate-200">{o.studentName}</span>
+                    <span className="text-[11px] text-slate-500">{fmtRecordDate(o.date)}</span>
+                  </div>
+                  <p className="text-slate-300 leading-relaxed">{o.note}</p>
+                  <p className="text-[11px] text-slate-500 mt-2 italic">Recorded by: {o.author}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
       {/* TAB 9: DOCUMENTS */}
       {activeTab === 'documents' && (
-        <div className="bg-[#101726] border border-[#1b273b] rounded-2xl p-6 shadow-xl text-xs">
-          <div className="flex items-center justify-between pb-4 border-b border-[#182335] mb-5">
+        <div className="bg-surface-13 border border-edge-8 rounded-2xl p-6 shadow-xl text-xs">
+          <div className="flex items-center justify-between pb-4 border-b border-edge-3 mb-5">
             <div>
-              <h3 className="text-base font-bold text-white">Family Verified Documents</h3>
+              <h3 className="text-base font-bold text-white">Family Documents</h3>
               <p className="text-slate-400 text-xs mt-0.5">National identity card copies, NADRA Family Registration Certificates, and affidavits</p>
             </div>
             <button
@@ -1195,32 +1349,36 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {[
-              { title: 'Guardian CNIC Front & Back Scans', type: 'CNIC Copy', date: '15 Jun 2026' },
-              { title: 'NADRA Family Registration Certificate (FRC)', type: 'B-Form / FRC', date: '15 Jun 2026' },
-              { title: 'Residential Utility Bill Affidavit', type: 'Address Proof', date: '18 Jun 2026' }
-            ].map((doc, i) => (
-              <div key={i} className="p-4 rounded-xl bg-[#141d2d] border border-[#1f2b3e] flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold">
-                    <FileText className="w-4 h-4" />
+          {familyDocuments.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 bg-surface-17 rounded-xl border border-edge-10">
+              <FileText className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-slate-200">No documents uploaded yet</p>
+              <p className="text-xs text-slate-500 mt-1">Documents uploaded for this family's children will appear here.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {familyDocuments.map((doc) => (
+                <div key={doc.id} className="p-4 rounded-xl bg-surface-26 border border-edge-17 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold">
+                      <FileText className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-slate-100">{doc.title}</h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">{doc.type} • {doc.studentName} • Uploaded on {fmtRecordDate(doc.date)}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="font-semibold text-slate-100">{doc.title}</h4>
-                    <p className="text-[11px] text-slate-400 mt-0.5">{doc.type} • Uploaded on {doc.date}</p>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => showToast(`Opening ${doc.title}`)}
+                    className="px-2.5 py-1 rounded bg-[#1f2b3d] hover:bg-[#2a3a52] text-slate-300 text-[11px] cursor-pointer"
+                  >
+                    View
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => showToast(`Opening ${doc.title}`)}
-                  className="px-2.5 py-1 rounded bg-[#1f2b3d] hover:bg-[#2a3a52] text-slate-300 text-[11px] cursor-pointer"
-                >
-                  View
-                </button>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -1231,8 +1389,8 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
       {/* MODAL 1: EDIT FAMILY */}
       {isEditFamilyOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-[#101726] border border-[#22334c] rounded-2xl w-full max-w-xl p-6 shadow-2xl animate-in zoom-in-95">
-            <div className="flex items-center justify-between pb-4 border-b border-[#1b273b] mb-4">
+          <div className="bg-surface-13 border border-edge-30 rounded-2xl w-full max-w-xl p-6 shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-4 border-b border-edge-8 mb-4">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <Edit3 className="w-4 h-4 text-purple-400" />
                 <span>Edit Family Information</span>
@@ -1254,7 +1412,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                     type="text"
                     value={formFamilyName}
                     onChange={(e) => setFormFamilyName(e.target.value)}
-                    className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white font-medium focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                    className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white font-medium focus:ring-1 focus:ring-purple-500 focus:outline-none"
                     required
                   />
                 </div>
@@ -1264,7 +1422,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                     type="text"
                     value={formGuardianCnic}
                     onChange={(e) => setFormGuardianCnic(e.target.value)}
-                    className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white font-mono focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                    className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white font-mono focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
               </div>
@@ -1276,7 +1434,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                     type="text"
                     value={formPhone}
                     onChange={(e) => setFormPhone(e.target.value)}
-                    className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white font-mono focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                    className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white font-mono focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
                 <div>
@@ -1285,7 +1443,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                     type="text"
                     value={formWhatsapp}
                     onChange={(e) => setFormWhatsapp(e.target.value)}
-                    className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white font-mono focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                    className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white font-mono focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
               </div>
@@ -1297,7 +1455,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                     type="email"
                     value={formEmail}
                     onChange={(e) => setFormEmail(e.target.value)}
-                    className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                    className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
                 <div>
@@ -1306,7 +1464,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                     type="text"
                     value={formOccupation}
                     onChange={(e) => setFormOccupation(e.target.value)}
-                    className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                    className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
               </div>
@@ -1317,7 +1475,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                   type="text"
                   value={formAddress}
                   onChange={(e) => setFormAddress(e.target.value)}
-                  className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                  className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
                 />
               </div>
 
@@ -1328,7 +1486,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                     type="text"
                     value={formMotherName}
                     onChange={(e) => setFormMotherName(e.target.value)}
-                    className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                    className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
                 <div>
@@ -1337,7 +1495,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                     type="text"
                     value={formReligion}
                     onChange={(e) => setFormReligion(e.target.value)}
-                    className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                    className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
                 <div>
@@ -1346,16 +1504,16 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                     type="text"
                     value={formCaste}
                     onChange={(e) => setFormCaste(e.target.value)}
-                    className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                    className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-[#1b273b]">
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-edge-8">
                 <button
                   type="button"
                   onClick={() => setIsEditFamilyOpen(false)}
-                  className="px-4 py-2 rounded-lg bg-[#141d2b] hover:bg-[#1a2538] text-slate-300 font-medium cursor-pointer"
+                  className="px-4 py-2 rounded-lg bg-surface-24 hover:bg-surface-43 text-slate-300 font-medium cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -1374,10 +1532,10 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
       {/* MODAL 2: SEND WHATSAPP */}
       {isWhatsAppOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#101726] border border-[#22334c] rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95 text-xs">
-            <div className="flex items-center justify-between pb-3 border-b border-[#1b273b] mb-4">
+          <div className="bg-surface-13 border border-edge-30 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95 text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-edge-8 mb-4">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <MessageCircle className="w-5 h-5 text-[#25D366]" />
+                <MessageCircle className="w-5 h-5 text-whatsapp" />
                 <span>Send WhatsApp to Guardian</span>
               </h3>
               <button 
@@ -1396,7 +1554,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                   type="text"
                   value={formWhatsapp}
                   readOnly
-                  className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white font-mono"
+                  className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white font-mono"
                 />
               </div>
 
@@ -1405,16 +1563,16 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                 <textarea
                   rows={4}
                   defaultValue={`Dear ${family.familyName},\n\nThis is an official communication from School Administration regarding your children enrolled with us. Please feel free to reach out with any inquiries.`}
-                  className="w-full bg-[#162032] border border-[#24344d] rounded-lg p-3 text-white leading-relaxed focus:outline-none"
+                  className="w-full bg-surface-36 border border-edge-34 rounded-lg p-3 text-white leading-relaxed focus:outline-none"
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-[#1b273b] mt-4">
+            <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-edge-8 mt-4">
               <button
                 type="button"
                 onClick={() => setIsWhatsAppOpen(false)}
-                className="px-3.5 py-1.5 rounded-lg bg-[#141d2b] hover:bg-[#1a2538] text-slate-300 font-medium"
+                className="px-3.5 py-1.5 rounded-lg bg-surface-24 hover:bg-surface-43 text-slate-300 font-medium"
               >
                 Cancel
               </button>
@@ -1426,7 +1584,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                   showToast('Redirecting to WhatsApp Web...');
                   setIsWhatsAppOpen(false);
                 }}
-                className="px-4 py-1.5 rounded-lg bg-[#25D366] hover:bg-[#20b858] text-slate-950 font-bold flex items-center gap-1.5 shadow"
+                className="px-4 py-1.5 rounded-lg bg-whatsapp hover:bg-[#20b858] text-slate-950 font-bold flex items-center gap-1.5 shadow"
               >
                 <span>Launch WhatsApp</span>
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -1439,8 +1597,8 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
       {/* MODAL 3: ADD FINE */}
       {isAddFineOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#101726] border border-[#22334c] rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95 text-xs">
-            <div className="flex items-center justify-between pb-3 border-b border-[#1b273b] mb-4">
+          <div className="bg-surface-13 border border-edge-30 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95 text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-edge-8 mb-4">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <AlertCircle className="w-5 h-5 text-red-400" />
                 <span>Add Fine to Family Account</span>
@@ -1460,7 +1618,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                 <select
                   value={fineStudentId}
                   onChange={(e) => setFineStudentId(e.target.value)}
-                  className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white"
+                  className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white"
                 >
                   {family.students.map(s => (
                     <option key={s.id} value={s.id}>{s.name} ({s.id})</option>
@@ -1474,7 +1632,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                   type="text"
                   value={fineTitle}
                   onChange={(e) => setFineTitle(e.target.value)}
-                  className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white"
+                  className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white"
                 />
               </div>
 
@@ -1484,16 +1642,16 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                   type="number"
                   value={fineAmount}
                   onChange={(e) => setFineAmount(e.target.value)}
-                  className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white font-mono"
+                  className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white font-mono"
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-[#1b273b] mt-4">
+            <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-edge-8 mt-4">
               <button
                 type="button"
                 onClick={() => setIsAddFineOpen(false)}
-                className="px-3.5 py-1.5 rounded-lg bg-[#141d2b] hover:bg-[#1a2538] text-slate-300 font-medium"
+                className="px-3.5 py-1.5 rounded-lg bg-surface-24 hover:bg-surface-43 text-slate-300 font-medium"
               >
                 Cancel
               </button>
@@ -1512,8 +1670,8 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
       {/* MODAL 4: ADD RECURRING PAYMENT */}
       {isAddRecurringOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#101726] border border-[#22334c] rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95 text-xs">
-            <div className="flex items-center justify-between pb-3 border-b border-[#1b273b] mb-4">
+          <div className="bg-surface-13 border border-edge-30 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95 text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-edge-8 mb-4">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-sky-400" />
                 <span>Add Recurring Payment</span>
@@ -1534,7 +1692,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                   type="text"
                   value={recurringTitle}
                   onChange={(e) => setRecurringTitle(e.target.value)}
-                  className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white"
+                  className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white"
                 />
               </div>
 
@@ -1544,16 +1702,16 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                   type="number"
                   value={recurringAmount}
                   onChange={(e) => setRecurringAmount(e.target.value)}
-                  className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white font-mono"
+                  className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white font-mono"
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-[#1b273b] mt-4">
+            <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-edge-8 mt-4">
               <button
                 type="button"
                 onClick={() => setIsAddRecurringOpen(false)}
-                className="px-3.5 py-1.5 rounded-lg bg-[#141d2b] hover:bg-[#1a2538] text-slate-300 font-medium"
+                className="px-3.5 py-1.5 rounded-lg bg-surface-24 hover:bg-surface-43 text-slate-300 font-medium"
               >
                 Cancel
               </button>
@@ -1572,8 +1730,8 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
       {/* MODAL 5: UPLOAD DOCUMENT */}
       {isUploadDocOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#101726] border border-[#22334c] rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95 text-xs">
-            <div className="flex items-center justify-between pb-3 border-b border-[#1b273b] mb-4">
+          <div className="bg-surface-13 border border-edge-30 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95 text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-edge-8 mb-4">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <UploadCloud className="w-5 h-5 text-blue-400" />
                 <span>Upload Family Document</span>
@@ -1593,7 +1751,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                 <select
                   value={docType}
                   onChange={(e) => setDocType(e.target.value)}
-                  className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white"
+                  className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white"
                 >
                   <option value="Family B-Form">Family B-Form</option>
                   <option value="Guardian CNIC">Guardian CNIC</option>
@@ -1609,22 +1767,22 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                   placeholder="e.g. NADRA Verified CNIC"
                   value={docTitle}
                   onChange={(e) => setDocTitle(e.target.value)}
-                  className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white"
+                  className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white"
                 />
               </div>
 
-              <div className="border-2 border-dashed border-[#24344d] rounded-xl p-5 text-center bg-[#131b29]">
+              <div className="border-2 border-dashed border-edge-34 rounded-xl p-5 text-center bg-[#131b29]">
                 <UploadCloud className="w-8 h-8 text-blue-400 mx-auto mb-2" />
                 <p className="text-slate-300 font-medium">Click to select or drag and drop file</p>
                 <p className="text-[10px] text-slate-500 mt-1">PDF, JPG, PNG up to 10MB</p>
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-[#1b273b] mt-4">
+            <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-edge-8 mt-4">
               <button
                 type="button"
                 onClick={() => setIsUploadDocOpen(false)}
-                className="px-3.5 py-1.5 rounded-lg bg-[#141d2b] hover:bg-[#1a2538] text-slate-300 font-medium"
+                className="px-3.5 py-1.5 rounded-lg bg-surface-24 hover:bg-surface-43 text-slate-300 font-medium"
               >
                 Cancel
               </button>
@@ -1643,8 +1801,8 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
       {/* MODAL 6: LETTER PAD */}
       {isLetterPadOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#101726] border border-[#22334c] rounded-2xl w-full max-w-xl p-6 shadow-2xl animate-in zoom-in-95 text-xs">
-            <div className="flex items-center justify-between pb-3 border-b border-[#1b273b] mb-4">
+          <div className="bg-surface-13 border border-edge-30 rounded-2xl w-full max-w-xl p-6 shadow-2xl animate-in zoom-in-95 text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-edge-8 mb-4">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <FileText className="w-5 h-5 text-purple-400" />
                 <span>Create Official Letter Pad</span>
@@ -1665,7 +1823,7 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                   type="text"
                   value={letterSubject}
                   onChange={(e) => setLetterSubject(e.target.value)}
-                  className="w-full bg-[#162032] border border-[#24344d] rounded-lg px-3 py-2 text-white font-medium"
+                  className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white font-medium"
                 />
               </div>
 
@@ -1675,16 +1833,16 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                   rows={6}
                   value={letterBody}
                   onChange={(e) => setLetterBody(e.target.value)}
-                  className="w-full bg-[#162032] border border-[#24344d] rounded-lg p-3 text-white leading-relaxed"
+                  className="w-full bg-surface-36 border border-edge-34 rounded-lg p-3 text-white leading-relaxed"
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-[#1b273b] mt-4">
+            <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-edge-8 mt-4">
               <button
                 type="button"
                 onClick={() => setIsLetterPadOpen(false)}
-                className="px-3.5 py-1.5 rounded-lg bg-[#141d2b] hover:bg-[#1a2538] text-slate-300 font-medium"
+                className="px-3.5 py-1.5 rounded-lg bg-surface-24 hover:bg-surface-43 text-slate-300 font-medium"
               >
                 Close
               </button>
@@ -1707,8 +1865,8 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
       {/* MODAL 7: ADD OBSERVATION */}
       {isAddObservationOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#101726] border border-[#22334c] rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95 text-xs">
-            <div className="flex items-center justify-between pb-3 border-b border-[#1b273b] mb-4">
+          <div className="bg-surface-13 border border-edge-30 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95 text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-edge-8 mb-4">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-indigo-400" />
                 <span>Add Meeting Observation</span>
@@ -1729,16 +1887,16 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                   rows={4}
                   value={observationText}
                   onChange={(e) => setObservationText(e.target.value)}
-                  className="w-full bg-[#162032] border border-[#24344d] rounded-lg p-3 text-white leading-relaxed"
+                  className="w-full bg-surface-36 border border-edge-34 rounded-lg p-3 text-white leading-relaxed"
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-[#1b273b] mt-4">
+            <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-edge-8 mt-4">
               <button
                 type="button"
                 onClick={() => setIsAddObservationOpen(false)}
-                className="px-3.5 py-1.5 rounded-lg bg-[#141d2b] hover:bg-[#1a2538] text-slate-300 font-medium"
+                className="px-3.5 py-1.5 rounded-lg bg-surface-24 hover:bg-surface-43 text-slate-300 font-medium"
               >
                 Cancel
               </button>
@@ -1789,11 +1947,13 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
               {/* Header */}
               <div className="text-center pb-3 border-b-2 border-slate-800">
                 <h2 className="text-xl font-extrabold tracking-tight text-slate-900 uppercase">
-                  Islamabad Model International School
+                  {voucherSchool.schoolName}
                 </h2>
-                <p className="text-xs text-slate-600">Main Campus, Sector H-8/4, Islamabad • Ph: +92 51 9283741</p>
+                <p className="text-xs text-slate-600">
+                  {voucherSchool.campusName}{voucherSchool.schoolAddress ? `, ${voucherSchool.schoolAddress}` : ''}{voucherSchool.schoolPhone ? ` • Ph: ${voucherSchool.schoolPhone}` : ''}
+                </p>
                 <div className="inline-block mt-2 px-3 py-0.5 bg-slate-900 text-white font-bold text-[11px] rounded tracking-wider uppercase">
-                  Consolidated Family Fee Bill • Month: Sep 2026
+                  Consolidated Family Fee Bill • Month: {monthLabelFromKey(monthKeyOf())}
                 </div>
               </div>
 
@@ -1802,12 +1962,12 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                 <div>
                   <p className="text-slate-500">Family ID: <span className="font-bold text-slate-900 font-mono">{family.familyId}</span></p>
                   <p className="text-slate-500">Guardian Name: <span className="font-bold text-slate-900 capitalize">{family.familyName}</span></p>
-                  <p className="text-slate-500">CNIC: <span className="font-bold text-slate-900 font-mono">{family.guardianCnic || '7647646475'}</span></p>
+                  <p className="text-slate-500">CNIC: <span className="font-bold text-slate-900 font-mono">{family.guardianCnic || 'Not recorded'}</span></p>
                 </div>
                 <div className="text-right">
-                  <p className="text-slate-500">Voucher No: <span className="font-bold text-slate-900 font-mono">VCH-2026-9081</span></p>
-                  <p className="text-slate-500">Issue Date: <span className="font-bold text-slate-900">01 Sep 2026</span></p>
-                  <p className="text-slate-500">Due Date: <span className="font-bold text-red-600 font-semibold">15 Sep 2026</span></p>
+                  <p className="text-slate-500">Voucher No: <span className="font-bold text-slate-900 font-mono">{`VCH-${family.familyId}-${monthKeyOf().replace('-', '')}`}</span></p>
+                  <p className="text-slate-500">Issue Date: <span className="font-bold text-slate-900">{fmtVoucherDate(voucherIssueDate)}</span></p>
+                  <p className="text-slate-500">Due Date: <span className="font-bold text-red-600 font-semibold">{fmtVoucherDate(voucherDueDate)}</span></p>
                 </div>
               </div>
 
@@ -1828,12 +1988,12 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
                         <td className="py-2 px-3 font-semibold capitalize">{s.name}</td>
                         <td className="py-2 px-3 font-mono">{s.id}</td>
                         <td className="py-2 px-3">{s.class} ({s.section})</td>
-                        <td className="py-2 px-3 text-right font-medium">{s.classFee || '10,000 PKR'}</td>
+                        <td className="py-2 px-3 text-right font-medium">{s.classFee || '—'}</td>
                       </tr>
                     ))}
                     <tr className="bg-slate-50 font-bold text-slate-900">
                       <td colSpan={3} className="py-2 px-3 text-right uppercase">Net Total Payable:</td>
-                      <td className="py-2 px-3 text-right text-purple-700 text-sm">{financialTotals.totalPaidFormatted}</td>
+                      <td className="py-2 px-3 text-right text-purple-700 text-sm">{financialTotals.totalDueFormatted}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1843,8 +2003,11 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
               <div className="pt-2 border-t border-slate-300 text-[11px] text-slate-500 flex items-center justify-between">
                 <div>
                   <p className="font-semibold text-slate-700">Bank Accounts for Payment:</p>
-                  <p>Meezan Bank A/C: 0102-39847120938</p>
-                  <p>HBL A/C: 0042-99812401823</p>
+                  {voucherSchool.accountNumber ? (
+                    <p>{voucherSchool.bankName} A/C: {voucherSchool.accountNumber}{voucherSchool.branchName ? ` • ${voucherSchool.branchName}` : ''}</p>
+                  ) : (
+                    <p>Bank details not recorded — please contact the school office.</p>
+                  )}
                 </div>
                 <div className="text-center">
                   <div className="w-32 h-10 border-b border-slate-400 mb-1" />

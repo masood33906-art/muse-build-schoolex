@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Student, ClassInfo } from '../types';
 import { downloadSampleCSVTemplate, parseCSVToStudents, CSVParseResult } from '../utils/csvHelper';
+import { backfillStudentClassIds } from '../utils/classExportHelper';
 
 interface BulkUploadModalProps {
   isOpen: boolean;
@@ -124,7 +125,9 @@ export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({
 
   const handleConfirmImport = () => {
     if (!parsedData || !allPrerequisitesMet) return;
-    onImportStudents(parsedData.students, importMode);
+    // Fix P0-3: CSV rows reference classes by NAME — stamp each row with the
+    // stable classId of the matching class record before handing them over.
+    onImportStudents(backfillStudentClassIds(parsedData.students, classes), importMode);
     handleClearFile();
     onClose();
   };
@@ -136,7 +139,7 @@ export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({
         id="modal-bulk-upload"
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#232d42] flex items-center justify-between bg-[#171f2e]">
+        <div className="px-6 py-4 border-b border-edge-22 flex items-center justify-between bg-[#171f2e]">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
               <UploadCloud className="w-4 h-4" />
@@ -160,7 +163,7 @@ export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {/* System Prerequisites Status Banner */}
-          <div className="bg-[#151e30] border border-[#263650] rounded-xl p-4 space-y-2.5">
+          <div className="bg-surface-30 border border-[#263650] rounded-xl p-4 space-y-2.5">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <School className="w-4 h-4 text-blue-400 shrink-0" />
@@ -226,7 +229,7 @@ export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({
           </div>
 
           {/* Sample CSV Download Box */}
-          <div className="bg-[#182232] border border-[#26354d] rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="bg-surface-40 border border-edge-37 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shrink-0">
                 <FileSpreadsheet className="w-4 h-4" />
@@ -290,9 +293,9 @@ export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({
               </p>
             </div>
           ) : (
-            <div className="bg-[#182232] border border-[#26354d] rounded-xl p-4 space-y-4">
+            <div className="bg-surface-40 border border-edge-37 rounded-xl p-4 space-y-4">
               {/* File Info Banner */}
-              <div className="flex items-center justify-between pb-3 border-b border-[#232d42]">
+              <div className="flex items-center justify-between pb-3 border-b border-edge-22">
                 <div className="flex items-center gap-3">
                   <FileText className={`w-6 h-6 ${allPrerequisitesMet ? 'text-emerald-400' : 'text-rose-400'}`} />
                   <div>
@@ -463,9 +466,9 @@ export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({
                     )}
                   </div>
 
-                  <div className="max-h-48 overflow-y-auto overflow-x-auto border border-[#232d42] rounded-lg">
+                  <div className="max-h-48 overflow-y-auto overflow-x-auto border border-edge-22 rounded-lg">
                     <table className="w-full text-left text-xs text-slate-300">
-                      <thead className="bg-[#141a27] text-slate-400 sticky top-0 border-b border-[#232d42]">
+                      <thead className="bg-[#141a27] text-slate-400 sticky top-0 border-b border-edge-22">
                         <tr>
                           <th className="py-2 px-3">ID</th>
                           <th className="py-2 px-3">Name</th>
@@ -530,7 +533,7 @@ export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({
                   )}
 
                   {/* Mode Selector */}
-                  <div className="mt-4 pt-4 border-t border-[#232d42] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="mt-4 pt-4 border-t border-edge-22 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                     <span className="text-xs font-semibold text-slate-300">
                       Import Destination Mode:
                     </span>
@@ -541,7 +544,7 @@ export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({
                         className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all ${
                           importMode === 'append'
                             ? 'bg-blue-600 text-white font-semibold'
-                            : 'bg-[#141b29] text-slate-400 hover:text-white border border-[#232d42]'
+                            : 'bg-[#141b29] text-slate-400 hover:text-white border border-edge-22'
                         }`}
                       >
                         Append to existing ({currentStudentCount})
@@ -552,7 +555,7 @@ export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({
                         className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all ${
                           importMode === 'replace'
                             ? 'bg-rose-600 text-white font-semibold'
-                            : 'bg-[#141b29] text-slate-400 hover:text-white border border-[#232d42]'
+                            : 'bg-[#141b29] text-slate-400 hover:text-white border border-edge-22'
                         }`}
                       >
                         Replace all records
@@ -566,7 +569,7 @@ export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3.5 bg-[#171f2e] border-t border-[#232d42] flex items-center justify-between">
+        <div className="px-6 py-3.5 bg-[#171f2e] border-t border-edge-22 flex items-center justify-between">
           <button
             type="button"
             onClick={onClose}

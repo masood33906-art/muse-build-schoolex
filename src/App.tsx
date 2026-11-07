@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Users, 
   IdCard, 
@@ -77,11 +77,12 @@ import { generateAllIdCards, DEFAULT_SCHOOL, createStudentRegistryPdfDoc, create
 import { generateAllStaffIdCards } from './utils/staffPdfGenerator';
 import { exportStaffToCSV } from './utils/staffCsvHelper';
 import { ensureUniqueStudentIds } from './utils/studentSanitizer';
+import { backfillStudentClassIds, withClassIdFromName } from './utils/classExportHelper';
 import { ATTENDANCE_STORAGE_KEY, loadAttendance } from './utils/attendanceHelper';
 import { ensureAllLedgers } from './utils/studentFeeLedgerHelper';
 import { migrateFeesV2 } from './utils/migrations/migrateFeesV2';
 import { disburseSalary, owedMonthsOf, migrateStaffPayStatusV1 } from './utils/payrollService';
-import { DEMO, loadJSON, saveJSON } from './utils/storage';
+import { DEMO, loadJSON, saveJSON, hydrationPromise, isHydrated } from './utils/storage';
 import { StorageFaultScreen } from './components/StorageFaultScreen';
 import { downloadBackup } from './utils/backup';
 import { shrinkDataURL } from './utils/image';
@@ -147,11 +148,26 @@ export default function App() {
     return () => window.removeEventListener('storageError', h);
   }, []);
 
+  // Fix P1-1: save/persist effects stay disarmed until backend hydration
+  // has been applied to localStorage. main.tsx already gates the first
+  // render on hydration, so normally this is true from the first paint;
+  // in the timeout path (backend slower than 3s) the app opened on the
+  // local fallback, and the reload effect further down swaps state to the
+  // hydrated copy when hydration lands — until then nothing may persist,
+  // so stale state can never overwrite the server's fuller copy.
+  const [hydrated, setHydrated] = useState<boolean>(() => isHydrated());
+  const openedBeforeHydration = useRef(!isHydrated());
+
   // ==========================================
   // STUDENT MODULE STATE & PERSISTENCE
   // ==========================================
   const [students, setStudents] = useState<Student[]>(() =>
-    ensureUniqueStudentIds(loadJSON<Student[]>(STUDENT_STORAGE_KEY, DEMO ? INITIAL_STUDENTS : [], Array.isArray as (v: unknown) => v is Student[]))
+    // Fix P0-3: backfill stable classIds onto legacy name-only student
+    // records at load, matched against the classes loaded just above.
+    backfillStudentClassIds(
+      ensureUniqueStudentIds(loadJSON<Student[]>(STUDENT_STORAGE_KEY, DEMO ? INITIAL_STUDENTS : [], Array.isArray as (v: unknown) => v is Student[])),
+      classes
+    )
   );
 
   const [studentFilters, setStudentFilters] = useState<FilterState>({
@@ -209,20 +225,32 @@ export default function App() {
     sectionName: 'Students'
   });
 
-  // Sync Students to localStorage
+  // Sync Students to localStorage (disarmed until hydrated — Fix P1-1)
   useEffect(() => {
+    if (!hydrated) return;
     saveJSON(STUDENT_STORAGE_KEY, students);
-  }, [students]);
+  }, [students, hydrated]);
 
-  // Sync Classes to localStorage
+  // Fix P0-3: whenever the classes list changes (class created, imported
+  // data replaced, ...), backfill classIds onto any student still carrying
+  // only a class NAME that now matches a class. Students whose name matches
+  // no class keep classId unset. backfillStudentClassIds returns the same
+  // array reference when nothing changes, so this cannot loop.
   useEffect(() => {
-    saveJSON(CLASSES_STORAGE_KEY, classes);
+    setStudents(prev => backfillStudentClassIds(prev, classes));
   }, [classes]);
 
+  // Sync Classes to localStorage (disarmed until hydrated — Fix P1-1)
   useEffect(() => {
+    if (!hydrated) return;
+    saveJSON(CLASSES_STORAGE_KEY, classes);
+  }, [classes, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;   // derives + persists ledger data: wait for hydrated state (Fix P1-1)
     ensureAllLedgers(students, classes);
     migrateFeesV2(students);
-  }, [students, classes]);
+  }, [students, classes, hydrated]);
   useEffect(() => {   // month rollover while the tab stays open
     const onVisible = () => document.visibilityState === 'visible' && ensureAllLedgers(students, classes);
     document.addEventListener('visibilitychange', onVisible);
@@ -274,12 +302,16 @@ export default function App() {
   };
 
   const handleSaveStudent = (studentData: Student) => {
+    // Fix P0-3: stamp the stable classId for the class NAME the form
+    // submitted, so the record is attached by id from the moment it is saved
+    // (this is the single save path for both AddStudentPage and the modal).
+    const stamped = withClassIdFromName(studentData, classes);
     if (editingStudent) {
-      setStudents(prev => prev.map(s => s.id === editingStudent.id ? studentData : s));
-      showToast(`Updated student ${studentData.name}`);
+      setStudents(prev => prev.map(s => s.id === editingStudent.id ? stamped : s));
+      showToast(`Updated student ${stamped.name}`);
     } else {
-      setStudents(prev => ensureUniqueStudentIds([studentData, ...prev]));
-      showToast(`Added ${studentData.name} (${studentData.id})`);
+      setStudents(prev => ensureUniqueStudentIds([stamped, ...prev]));
+      showToast(`Added ${stamped.name} (${stamped.id})`);
     }
     setEditingStudent(null);
     setActiveStudentView('directory');
@@ -354,14 +386,21 @@ export default function App() {
   ) => {
     if (studentIds.length === 0 || !targetClass) return;
     const idSet = new Set(studentIds);
+    // Fix P0-3: moving a student to another class moves their classId too.
+    const targetClassId = classes.find(
+      c => c.name.toLowerCase().trim() === targetClass.toLowerCase().trim()
+    )?.id;
     setStudents(prev =>
       prev.map(s => {
         if (!idSet.has(s.id)) return s;
-        return {
+        const moved: Student = {
           ...s,
           class: targetClass,
           section: targetSection || s.section
         };
+        if (targetClassId) moved.classId = targetClassId;
+        else delete moved.classId;
+        return moved;
       })
     );
     setSelectedStudentIds(new Set());
@@ -384,12 +423,14 @@ export default function App() {
   };
 
   const handleImportStudents = (newStudents: Student[], mode: 'append' | 'replace') => {
+    // Fix P0-3: imported rows reference classes by NAME (CSV) — backfill
+    // their stable classIds against the current classes list at save time.
     if (mode === 'replace') {
-      const sanitized = ensureUniqueStudentIds(newStudents);
+      const sanitized = backfillStudentClassIds(ensureUniqueStudentIds(newStudents), classes);
       setStudents(sanitized);
       showToast(`Replaced registry with ${sanitized.length} students from CSV`);
     } else {
-      setStudents(prev => ensureUniqueStudentIds([...newStudents, ...prev]));
+      setStudents(prev => ensureUniqueStudentIds(backfillStudentClassIds([...newStudents, ...prev], classes)));
       showToast(`Successfully appended ${newStudents.length} students from CSV`);
     }
     setSelectedStudentIds(new Set());
@@ -527,15 +568,17 @@ export default function App() {
     loadJSON<HolidayRecord[]>(HOLIDAYS_STORAGE_KEY, [], Array.isArray as (v: unknown) => v is HolidayRecord[])
   );
 
-  // Sync attendance to localStorage
+  // Sync attendance to localStorage (disarmed until hydrated — Fix P1-1)
   useEffect(() => {
+    if (!hydrated) return;
     saveJSON(ATTENDANCE_STORAGE_KEY, allAttendance);
-  }, [allAttendance]);
+  }, [allAttendance, hydrated]);
 
-  // Sync holidays to localStorage
+  // Sync holidays to localStorage (disarmed until hydrated — Fix P1-1)
   useEffect(() => {
+    if (!hydrated) return;
     saveJSON(HOLIDAYS_STORAGE_KEY, holidays);
-  }, [holidays]);
+  }, [holidays, hydrated]);
 
   // Handler for student attendance updates from MemberAttendanceSection
   const handleUpdateStudentAttendance = (
@@ -603,15 +646,48 @@ export default function App() {
     });
   };
 
-  // Sync Staff to localStorage
+  // Sync Staff to localStorage (disarmed until hydrated — Fix P1-1)
   useEffect(() => {
+    if (!hydrated) return;
     saveJSON(STAFF_STORAGE_KEY, staff);
-  }, [staff]);
+  }, [staff, hydrated]);
+
+  // Fix P1-1 (timeout path): if this App mounted before hydration landed
+  // (main.tsx's 3s fallback let it open on the local cache), reload the
+  // main data path from the now-hydrated localStorage so the screen
+  // converges on the server's copy instead of keeping the stale one.
+  // In the normal path hydration finished before first render, the
+  // initializers already read hydrated data, and this only flips the flag.
+  useEffect(() => {
+    let cancelled = false;
+    hydrationPromise.then(() => {
+      if (cancelled) return;
+      if (openedBeforeHydration.current) {
+        openedBeforeHydration.current = false;
+        const freshClasses = loadJSON<ClassInfo[]>(CLASSES_STORAGE_KEY, DEMO ? INITIAL_CLASSES : [], Array.isArray as (v: unknown) => v is ClassInfo[]);
+        setClasses(freshClasses);
+        setStudents(backfillStudentClassIds(
+          ensureUniqueStudentIds(loadJSON<Student[]>(STUDENT_STORAGE_KEY, DEMO ? INITIAL_STUDENTS : [], Array.isArray as (v: unknown) => v is Student[])),
+          freshClasses
+        ));
+        setStaff(migrateStaffPayStatusV1(
+          loadJSON<StaffMember[]>(STAFF_STORAGE_KEY, DEMO ? INITIAL_STAFF : [], Array.isArray as (v: unknown) => v is StaffMember[])
+        ).staff);
+        setAllAttendance(loadAttendance());
+        setHolidays(loadJSON<HolidayRecord[]>(HOLIDAYS_STORAGE_KEY, [], Array.isArray as (v: unknown) => v is HolidayRecord[]));
+      }
+      setHydrated(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   // §5 One-time startup migrations:
   // 1) Shrink existing student/staff photos > 60,000 chars to 256px JPEG
   // 2) Move existing StaffDocument.fileData & LedgerDocument.fileData to IndexedDB
+  // Waits for hydration (Fix P1-1): migrating pre-hydration state and then
+  // stamping the done-flags would leave the hydrated copy unmigrated.
   useEffect(() => {
+    if (!hydrated) return;
     let cancelled = false;
     (async () => {
       try {
@@ -716,7 +792,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hydrated]);
 
   // Unique departments for filtering
   const existingDepartments = useMemo(() => {
@@ -973,7 +1049,7 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen bg-[#0a0e17] text-slate-100 flex flex-row overflow-hidden font-sans selection:bg-blue-600 selection:text-white">
+    <div className="h-screen bg-abyss text-slate-100 flex flex-row overflow-hidden font-sans selection:bg-blue-600 selection:text-white">
       <StorageFaultScreen />
       {/* 1. Left Vertical Navbar */}
       <VerticalNavBar
@@ -983,14 +1059,14 @@ export default function App() {
           if (mod === 'students') setActiveStudentView('directory');
           if (mod === 'staff') setActiveStaffView('directory');
         }}
-        studentsCount={students.length}
+        totalStudents={students.length}
         staffCount={staff.length}
         classesCount={classes.length}
         schoolSettings={schoolSettings}
       />
 
       {/* 2. Main Content Column */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto bg-[#0b0f19]">
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto bg-canvas">
         {storageErr && (
           <div
             className="w-full bg-rose-600 text-white px-4 py-2.5 text-xs font-bold flex items-center justify-between gap-3 shrink-0 z-50 shadow-lg"
@@ -1203,7 +1279,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => handleOpenStudentIdCardModal()}
-                      className="px-3 py-2 rounded-lg bg-[#182234] hover:bg-[#202d44] border border-[#263753] hover:border-blue-500/50 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+                      className="px-3 py-2 rounded-lg bg-surface-41 hover:bg-surface-48 border border-edge-39 hover:border-blue-500/50 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
                       id="btn-nav-id-cards"
                     >
                       <IdCard className="w-3.5 h-3.5 text-blue-400" />
@@ -1218,7 +1294,7 @@ export default function App() {
                         className={`px-3 py-2 rounded-lg border text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm ${
                           isExportDropdownOpen
                             ? 'bg-[#1f2d44] border-emerald-500 text-white shadow-emerald-500/10'
-                            : 'bg-[#182234] hover:bg-[#202d44] border-[#263753] hover:border-emerald-500/50 text-slate-200 hover:text-white'
+                            : 'bg-surface-41 hover:bg-surface-48 border-edge-39 hover:border-emerald-500/50 text-slate-200 hover:text-white'
                         }`}
                         id="btn-nav-export"
                         title="Export options: CSV or PDF preview"
@@ -1235,10 +1311,10 @@ export default function App() {
                             onClick={() => setIsExportDropdownOpen(false)} 
                           />
                           <div 
-                            className="absolute right-0 mt-1.5 w-64 rounded-xl bg-[#131926] border border-[#24334a] shadow-2xl z-40 py-2 text-xs overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+                            className="absolute right-0 mt-1.5 w-64 rounded-xl bg-[#131926] border border-edge-31 shadow-2xl z-40 py-2 text-xs overflow-hidden animate-in fade-in zoom-in-95 duration-150"
                             id="dropdown-export-menu"
                           >
-                            <div className="px-3.5 py-2 border-b border-[#1f2b3e] mb-1 bg-[#161f30]">
+                            <div className="px-3.5 py-2 border-b border-edge-17 mb-1 bg-[#161f30]">
                               <div className="flex items-center justify-between">
                                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                                   Export Options
@@ -1259,7 +1335,7 @@ export default function App() {
                                 setIsExportDropdownOpen(false);
                                 handleExportCurrentSectionCSV();
                               }}
-                              className="w-full px-3.5 py-2.5 text-left hover:bg-[#1c2738] flex items-center gap-3 text-slate-200 hover:text-white transition-colors cursor-pointer group"
+                              className="w-full px-3.5 py-2.5 text-left hover:bg-surface-45 flex items-center gap-3 text-slate-200 hover:text-white transition-colors cursor-pointer group"
                               id="btn-export-option-csv"
                             >
                               <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0 group-hover:bg-emerald-500/25 transition-colors">
@@ -1283,7 +1359,7 @@ export default function App() {
                                 setIsExportDropdownOpen(false);
                                 handleOpenCurrentSectionPdfPreview();
                               }}
-                              className="w-full px-3.5 py-2.5 text-left hover:bg-[#1c2738] flex items-center gap-3 text-slate-200 hover:text-white transition-colors cursor-pointer group"
+                              className="w-full px-3.5 py-2.5 text-left hover:bg-surface-45 flex items-center gap-3 text-slate-200 hover:text-white transition-colors cursor-pointer group"
                               id="btn-export-option-pdf"
                             >
                               <div className="w-8 h-8 rounded-lg bg-red-500/15 border border-red-500/30 text-red-400 flex items-center justify-center shrink-0 group-hover:bg-red-500/25 transition-colors">
@@ -1308,7 +1384,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setIsStudentBulkUploadModalOpen(true)}
-                      className="px-3 py-2 rounded-lg bg-[#182234] hover:bg-[#202d44] border border-[#263753] hover:border-purple-500/50 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+                      className="px-3 py-2 rounded-lg bg-surface-41 hover:bg-surface-48 border border-edge-39 hover:border-purple-500/50 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
                       id="btn-nav-bulk-upload"
                     >
                       <UploadCloud className="w-3.5 h-3.5 text-purple-400" />
@@ -1343,7 +1419,7 @@ export default function App() {
                   classes={existingClasses}
                   activeTab={studentActiveTab}
                   onTabChange={setStudentActiveTab}
-                  studentsCount={students.length}
+                  totalStudents={students.length}
                   familiesCount={familiesCount}
                   filteredCount={filteredStudents.length}
                 />
@@ -1551,7 +1627,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => handleOpenSalarySlipModal('individual')}
-                      className="px-3.5 py-2 rounded-lg bg-[#121824] hover:bg-[#182132] border border-[#1f2a3d] text-slate-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+                      className="px-3.5 py-2 rounded-lg bg-surface-16 hover:bg-[#182132] border border-[#1f2a3d] text-slate-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
                       id="btn-staff-nav-salary-slips"
                     >
                       <FileText className="w-3.5 h-3.5 text-slate-300" />
@@ -1562,7 +1638,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setIsStaffBackupModalOpen(true)}
-                      className="px-3.5 py-2 rounded-lg bg-[#121824] hover:bg-[#182132] border border-[#1f2a3d] text-slate-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+                      className="px-3.5 py-2 rounded-lg bg-surface-16 hover:bg-[#182132] border border-[#1f2a3d] text-slate-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
                       id="btn-staff-nav-export"
                     >
                       <Download className="w-3.5 h-3.5 text-slate-300" />
@@ -1573,7 +1649,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => handleOpenPayStaffModal()}
-                      className="px-3.5 py-2 rounded-lg bg-[#121824] hover:bg-[#182132] border border-[#1f2a3d] text-slate-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+                      className="px-3.5 py-2 rounded-lg bg-surface-16 hover:bg-[#182132] border border-[#1f2a3d] text-slate-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
                       id="btn-staff-nav-pay"
                     >
                       <span>Pay Staff</span>

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   ArrowLeft, 
   IdCard, 
@@ -45,6 +45,10 @@ import { getAvatarColor, getInitials } from '../data/initialStudents';
 import { getStudentAvatar } from '../utils/studentAvatarHelper';
 import { MemberAttendanceSection } from './MemberAttendanceSection';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
+import { loadAllLedgerItems } from '../utils/studentFeeLedgerHelper';
+import { listPayments } from '../utils/paymentStore';
+import { getStoredExams, calculateGrade } from '../utils/examStore';
+import { getSchoolSettings } from '../utils/settingsHelper';
 
 interface StudentDetailsViewProps {
   student: Student;
@@ -107,7 +111,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
   // Form states for modals
   const [newSection, setNewSection] = useState(student.section || 'A');
   const [newClass, setNewClass] = useState(student.class || 'Class 1');
-  const [newFamilyId, setNewFamilyId] = useState(student.familyId || 'F0080');
+  const [newFamilyId, setNewFamilyId] = useState(student.familyId || '');
   const [newGuardianName, setNewGuardianName] = useState(student.family || '');
   const [fineTitle, setFineTitle] = useState('Late Submission Fine');
   const [fineAmount, setFineAmount] = useState('500');
@@ -134,10 +138,10 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
     return {
       studentId: student.id,
       displayName: `${student.name}, (${student.id})`,
-      guardian: student.family || 'gulzar',
-      religion: student.religion || 'Islam',
-      gender: student.gender || 'Female',
-      dob: student.dob || '15/06/2007',
+      guardian: student.family || '-',
+      religion: student.religion || '-',
+      gender: student.gender || '-',
+      dob: student.dob || '-',
       cnic: student.cnic || '-',
       bloodGroup: student.bloodGroup || '-',
       discount: student.discount || 'None',
@@ -150,29 +154,137 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
       reference: student.reference || '-',
       note: student.note || '-',
       // Class Container
-      className: student.class || 'testing class',
+      className: student.class || '-',
       section: student.section || 'A',
-      classFee: typeof student.classFee === 'number' 
-        ? `${student.classFee.toLocaleString()} PKR` 
-        : student.classFee || '10,000 PKR',
-      admissionDate: student.admissionDate || '15/06/2026',
+      classFee: typeof student.classFee === 'number'
+        ? `${student.classFee.toLocaleString()} PKR`
+        : student.classFee || 'Not set',
+      admissionDate: student.admissionDate || 'Not recorded',
       // Family Container
-      familyId: student.familyId || 'F0080',
-      guardianCnic: student.guardianCnic || '7647646475',
-      guardianOccupation: student.guardianOccupation || 'lbr',
+      familyId: student.familyId || '-',
+      guardianCnic: student.guardianCnic || '-',
+      guardianOccupation: student.guardianOccupation || '-',
       motherName: student.motherName || '-',
       motherCnic: student.motherCnic || '-',
       motherOccupation: student.motherOccupation || '-',
-      phoneNumber: student.phone || '03356226026',
-      whatsapp: student.whatsapp || student.phone || '03356226026',
-      email: student.email || 'dfghgfd456@gmail.com',
+      phoneNumber: student.phone || '',
+      whatsapp: student.whatsapp || student.phone || '',
+      email: student.email || '-',
       address: student.address || '-',
       caste: student.caste || '-',
       // KPIs
       totalDue: student.totalDue != null ? `${student.totalDue.toLocaleString()} PKR` : '0 PKR',
-      totalPaid: student.totalPaid != null ? `${student.totalPaid.toLocaleString()} PKR` : '40,000 PKR'
+      totalPaid: student.totalPaid != null ? `${student.totalPaid.toLocaleString()} PKR` : '0 PKR'
     };
   }, [student]);
+
+  // Real records for the Fee Timeline / Transactions / Exams tabs (Fix #4b):
+  // this student's own fee-ledger items, recorded payments, and stored exam
+  // results — the same real sources FamilyDetailsView and the Exams module
+  // use — or an honest empty state. (Previously these tabs rendered fixed
+  // sample rows with invented receipts, transactions, and exam results,
+  // identical for every student.)
+  const [feeDataVersion, setFeeDataVersion] = useState(0);
+  useEffect(() => {
+    const refresh = () => setFeeDataVersion(v => v + 1);
+    window.addEventListener('feeDataUpdated', refresh);
+    window.addEventListener('ledgerTransactionsUpdated', refresh);
+    return () => {
+      window.removeEventListener('feeDataUpdated', refresh);
+      window.removeEventListener('ledgerTransactionsUpdated', refresh);
+    };
+  }, []);
+
+  const fmtRecordDate = (iso: string) => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime())
+      ? iso
+      : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
+  const studentFeeTimeline = useMemo(() => {
+    const items = loadAllLedgerItems()[student.id] || [];
+    interface TimelineGroup {
+      key: string; monthKey: string; month: string; type: string;
+      total: number; paid: number; allPaid: boolean; anyPaid: boolean;
+    }
+    const groups = new Map<string, TimelineGroup>();
+    items.forEach(item => {
+      const key = `${item.monthKey}|${item.type}`;
+      const g = groups.get(key) || {
+        key, monthKey: item.monthKey, month: item.month, type: item.type,
+        total: 0, paid: 0, allPaid: true, anyPaid: false
+      };
+      g.total += item.total;
+      g.paid += item.paidAmount;
+      if (item.status !== 'Paid') g.allPaid = false;
+      if (item.paidAmount > 0) g.anyPaid = true;
+      groups.set(key, g);
+    });
+    return Array.from(groups.values())
+      .sort((a, b) => b.monthKey.localeCompare(a.monthKey))
+      .map(g => ({
+        key: g.key,
+        title: `${g.month} — ${g.type === 'Monthly Fee' ? 'Tuition Fee' : g.type}`,
+        detail: `Paid ${g.paid.toLocaleString()} of ${g.total.toLocaleString()} PKR`,
+        amount: `${g.total.toLocaleString()} PKR`,
+        status: g.allPaid ? 'Paid' : g.anyPaid ? 'Partially Paid' : 'Unpaid'
+      }));
+    // feeDataVersion re-runs this after payments are recorded elsewhere.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [student.id, feeDataVersion]);
+
+  const studentTransactions = useMemo(() => {
+    return listPayments()
+      .filter(p => !p.voidedAt && p.studentIds.includes(student.id))
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .map(p => ({
+        id: p.receiptNo || p.id,
+        desc: p.note || 'Fee payment',
+        method: p.method as string,
+        date: fmtRecordDate(p.date),
+        amount: `${p.amount.toLocaleString()} PKR`
+      }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [student.id, feeDataVersion]);
+
+  const studentExamResults = useMemo(() => {
+    return getStoredExams()
+      .filter(exam => exam.studentMarks && exam.studentMarks[student.id])
+      .map(exam => {
+        const entry = exam.studentMarks[student.id];
+        const subjects = exam.subjects.map(sub => {
+          const obtained = entry.marks[sub.id] ?? null;
+          const pct = obtained != null && sub.totalMarks > 0 ? (obtained / sub.totalMarks) * 100 : null;
+          return {
+            id: sub.id,
+            name: sub.name,
+            total: sub.totalMarks,
+            obtained,
+            grade: pct != null ? calculateGrade(pct, exam.gradingSchema).grade : '—'
+          };
+        });
+        const total = subjects.reduce((sum, s) => sum + s.total, 0);
+        const obtainedTotal = subjects.reduce((sum, s) => sum + (s.obtained || 0), 0);
+        const hasMarks = subjects.some(s => s.obtained != null);
+        const percentage = total > 0 ? Math.round((obtainedTotal / total) * 1000) / 10 : 0;
+        return {
+          exam,
+          remarks: entry.remarks,
+          subjects,
+          total,
+          obtainedTotal,
+          hasMarks,
+          percentage,
+          grade: calculateGrade(percentage, exam.gradingSchema).grade
+        };
+      });
+  }, [student.id]);
+
+  // School identity for printed documents (admission form, character
+  // certificate, letter pad, WhatsApp message) comes from the school's own
+  // settings record — never a hardcoded school name.
+  const schoolSettings = getSchoolSettings();
 
   // Handle updates
   const handleSaveSection = () => {
@@ -324,7 +436,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
       {/* ======================================================== */}
       {/* 2. STUDENT IDENTITY BANNER & ACTIONS (MATCHING PICTURE) */}
       {/* ======================================================== */}
-      <div className="bg-[#101726] border border-[#1b273b] rounded-2xl p-5 mb-5 shadow-xl">
+      <div className="bg-surface-13 border border-edge-8 rounded-2xl p-5 mb-5 shadow-xl">
         <div className="flex flex-col gap-4">
           
           {/* Top Row: Picture/Logo + Name + Roll Number */}
@@ -358,13 +470,13 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
           </div>
 
           {/* Action Features Row (10 feature buttons directly matching reference picture) */}
-          <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-[#182335]">
+          <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-edge-3">
             
             {/* 1. Change Family */}
             <button
               type="button"
               onClick={() => setIsChangeFamilyOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-[#141d2d] hover:bg-[#1a263a] border border-[#22334c] text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+              className="px-3 py-1.5 rounded-lg bg-surface-26 hover:bg-surface-44 border border-edge-30 text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
               id="btn-feature-change-family"
             >
               <Users className="w-3.5 h-3.5 text-slate-400" />
@@ -375,10 +487,10 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsWhatsAppOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-[#0e271c] hover:bg-[#123525] border border-[#25D366]/40 text-[#25D366] text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+              className="px-3 py-1.5 rounded-lg bg-[#0e271c] hover:bg-[#123525] border border-whatsapp/40 text-whatsapp text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
               id="btn-feature-send-whatsapp"
             >
-              <MessageCircle className="w-3.5 h-3.5 text-[#25D366]" />
+              <MessageCircle className="w-3.5 h-3.5 text-whatsapp" />
               <span>Send WhatsApp</span>
             </button>
 
@@ -386,7 +498,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsAddFineOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-[#141d2d] hover:bg-[#1a263a] border border-[#22334c] text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+              className="px-3 py-1.5 rounded-lg bg-surface-26 hover:bg-surface-44 border border-edge-30 text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
               id="btn-feature-add-fine"
             >
               <AlertCircle className="w-3.5 h-3.5 text-slate-400" />
@@ -397,7 +509,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsAddRecurringOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-[#141d2d] hover:bg-[#1a263a] border border-[#22334c] text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+              className="px-3 py-1.5 rounded-lg bg-surface-26 hover:bg-surface-44 border border-edge-30 text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
               id="btn-feature-add-recurring"
             >
               <Calendar className="w-3.5 h-3.5 text-slate-400" />
@@ -408,7 +520,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsUploadDocOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-[#141d2d] hover:bg-[#1a263a] border border-[#22334c] text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+              className="px-3 py-1.5 rounded-lg bg-surface-26 hover:bg-surface-44 border border-edge-30 text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
               id="btn-feature-upload-doc"
             >
               <UploadCloud className="w-3.5 h-3.5 text-slate-400" />
@@ -419,7 +531,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsAddAchievementOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-[#141d2d] hover:bg-[#1a263a] border border-[#22334c] text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+              className="px-3 py-1.5 rounded-lg bg-surface-26 hover:bg-surface-44 border border-edge-30 text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
               id="btn-feature-add-achievement"
             >
               <Award className="w-3.5 h-3.5 text-slate-400" />
@@ -430,7 +542,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsCharacterCertOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-[#141d2d] hover:bg-[#1a263a] border border-[#22334c] text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+              className="px-3 py-1.5 rounded-lg bg-surface-26 hover:bg-surface-44 border border-edge-30 text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
               id="btn-feature-add-certificate"
             >
               <Plus className="w-3.5 h-3.5 text-slate-400" />
@@ -441,7 +553,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsLetterPadOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-[#141d2d] hover:bg-[#1a263a] border border-[#22334c] text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+              className="px-3 py-1.5 rounded-lg bg-surface-26 hover:bg-surface-44 border border-edge-30 text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
               id="btn-feature-letter-pad"
             >
               <FileText className="w-3.5 h-3.5 text-slate-400" />
@@ -452,7 +564,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsAddObservationOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-[#141d2d] hover:bg-[#1a263a] border border-[#22334c] text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+              className="px-3 py-1.5 rounded-lg bg-surface-26 hover:bg-surface-44 border border-edge-30 text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
               id="btn-feature-add-observation"
             >
               <BookOpen className="w-3.5 h-3.5 text-slate-400" />
@@ -481,7 +593,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
         
         {/* Total Due Card */}
         <div 
-          className="bg-[#101726] border border-[#1b273b] rounded-2xl p-4 sm:p-5 flex items-center justify-between shadow-lg"
+          className="bg-surface-13 border border-edge-8 rounded-2xl p-4 sm:p-5 flex items-center justify-between shadow-lg"
           id="kpi-card-total-due"
         >
           <div>
@@ -499,7 +611,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
 
         {/* Total Paid Card */}
         <div 
-          className="bg-[#101726] border border-[#1b273b] rounded-2xl p-4 sm:p-5 flex items-center justify-between shadow-lg"
+          className="bg-surface-13 border border-edge-8 rounded-2xl p-4 sm:p-5 flex items-center justify-between shadow-lg"
           id="kpi-card-total-paid"
         >
           <div>
@@ -520,15 +632,15 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
       {/* ======================================================== */}
       {/* 4. NAVIGATION TABS BAR (10 TABS AS IN PICTURE)           */}
       {/* ======================================================== */}
-      <div className="bg-[#101726] border border-[#1b273b] rounded-2xl p-1.5 mb-5 flex items-center overflow-x-auto gap-1 shadow-md">
+      <div className="bg-surface-13 border border-edge-8 rounded-2xl p-1.5 mb-5 flex items-center overflow-x-auto gap-1 shadow-md">
         
         <button
           type="button"
           onClick={() => setActiveTab('student-info')}
           className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'student-info'
-              ? 'bg-[#1a273e] text-white shadow-sm border border-[#2c3f61]'
-              : 'text-slate-400 hover:text-white hover:bg-[#141d2d]'
+              ? 'bg-surface-46 text-white shadow-sm border border-edge-42'
+              : 'text-slate-400 hover:text-white hover:bg-surface-26'
           }`}
           id="tab-student-info"
         >
@@ -540,8 +652,8 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
           onClick={() => setActiveTab('fee-timeline')}
           className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'fee-timeline'
-              ? 'bg-[#1a273e] text-white shadow-sm border border-[#2c3f61]'
-              : 'text-slate-400 hover:text-white hover:bg-[#141d2d]'
+              ? 'bg-surface-46 text-white shadow-sm border border-edge-42'
+              : 'text-slate-400 hover:text-white hover:bg-surface-26'
           }`}
           id="tab-fee-timeline"
         >
@@ -553,8 +665,8 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
           onClick={() => setActiveTab('transactions')}
           className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'transactions'
-              ? 'bg-[#1a273e] text-white shadow-sm border border-[#2c3f61]'
-              : 'text-slate-400 hover:text-white hover:bg-[#141d2d]'
+              ? 'bg-surface-46 text-white shadow-sm border border-edge-42'
+              : 'text-slate-400 hover:text-white hover:bg-surface-26'
           }`}
           id="tab-transactions"
         >
@@ -566,8 +678,8 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
           onClick={() => setActiveTab('fines')}
           className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'fines'
-              ? 'bg-[#1a273e] text-white shadow-sm border border-[#2c3f61]'
-              : 'text-slate-400 hover:text-white hover:bg-[#141d2d]'
+              ? 'bg-surface-46 text-white shadow-sm border border-edge-42'
+              : 'text-slate-400 hover:text-white hover:bg-surface-26'
           }`}
           id="tab-fines"
         >
@@ -579,8 +691,8 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
           onClick={() => setActiveTab('recurring-payments')}
           className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'recurring-payments'
-              ? 'bg-[#1a273e] text-white shadow-sm border border-[#2c3f61]'
-              : 'text-slate-400 hover:text-white hover:bg-[#141d2d]'
+              ? 'bg-surface-46 text-white shadow-sm border border-edge-42'
+              : 'text-slate-400 hover:text-white hover:bg-surface-26'
           }`}
           id="tab-recurring-payments"
         >
@@ -592,8 +704,8 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
           onClick={() => setActiveTab('attendance')}
           className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'attendance'
-              ? 'bg-[#1a273e] text-white shadow-sm border border-[#2c3f61]'
-              : 'text-slate-400 hover:text-white hover:bg-[#141d2d]'
+              ? 'bg-surface-46 text-white shadow-sm border border-edge-42'
+              : 'text-slate-400 hover:text-white hover:bg-surface-26'
           }`}
           id="tab-attendance"
         >
@@ -605,8 +717,8 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
           onClick={() => setActiveTab('exams')}
           className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'exams'
-              ? 'bg-[#1a273e] text-white shadow-sm border border-[#2c3f61]'
-              : 'text-slate-400 hover:text-white hover:bg-[#141d2d]'
+              ? 'bg-surface-46 text-white shadow-sm border border-edge-42'
+              : 'text-slate-400 hover:text-white hover:bg-surface-26'
           }`}
           id="tab-exams"
         >
@@ -618,8 +730,8 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
           onClick={() => setActiveTab('observations')}
           className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'observations'
-              ? 'bg-[#1a273e] text-white shadow-sm border border-[#2c3f61]'
-              : 'text-slate-400 hover:text-white hover:bg-[#141d2d]'
+              ? 'bg-surface-46 text-white shadow-sm border border-edge-42'
+              : 'text-slate-400 hover:text-white hover:bg-surface-26'
           }`}
           id="tab-observations"
         >
@@ -631,8 +743,8 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
           onClick={() => setActiveTab('activities')}
           className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'activities'
-              ? 'bg-[#1a273e] text-white shadow-sm border border-[#2c3f61]'
-              : 'text-slate-400 hover:text-white hover:bg-[#141d2d]'
+              ? 'bg-surface-46 text-white shadow-sm border border-edge-42'
+              : 'text-slate-400 hover:text-white hover:bg-surface-26'
           }`}
           id="tab-activities"
         >
@@ -644,8 +756,8 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
           onClick={() => setActiveTab('documents')}
           className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'documents'
-              ? 'bg-[#1a273e] text-white shadow-sm border border-[#2c3f61]'
-              : 'text-slate-400 hover:text-white hover:bg-[#141d2d]'
+              ? 'bg-surface-46 text-white shadow-sm border border-edge-42'
+              : 'text-slate-400 hover:text-white hover:bg-surface-26'
           }`}
           id="tab-documents"
         >
@@ -666,18 +778,18 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
           {/* CONTAINER 1: ABOUT                       */}
           {/* ========================================= */}
           <div 
-            className="bg-[#101726] border border-[#1b273b] rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col"
+            className="bg-surface-13 border border-edge-8 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col"
             id="container-about-student"
           >
             {/* Header: Title + Edit Button */}
-            <div className="flex items-center justify-between pb-3 border-b border-[#182335] mb-3.5">
+            <div className="flex items-center justify-between pb-3 border-b border-edge-3 mb-3.5">
               <h3 className="text-sm font-bold text-white">
                 About
               </h3>
               <button
                 type="button"
                 onClick={() => onOpenEditModal(student)}
-                className="px-2.5 py-1 rounded-lg bg-[#141e2f] hover:bg-[#1c2a42] border border-[#22344f] text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-surface-28 hover:bg-surface-47 border border-edge-33 text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
                 id="btn-edit-about"
               >
                 <Edit3 className="w-3.5 h-3.5 text-slate-400" />
@@ -690,7 +802,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsAdmissionFormOpen(true)}
-                className="flex-1 py-1.5 px-2.5 rounded-lg bg-[#141e2f] hover:bg-[#1b2940] border border-[#22334e] text-slate-200 text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                className="flex-1 py-1.5 px-2.5 rounded-lg bg-surface-28 hover:bg-[#1b2940] border border-edge-32 text-slate-200 text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
                 id="btn-about-admission-form"
               >
                 <FileText className="w-3.5 h-3.5 text-slate-400" />
@@ -699,7 +811,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
               <button
                 type="button"
                 onClick={() => onOpenIdCardModal(student)}
-                className="flex-1 py-1.5 px-2.5 rounded-lg bg-[#141e2f] hover:bg-[#1b2940] border border-[#22334e] text-slate-200 text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                className="flex-1 py-1.5 px-2.5 rounded-lg bg-surface-28 hover:bg-[#1b2940] border border-edge-32 text-slate-200 text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
                 id="btn-about-id-card"
               >
                 <IdCard className="w-3.5 h-3.5 text-slate-400" />
@@ -710,7 +822,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
             {/* Information Rows */}
             <div className="space-y-2.5 text-xs">
               
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <User className="w-3.5 h-3.5 text-slate-500" />
                   <span>Student ID</span>
@@ -718,7 +830,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-sky-400 font-mono font-medium">{studentInfo.studentId}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <User className="w-3.5 h-3.5 text-slate-500" />
                   <span>Name</span>
@@ -726,7 +838,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium">{studentInfo.displayName}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <ShieldCheck className="w-3.5 h-3.5 text-slate-500" />
                   <span>Guardian</span>
@@ -734,7 +846,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium capitalize">{studentInfo.guardian}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <Heart className="w-3.5 h-3.5 text-slate-500" />
                   <span>Religion</span>
@@ -742,7 +854,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium">{studentInfo.religion}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <User className="w-3.5 h-3.5 text-slate-500" />
                   <span>Gender</span>
@@ -750,7 +862,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium">{studentInfo.gender}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <Calendar className="w-3.5 h-3.5 text-slate-500" />
                   <span>DOB</span>
@@ -758,7 +870,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium">{studentInfo.dob}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <CreditCard className="w-3.5 h-3.5 text-slate-500" />
                   <span>CNIC/B-Form</span>
@@ -766,7 +878,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium">{studentInfo.cnic}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <Droplet className="w-3.5 h-3.5 text-slate-500" />
                   <span>Blood Group</span>
@@ -774,7 +886,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium">{studentInfo.bloodGroup}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <Percent className="w-3.5 h-3.5 text-slate-500" />
                   <span>Discount</span>
@@ -782,7 +894,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium">{studentInfo.discount}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <Coins className="w-3.5 h-3.5 text-slate-500" />
                   <span>Admission Fee</span>
@@ -790,7 +902,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium">{studentInfo.admissionFee}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <School className="w-3.5 h-3.5 text-slate-500" />
                   <span>Previous School</span>
@@ -798,7 +910,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium">{studentInfo.previousSchool}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <GraduationCap className="w-3.5 h-3.5 text-slate-500" />
                   <span>Previous Class</span>
@@ -806,7 +918,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium">{studentInfo.previousClass}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <Award className="w-3.5 h-3.5 text-slate-500" />
                   <span>Previous Result</span>
@@ -814,7 +926,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium">{studentInfo.previousResult}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <Users className="w-3.5 h-3.5 text-slate-500" />
                   <span>Reference</span>
@@ -837,11 +949,11 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
           {/* CONTAINER 2: CLASS                       */}
           {/* ========================================= */}
           <div 
-            className="bg-[#101726] border border-[#1b273b] rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col"
+            className="bg-surface-13 border border-edge-8 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col"
             id="container-class-student"
           >
             {/* Header: Title + Change Section & Promote Class */}
-            <div className="flex items-center justify-between pb-3 border-b border-[#182335] mb-4">
+            <div className="flex items-center justify-between pb-3 border-b border-edge-3 mb-4">
               <h3 className="text-sm font-bold text-white">
                 Class
               </h3>
@@ -849,7 +961,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsChangeSectionOpen(true)}
-                  className="px-2.5 py-1 rounded-lg bg-[#141e2f] hover:bg-[#1c2a42] border border-[#22344f] text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
+                  className="px-2.5 py-1 rounded-lg bg-surface-28 hover:bg-surface-47 border border-edge-33 text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
                   id="btn-change-section"
                 >
                   <Repeat className="w-3.5 h-3.5 text-slate-400" />
@@ -858,7 +970,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsPromoteClassOpen(true)}
-                  className="px-2.5 py-1 rounded-lg bg-[#141e2f] hover:bg-[#1c2a42] border border-[#22344f] text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
+                  className="px-2.5 py-1 rounded-lg bg-surface-28 hover:bg-surface-47 border border-edge-33 text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
                   id="btn-promote-class"
                 >
                   <GraduationCap className="w-3.5 h-3.5 text-slate-400" />
@@ -870,7 +982,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
             {/* Information Rows */}
             <div className="space-y-3 text-xs">
               
-              <div className="flex items-center justify-between py-2 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-2 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <School className="w-3.5 h-3.5 text-slate-500" />
                   <span>Class</span>
@@ -878,7 +990,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium">{studentInfo.className}</span>
               </div>
 
-              <div className="flex items-center justify-between py-2 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-2 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <Layers className="w-3.5 h-3.5 text-slate-500" />
                   <span>Section</span>
@@ -886,7 +998,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium">{studentInfo.section}</span>
               </div>
 
-              <div className="flex items-center justify-between py-2 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-2 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <Coins className="w-3.5 h-3.5 text-slate-500" />
                   <span>Class Fee</span>
@@ -909,18 +1021,18 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
           {/* CONTAINER 3: FAMILY                      */}
           {/* ========================================= */}
           <div 
-            className="bg-[#101726] border border-[#1b273b] rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col"
+            className="bg-surface-13 border border-edge-8 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col"
             id="container-family-student"
           >
             {/* Header: Title + Edit Button */}
-            <div className="flex items-center justify-between pb-3 border-b border-[#182335] mb-4">
+            <div className="flex items-center justify-between pb-3 border-b border-edge-3 mb-4">
               <h3 className="text-sm font-bold text-white">
                 Family
               </h3>
               <button
                 type="button"
                 onClick={() => setIsChangeFamilyOpen(true)}
-                className="px-2.5 py-1 rounded-lg bg-[#141e2f] hover:bg-[#1c2a42] border border-[#22344f] text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-surface-28 hover:bg-surface-47 border border-edge-33 text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
                 id="btn-edit-family"
               >
                 <Edit3 className="w-3.5 h-3.5 text-slate-400" />
@@ -931,7 +1043,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
             {/* Information Rows */}
             <div className="space-y-2.5 text-xs">
               
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <Users className="w-3.5 h-3.5 text-slate-500" />
                   <span>Family ID</span>
@@ -939,7 +1051,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-sky-400 font-mono font-medium">{studentInfo.familyId}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <User className="w-3.5 h-3.5 text-slate-500" />
                   <span>Guardian Name</span>
@@ -947,7 +1059,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium capitalize">{studentInfo.guardian}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <CreditCard className="w-3.5 h-3.5 text-slate-500" />
                   <span>Guardian CNIC</span>
@@ -955,7 +1067,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium">{studentInfo.guardianCnic}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <ShieldCheck className="w-3.5 h-3.5 text-slate-500" />
                   <span>Guardian Occupation</span>
@@ -963,7 +1075,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium">{studentInfo.guardianOccupation}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <User className="w-3.5 h-3.5 text-slate-500" />
                   <span>Mother Name</span>
@@ -971,7 +1083,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium">{studentInfo.motherName}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <CreditCard className="w-3.5 h-3.5 text-slate-500" />
                   <span>Mother CNIC</span>
@@ -979,7 +1091,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium">{studentInfo.motherCnic}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <ShieldCheck className="w-3.5 h-3.5 text-slate-500" />
                   <span>Mother Occupation</span>
@@ -987,7 +1099,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium">{studentInfo.motherOccupation}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <Phone className="w-3.5 h-3.5 text-slate-500" />
                   <span>Phone Number</span>
@@ -995,15 +1107,15 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium">{studentInfo.phoneNumber}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
-                  <MessageCircle className="w-3.5 h-3.5 text-[#25D366]" />
+                  <MessageCircle className="w-3.5 h-3.5 text-whatsapp" />
                   <span>Whatsapp</span>
                 </div>
                 <span className="text-slate-200 font-medium">{studentInfo.whatsapp}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <Mail className="w-3.5 h-3.5 text-slate-500" />
                   <span>Email</span>
@@ -1011,7 +1123,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <span className="text-slate-200 font-medium">{studentInfo.email}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-[#172234]">
+              <div className="flex items-center justify-between py-1.5 border-b border-edge-1">
                 <div className="flex items-center gap-2 text-slate-400">
                   <MapPin className="w-3.5 h-3.5 text-slate-500" />
                   <span>Address</span>
@@ -1035,8 +1147,8 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
 
       {/* TAB 2: FEE TIMELINE */}
       {activeTab === 'fee-timeline' && (
-        <div className="bg-[#101726] border border-[#1b273b] rounded-2xl p-6 shadow-xl text-xs">
-          <div className="flex items-center justify-between pb-4 border-b border-[#182335] mb-5">
+        <div className="bg-surface-13 border border-edge-8 rounded-2xl p-6 shadow-xl text-xs">
+          <div className="flex items-center justify-between pb-4 border-b border-edge-3 mb-5">
             <div>
               <h3 className="text-base font-bold text-white">Fee Timeline & Installments</h3>
               <p className="text-slate-400 text-xs mt-0.5">Payment schedule, dues, and verified clearance receipts</p>
@@ -1051,25 +1163,32 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
           </div>
 
           <div className="space-y-4">
-            {[
-              { title: 'September 2026 Tuition Fee', due: '10,000 PKR', status: 'Paid', date: '05 Sep 2026', receipt: 'REC-8841' },
-              { title: 'August 2026 Tuition Fee', due: '10,000 PKR', status: 'Paid', date: '04 Aug 2026', receipt: 'REC-7622' },
-              { title: 'July 2026 Tuition Fee', due: '10,000 PKR', status: 'Paid', date: '02 Jul 2026', receipt: 'REC-6910' },
-              { title: 'Admission & Registration Charge', due: '10,000 PKR', status: 'Paid', date: '15 Jun 2026', receipt: 'REC-5401' }
-            ].map((f, i) => (
-              <div key={i} className="p-4 rounded-xl bg-[#141d2d] border border-[#1f2b3e] flex items-center justify-between">
+            {studentFeeTimeline.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 bg-surface-17 rounded-xl border border-edge-10">
+                <Coins className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+                <p className="text-sm font-semibold text-slate-200">No bills recorded yet</p>
+                <p className="text-xs text-slate-500 mt-1">Fee bills for this student will appear here once they have been generated.</p>
+              </div>
+            ) : studentFeeTimeline.map((f) => (
+              <div key={f.key} className="p-4 rounded-xl bg-surface-26 border border-edge-17 flex items-center justify-between">
                 <div className="flex items-center gap-3.5">
                   <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
                     <Coins className="w-4 h-4" />
                   </div>
                   <div>
                     <h4 className="font-semibold text-slate-100">{f.title}</h4>
-                    <p className="text-[11px] text-slate-400 mt-0.5">Cleared on {f.date} • Ref: {f.receipt}</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">{f.detail}</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className="font-bold text-white block text-sm">{f.due}</span>
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
+                  <span className="font-bold text-white block text-sm">{f.amount}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                    f.status === 'Paid'
+                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                      : f.status === 'Partially Paid'
+                      ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                      : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+                  }`}>
                     {f.status}
                   </span>
                 </div>
@@ -1081,46 +1200,49 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
 
       {/* TAB 3: TRANSACTIONS */}
       {activeTab === 'transactions' && (
-        <div className="bg-[#101726] border border-[#1b273b] rounded-2xl p-6 shadow-xl text-xs">
+        <div className="bg-surface-13 border border-edge-8 rounded-2xl p-6 shadow-xl text-xs">
           <h3 className="text-base font-bold text-white mb-1">Financial Transactions Ledger</h3>
           <p className="text-slate-400 text-xs mb-4">Complete audit trail of all receipts and invoices</p>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-[#1b273b] text-slate-400 font-semibold uppercase text-[10px] tracking-wider bg-[#0c121e]">
-                  <th className="py-3 px-4">Transaction ID</th>
-                  <th className="py-3 px-4">Description</th>
-                  <th className="py-3 px-4">Method</th>
-                  <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-4 text-right">Amount</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#172234]">
-                {[
-                  { id: 'TXN-90412', desc: 'Monthly Tuition Clearance', method: 'Cash Deposit', date: '2026-09-05', amount: '10,000 PKR' },
-                  { id: 'TXN-88123', desc: 'Term Examination & Lab Fee', method: 'Bank Transfer', date: '2026-08-10', amount: '5,000 PKR' },
-                  { id: 'TXN-79401', desc: 'Annual Curriculum & Books', method: 'Cash Deposit', date: '2026-06-20', amount: '15,000 PKR' },
-                  { id: 'TXN-75120', desc: 'New Enrollment Admission', method: 'Bank Transfer', date: '2026-06-15', amount: '10,000 PKR' }
-                ].map(t => (
-                  <tr key={t.id} className="hover:bg-[#141d2e] transition-colors">
-                    <td className="py-3 px-4 font-mono text-sky-400">{t.id}</td>
-                    <td className="py-3 px-4 text-slate-200 font-medium">{t.desc}</td>
-                    <td className="py-3 px-4 text-slate-400">{t.method}</td>
-                    <td className="py-3 px-4 text-slate-400">{t.date}</td>
-                    <td className="py-3 px-4 text-right font-bold text-emerald-400">+{t.amount}</td>
+          {studentTransactions.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 bg-surface-17 rounded-xl border border-edge-10">
+              <FileText className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-slate-200">No transactions recorded yet</p>
+              <p className="text-xs text-slate-500 mt-1">Payments recorded for this student will appear here with their real receipt numbers, dates and amounts.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-edge-8 text-slate-400 font-semibold uppercase text-[10px] tracking-wider bg-surface-6">
+                    <th className="py-3 px-4">Receipt No</th>
+                    <th className="py-3 px-4">Description</th>
+                    <th className="py-3 px-4">Method</th>
+                    <th className="py-3 px-4">Date</th>
+                    <th className="py-3 px-4 text-right">Amount</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-edge-1">
+                  {studentTransactions.map(t => (
+                    <tr key={t.id} className="hover:bg-[#141d2e] transition-colors">
+                      <td className="py-3 px-4 font-mono text-sky-400">{t.id}</td>
+                      <td className="py-3 px-4 text-slate-200 font-medium">{t.desc}</td>
+                      <td className="py-3 px-4 text-slate-400">{t.method}</td>
+                      <td className="py-3 px-4 text-slate-400">{t.date}</td>
+                      <td className="py-3 px-4 text-right font-bold text-emerald-400">+{t.amount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
       {/* TAB 4: FINES */}
       {activeTab === 'fines' && (
-        <div className="bg-[#101726] border border-[#1b273b] rounded-2xl p-6 shadow-xl text-xs">
-          <div className="flex items-center justify-between pb-4 border-b border-[#182335] mb-5">
+        <div className="bg-surface-13 border border-edge-8 rounded-2xl p-6 shadow-xl text-xs">
+          <div className="flex items-center justify-between pb-4 border-b border-edge-3 mb-5">
             <div>
               <h3 className="text-base font-bold text-white">Disciplinary & Late Fines</h3>
               <p className="text-slate-400 text-xs mt-0.5">Penalties, library fines, and policy violation records</p>
@@ -1137,7 +1259,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
           {(student.finesList && student.finesList.length > 0) ? (
             <div className="space-y-3">
               {student.finesList.map(f => (
-                <div key={f.id} className="p-3.5 rounded-xl bg-[#141d2d] border border-[#1f2b3e] flex items-center justify-between">
+                <div key={f.id} className="p-3.5 rounded-xl bg-surface-26 border border-edge-17 flex items-center justify-between">
                   <div>
                     <h4 className="font-semibold text-slate-100">{f.title}</h4>
                     <p className="text-[11px] text-slate-400 mt-0.5">Issued: {f.date} • ID: {f.id}</p>
@@ -1163,8 +1285,8 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
 
       {/* TAB 5: RECURRING PAYMENTS */}
       {activeTab === 'recurring-payments' && (
-        <div className="bg-[#101726] border border-[#1b273b] rounded-2xl p-6 shadow-xl text-xs">
-          <div className="flex items-center justify-between pb-4 border-b border-[#182335] mb-5">
+        <div className="bg-surface-13 border border-edge-8 rounded-2xl p-6 shadow-xl text-xs">
+          <div className="flex items-center justify-between pb-4 border-b border-edge-3 mb-5">
             <div>
               <h3 className="text-base font-bold text-white">Recurring Payment Items</h3>
               <p className="text-slate-400 text-xs mt-0.5">Automated recurring billing elements generated each cycle</p>
@@ -1178,22 +1300,10 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 rounded-xl bg-[#141d2d] border border-[#1f2b3e]">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-bold text-white">Standard Class Tuition</span>
-                <span className="text-emerald-400 font-mono font-bold">10,000 PKR / mo</span>
-              </div>
-              <p className="text-slate-400 text-xs">Generated on 1st of every calendar month for {studentInfo.className}.</p>
-            </div>
-
-            <div className="p-4 rounded-xl bg-[#141d2d] border border-[#1f2b3e]">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-bold text-white">Dedicated Transport Fee</span>
-                <span className="text-emerald-400 font-mono font-bold">3,000 PKR / mo</span>
-              </div>
-              <p className="text-slate-400 text-xs">Assigned Route 4 (Gulshan - Campus). Active status.</p>
-            </div>
+          <div className="p-8 text-center text-slate-400 bg-surface-17 rounded-xl border border-edge-10">
+            <Repeat className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+            <p className="text-sm font-semibold text-slate-200">No recurring charges recorded</p>
+            <p className="text-xs text-slate-500 mt-1">No transport or other recurring billing items have been recorded for this student. Monthly fee bills appear under Fee Timeline as they are generated.</p>
           </div>
         </div>
       )}
@@ -1216,69 +1326,70 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
 
       {/* TAB 7: EXAMS */}
       {activeTab === 'exams' && (
-        <div className="bg-[#101726] border border-[#1b273b] rounded-2xl p-6 shadow-xl text-xs">
+        <div className="bg-surface-13 border border-edge-8 rounded-2xl p-6 shadow-xl text-xs">
           <h3 className="text-base font-bold text-white mb-1">Academic Examination Records</h3>
-          <p className="text-slate-400 text-xs mb-5">Term results, percentage, GPA, and subject breakdown</p>
+          <p className="text-slate-400 text-xs mb-5">Term results, percentage, and subject breakdown</p>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="p-4 rounded-xl bg-[#141d2d] border border-[#1f2b3e]">
-              <span className="text-slate-400 font-medium">Midterm Examination</span>
-              <div className="text-xl font-bold text-white mt-1">472 / 500</div>
-              <span className="text-emerald-400 text-xs font-semibold">94.4% • Grade A+</span>
+          {studentExamResults.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 bg-surface-17 rounded-xl border border-edge-10">
+              <BookOpen className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-slate-200">No examination records yet</p>
+              <p className="text-xs text-slate-500 mt-1">Results recorded for this student in the Exams module will appear here.</p>
             </div>
-            <div className="p-4 rounded-xl bg-[#141d2d] border border-[#1f2b3e]">
-              <span className="text-slate-400 font-medium">Class Rank</span>
-              <div className="text-xl font-bold text-white mt-1">2nd Position</div>
-              <span className="text-sky-400 text-xs font-semibold">Top 3% of Class</span>
+          ) : studentExamResults.map((r) => (
+            <div key={r.exam.id} className="mb-6 last:mb-0">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h4 className="font-bold text-white text-sm">{r.exam.name}</h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5">{r.exam.class} • Section {r.exam.section}</p>
+                </div>
+                {r.hasMarks ? (
+                  <div className="text-right">
+                    <span className="font-bold text-white text-sm">{r.obtainedTotal} / {r.total}</span>
+                    <span className="block text-[11px] text-emerald-400 font-semibold">{r.percentage}% • Grade {r.grade}</span>
+                  </div>
+                ) : (
+                  <span className="text-[11px] text-slate-400 font-semibold">Marks not entered yet</span>
+                )}
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-edge-8 text-slate-400 font-semibold uppercase text-[10px] tracking-wider bg-surface-6">
+                      <th className="py-2.5 px-4">Subject</th>
+                      <th className="py-2.5 px-4">Total Marks</th>
+                      <th className="py-2.5 px-4">Obtained</th>
+                      <th className="py-2.5 px-4">Grade</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-edge-1">
+                    {r.subjects.map(s => (
+                      <tr key={s.id} className="hover:bg-[#141d2e] transition-colors">
+                        <td className="py-2.5 px-4 font-semibold text-slate-200">{s.name}</td>
+                        <td className="py-2.5 px-4 text-slate-400">{s.total}</td>
+                        <td className="py-2.5 px-4 font-bold text-white">{s.obtained ?? '—'}</td>
+                        <td className="py-2.5 px-4">
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold text-[10px]">
+                            {s.grade}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {r.remarks && (
+                <p className="text-[11px] text-slate-400 mt-2 italic">Examiner remark: {r.remarks}</p>
+              )}
             </div>
-            <div className="p-4 rounded-xl bg-[#141d2d] border border-[#1f2b3e]">
-              <span className="text-slate-400 font-medium">Cumulative GPA</span>
-              <div className="text-xl font-bold text-white mt-1">3.92 / 4.00</div>
-              <span className="text-emerald-400 text-xs font-semibold">Dean's Honor Roll</span>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-[#1b273b] text-slate-400 font-semibold uppercase text-[10px] tracking-wider bg-[#0c121e]">
-                  <th className="py-2.5 px-4">Subject</th>
-                  <th className="py-2.5 px-4">Total Marks</th>
-                  <th className="py-2.5 px-4">Obtained</th>
-                  <th className="py-2.5 px-4">Grade</th>
-                  <th className="py-2.5 px-4">Teacher Remark</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#172234]">
-                {[
-                  { subject: 'Mathematics', total: 100, obtained: 96, grade: 'A+', remark: 'Outstanding analytical skills' },
-                  { subject: 'English Language', total: 100, obtained: 92, grade: 'A+', remark: 'Excellent comprehension' },
-                  { subject: 'General Science', total: 100, obtained: 95, grade: 'A+', remark: 'Great lab performance' },
-                  { subject: 'Social Studies', total: 100, obtained: 94, grade: 'A+', remark: 'Very thorough essays' },
-                  { subject: 'Computer Science', total: 100, obtained: 95, grade: 'A+', remark: 'Passionate programmer' }
-                ].map(s => (
-                  <tr key={s.subject} className="hover:bg-[#141d2e] transition-colors">
-                    <td className="py-2.5 px-4 font-semibold text-slate-200">{s.subject}</td>
-                    <td className="py-2.5 px-4 text-slate-400">{s.total}</td>
-                    <td className="py-2.5 px-4 font-bold text-white">{s.obtained}</td>
-                    <td className="py-2.5 px-4">
-                      <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold text-[10px]">
-                        {s.grade}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-4 text-slate-400">{s.remark}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          ))}
         </div>
       )}
 
       {/* TAB 8: OBSERVATIONS */}
       {activeTab === 'observations' && (
-        <div className="bg-[#101726] border border-[#1b273b] rounded-2xl p-6 shadow-xl text-xs">
-          <div className="flex items-center justify-between pb-4 border-b border-[#182335] mb-5">
+        <div className="bg-surface-13 border border-edge-8 rounded-2xl p-6 shadow-xl text-xs">
+          <div className="flex items-center justify-between pb-4 border-b border-edge-3 mb-5">
             <div>
               <h3 className="text-base font-bold text-white">Teacher & Counselor Observations</h3>
               <p className="text-slate-400 text-xs mt-0.5">Behavioral assessments, special notes, and mentor remarks</p>
@@ -1292,28 +1403,32 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
             </button>
           </div>
 
-          <div className="space-y-3">
-            {[
-              { note: 'Demonstrates exemplary leadership in student council and group projects.', author: 'Class Teacher', date: '2026-09-08' },
-              { note: 'Consistently completes homework on time and helps peers with difficult topics.', author: 'Math Instructor', date: '2026-08-25' },
-              ...(student.observationsList || [])
-            ].map((o, idx) => (
-              <div key={idx} className="p-4 rounded-xl bg-[#141d2d] border border-[#1f2b3e]">
-                <p className="text-slate-200 text-xs leading-relaxed font-medium">"{o.note}"</p>
-                <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2 pt-2 border-t border-[#182335]">
-                  <span>By: <strong className="text-slate-300">{o.author}</strong></span>
-                  <span>{o.date}</span>
+          {(student.observationsList || []).length === 0 ? (
+            <div className="p-8 text-center text-slate-400 bg-surface-17 rounded-xl border border-edge-10">
+              <BookOpen className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-slate-200">No observations recorded yet</p>
+              <p className="text-xs text-slate-500 mt-1">Notes from teachers and counselors will appear here once recorded.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {(student.observationsList || []).map((o) => (
+                <div key={o.id} className="p-4 rounded-xl bg-surface-26 border border-edge-17">
+                  <p className="text-slate-200 text-xs leading-relaxed font-medium">"{o.note}"</p>
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2 pt-2 border-t border-edge-3">
+                    <span>By: <strong className="text-slate-300">{o.author}</strong></span>
+                    <span>{o.date}</span>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
       {/* TAB 9: ACTIVITIES */}
       {activeTab === 'activities' && (
-        <div className="bg-[#101726] border border-[#1b273b] rounded-2xl p-6 shadow-xl text-xs">
-          <div className="flex items-center justify-between pb-4 border-b border-[#182335] mb-5">
+        <div className="bg-surface-13 border border-edge-8 rounded-2xl p-6 shadow-xl text-xs">
+          <div className="flex items-center justify-between pb-4 border-b border-edge-3 mb-5">
             <div>
               <h3 className="text-base font-bold text-white">Extracurricular Activities & Achievements</h3>
               <p className="text-slate-400 text-xs mt-0.5">Clubs, sports tournaments, badges, and honors</p>
@@ -1327,31 +1442,34 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {[
-              { title: 'School Debate Team Captain', cat: 'Leadership', date: '2026-08-15' },
-              { title: '1st Position in Inter-School Science Fair', cat: 'Academic', date: '2026-07-20' },
-              { title: 'Annual Athletics 200m Sprint Gold Medal', cat: 'Sports', date: '2026-05-12' },
-              ...(student.achievementsList || [])
-            ].map((a, i) => (
-              <div key={i} className="p-4 rounded-xl bg-[#141d2d] border border-[#1f2b3e] flex items-center gap-3.5">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold shrink-0">
-                  <Award className="w-5 h-5" />
+          {(student.achievementsList || []).length === 0 ? (
+            <div className="p-8 text-center text-slate-400 bg-surface-17 rounded-xl border border-edge-10">
+              <Award className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-slate-200">No achievements recorded yet</p>
+              <p className="text-xs text-slate-500 mt-1">Clubs, sports, badges, and honors recorded for this student will appear here.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {(student.achievementsList || []).map((a) => (
+                <div key={a.id} className="p-4 rounded-xl bg-surface-26 border border-edge-17 flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold shrink-0">
+                    <Award className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-slate-100">{a.title}</h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">{a.category} • Awarded {a.date}</p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="font-semibold text-slate-100">{a.title}</h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">{a.cat} • Awarded {a.date}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
       {/* TAB 10: DOCUMENTS */}
       {activeTab === 'documents' && (
-        <div className="bg-[#101726] border border-[#1b273b] rounded-2xl p-6 shadow-xl text-xs">
-          <div className="flex items-center justify-between pb-4 border-b border-[#182335] mb-5">
+        <div className="bg-surface-13 border border-edge-8 rounded-2xl p-6 shadow-xl text-xs">
+          <div className="flex items-center justify-between pb-4 border-b border-edge-3 mb-5">
             <div>
               <h3 className="text-base font-bold text-white">Student Uploaded Documents</h3>
               <p className="text-slate-400 text-xs mt-0.5">Official digital archives, certificates, and scanned credentials</p>
@@ -1365,35 +1483,38 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
             </button>
           </div>
 
-          <div className="space-y-3">
-            {[
-              { title: 'Official Government B-Form (Nadra)', type: 'Identity Verification', date: '2026-06-15' },
-              { title: 'Previous School Leaving Certificate', type: 'Academic Record', date: '2026-06-15' },
-              { title: 'Medical Fitness & Vaccination Record', type: 'Health', date: '2026-06-16' },
-              ...(student.documentsList || [])
-            ].map((d, i) => (
-              <div key={i} className="p-3.5 rounded-xl bg-[#141d2d] border border-[#1f2b3e] flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center">
-                    <FileText className="w-4 h-4" />
+          {(student.documentsList || []).length === 0 ? (
+            <div className="p-8 text-center text-slate-400 bg-surface-17 rounded-xl border border-edge-10">
+              <FileText className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-slate-200">No documents uploaded yet</p>
+              <p className="text-xs text-slate-500 mt-1">Documents uploaded for this student will appear here.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {(student.documentsList || []).map((d) => (
+                <div key={d.id} className="p-3.5 rounded-xl bg-surface-26 border border-edge-17 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center">
+                      <FileText className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-slate-200">{d.title}</h4>
+                      <p className="text-[11px] text-slate-400">{d.type} • Uploaded {d.date}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="font-semibold text-slate-200">{d.title}</h4>
-                    <p className="text-[11px] text-slate-400">{d.type} • Uploaded {d.date}</p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => showToast(`Downloading ${d.title}`)}
+                      className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold cursor-pointer"
+                    >
+                      View
+                    </button>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => showToast(`Downloading ${d.title}`)}
-                    className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold cursor-pointer"
-                  >
-                    View
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -1404,9 +1525,9 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
       {/* MODAL 1: OFFICIAL PRINTABLE ADMISSION FORM */}
       {isAdmissionFormOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0f172a] border border-[#1e293b] rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 max-h-[92vh] flex flex-col text-slate-100">
+          <div className="bg-surface-15 border border-edge-13 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 max-h-[92vh] flex flex-col text-slate-100">
             {/* Header */}
-            <div className="px-6 py-4 border-b border-[#1e293b] flex items-center justify-between bg-[#0b1120]">
+            <div className="px-6 py-4 border-b border-edge-13 flex items-center justify-between bg-[#0b1120]">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold">
                   <FileText className="w-4 h-4" />
@@ -1441,9 +1562,11 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 {/* School Header */}
                 <div className="text-center border-b-2 border-slate-800 pb-4 mb-4">
                   <h2 className="text-xl font-extrabold uppercase tracking-wider text-slate-900">
-                    Genius Public Model School
+                    {schoolSettings.schoolName}
                   </h2>
-                  <p className="text-xs text-slate-600">Higher Secondary Education Campus • Estd. 1998</p>
+                  {schoolSettings.schoolTagline && (
+                    <p className="text-xs text-slate-600">{schoolSettings.schoolTagline}</p>
+                  )}
                   <div className="mt-2 inline-block px-3 py-1 bg-slate-900 text-white font-bold text-xs uppercase tracking-widest rounded">
                     Official Student Enrollment & Admission Record
                   </div>
@@ -1522,7 +1645,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
       {/* MODAL 2: CHANGE SECTION */}
       {isChangeSectionOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0f172a] border border-[#1e293b] rounded-2xl w-full max-w-sm shadow-2xl p-5 text-white">
+          <div className="bg-surface-15 border border-edge-13 rounded-2xl w-full max-w-sm shadow-2xl p-5 text-white">
             <h3 className="text-sm font-bold text-white mb-2">Change Class Section</h3>
             <p className="text-xs text-slate-400 mb-4">Select target section for {student.name}:</p>
             <div className="grid grid-cols-4 gap-2 mb-5">
@@ -1534,7 +1657,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                   className={`py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                     newSection === sec
                       ? 'bg-blue-600 border-blue-400 text-white shadow-md'
-                      : 'bg-[#141e2f] border-[#22334e] text-slate-300 hover:text-white'
+                      : 'bg-surface-28 border-edge-32 text-slate-300 hover:text-white'
                   }`}
                 >
                   Sec {sec}
@@ -1564,7 +1687,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
       {/* MODAL 3: PROMOTE CLASS */}
       {isPromoteClassOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0f172a] border border-[#1e293b] rounded-2xl w-full max-w-md shadow-2xl p-5 text-white">
+          <div className="bg-surface-15 border border-edge-13 rounded-2xl w-full max-w-md shadow-2xl p-5 text-white">
             <h3 className="text-sm font-bold text-white mb-1">Promote Student Class</h3>
             <p className="text-xs text-slate-400 mb-4">Advance {student.name} to the next academic level:</p>
             
@@ -1574,7 +1697,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <select
                   value={newClass}
                   onChange={(e) => setNewClass(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#141e2f] border border-[#22334e] text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                  className="w-full px-3 py-2 rounded-xl bg-surface-28 border border-edge-32 text-white focus:outline-none focus:border-blue-500 cursor-pointer"
                 >
                   {['Playgroup', 'Nursery', 'Prep', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'].map(c => (
                     <option key={c} value={c}>{c}</option>
@@ -1587,7 +1710,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <select
                   value={newSection}
                   onChange={(e) => setNewSection(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#141e2f] border border-[#22334e] text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                  className="w-full px-3 py-2 rounded-xl bg-surface-28 border border-edge-32 text-white focus:outline-none focus:border-blue-500 cursor-pointer"
                 >
                   {['A', 'B', 'C', 'D'].map(s => (
                     <option key={s} value={s}>Section {s}</option>
@@ -1619,7 +1742,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
       {/* MODAL 4: CHANGE FAMILY */}
       {isChangeFamilyOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0f172a] border border-[#1e293b] rounded-2xl w-full max-w-md shadow-2xl p-5 text-white">
+          <div className="bg-surface-15 border border-edge-13 rounded-2xl w-full max-w-md shadow-2xl p-5 text-white">
             <h3 className="text-sm font-bold text-white mb-1">Change Family & Guardian</h3>
             <p className="text-xs text-slate-400 mb-4">Reassign {student.name} to a family group:</p>
             
@@ -1630,7 +1753,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                   type="text"
                   value={newFamilyId}
                   onChange={(e) => setNewFamilyId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#141e2f] border border-[#22334e] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 rounded-xl bg-surface-28 border border-edge-32 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -1640,7 +1763,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                   type="text"
                   value={newGuardianName}
                   onChange={(e) => setNewGuardianName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#141e2f] border border-[#22334e] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 rounded-xl bg-surface-28 border border-edge-32 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
             </div>
@@ -1668,7 +1791,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
       {/* MODAL 5: ADD FINE */}
       {isAddFineOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0f172a] border border-[#1e293b] rounded-2xl w-full max-w-md shadow-2xl p-5 text-white">
+          <div className="bg-surface-15 border border-edge-13 rounded-2xl w-full max-w-md shadow-2xl p-5 text-white">
             <h3 className="text-sm font-bold text-white mb-1">Add Student Fine</h3>
             <p className="text-xs text-slate-400 mb-4">Record fine for {student.name}:</p>
             
@@ -1679,7 +1802,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                   type="text"
                   value={fineTitle}
                   onChange={(e) => setFineTitle(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#141e2f] border border-[#22334e] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 rounded-xl bg-surface-28 border border-edge-32 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -1689,7 +1812,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                   type="number"
                   value={fineAmount}
                   onChange={(e) => setFineAmount(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#141e2f] border border-[#22334e] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 rounded-xl bg-surface-28 border border-edge-32 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
             </div>
@@ -1717,7 +1840,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
       {/* MODAL 6: ADD RECURRING PAYMENT */}
       {isAddRecurringOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0f172a] border border-[#1e293b] rounded-2xl w-full max-w-md shadow-2xl p-5 text-white">
+          <div className="bg-surface-15 border border-edge-13 rounded-2xl w-full max-w-md shadow-2xl p-5 text-white">
             <h3 className="text-sm font-bold text-white mb-1">Add Recurring Payment Item</h3>
             <p className="text-xs text-slate-400 mb-4">Set up recurring charge for {student.name}:</p>
             
@@ -1728,7 +1851,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                   type="text"
                   value={recurringTitle}
                   onChange={(e) => setRecurringTitle(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#141e2f] border border-[#22334e] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 rounded-xl bg-surface-28 border border-edge-32 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -1738,7 +1861,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                   type="number"
                   value={recurringAmount}
                   onChange={(e) => setRecurringAmount(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#141e2f] border border-[#22334e] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 rounded-xl bg-surface-28 border border-edge-32 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
             </div>
@@ -1766,7 +1889,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
       {/* MODAL 7: UPLOAD DOCUMENT */}
       {isUploadDocOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0f172a] border border-[#1e293b] rounded-2xl w-full max-w-md shadow-2xl p-5 text-white">
+          <div className="bg-surface-15 border border-edge-13 rounded-2xl w-full max-w-md shadow-2xl p-5 text-white">
             <h3 className="text-sm font-bold text-white mb-1">Upload Student Document</h3>
             <p className="text-xs text-slate-400 mb-4">Attach digital documents for {student.name}:</p>
             
@@ -1776,7 +1899,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <select
                   value={docType}
                   onChange={(e) => setDocType(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#141e2f] border border-[#22334e] text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                  className="w-full px-3 py-2 rounded-xl bg-surface-28 border border-edge-32 text-white focus:outline-none focus:border-blue-500 cursor-pointer"
                 >
                   <option value="B-Form">B-Form / CNIC Scanned</option>
                   <option value="Birth Certificate">Birth Certificate</option>
@@ -1794,11 +1917,11 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                   placeholder="e.g. Nadra Verified Copy"
                   value={docTitle}
                   onChange={(e) => setDocTitle(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#141e2f] border border-[#22334e] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 rounded-xl bg-surface-28 border border-edge-32 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
-              <div className="border-2 border-dashed border-[#22334e] rounded-xl p-6 text-center bg-[#111927]">
+              <div className="border-2 border-dashed border-edge-32 rounded-xl p-6 text-center bg-[#111927]">
                 <UploadCloud className="w-8 h-8 text-blue-400 mx-auto mb-2" />
                 <p className="text-xs text-slate-300 font-medium">Click or Drag & Drop file here</p>
                 <p className="text-[10px] text-slate-500 mt-1">PDF, JPG, PNG up to 15MB</p>
@@ -1828,7 +1951,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
       {/* MODAL 8: ADD ACHIEVEMENT */}
       {isAddAchievementOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0f172a] border border-[#1e293b] rounded-2xl w-full max-w-md shadow-2xl p-5 text-white">
+          <div className="bg-surface-15 border border-edge-13 rounded-2xl w-full max-w-md shadow-2xl p-5 text-white">
             <h3 className="text-sm font-bold text-white mb-1">Add Student Achievement</h3>
             <p className="text-xs text-slate-400 mb-4">Record honor for {student.name}:</p>
             
@@ -1839,7 +1962,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                   type="text"
                   value={achievementTitle}
                   onChange={(e) => setAchievementTitle(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#141e2f] border border-[#22334e] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 rounded-xl bg-surface-28 border border-edge-32 text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -1848,7 +1971,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <select
                   value={achievementCategory}
                   onChange={(e) => setAchievementCategory(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#141e2f] border border-[#22334e] text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                  className="w-full px-3 py-2 rounded-xl bg-surface-28 border border-edge-32 text-white focus:outline-none focus:border-blue-500 cursor-pointer"
                 >
                   <option value="Academic">Academic Honors</option>
                   <option value="Sports">Sports & Athletics</option>
@@ -1882,8 +2005,8 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
       {/* MODAL 9: OFFICIAL CHARACTER CERTIFICATE */}
       {isCharacterCertOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0f172a] border border-[#1e293b] rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 text-slate-100 flex flex-col max-h-[90vh]">
-            <div className="px-6 py-4 border-b border-[#1e293b] flex items-center justify-between bg-[#0b1120]">
+          <div className="bg-surface-15 border border-edge-13 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 text-slate-100 flex flex-col max-h-[90vh]">
+            <div className="px-6 py-4 border-b border-edge-13 flex items-center justify-between bg-[#0b1120]">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
                   <FileBadge className="w-4 h-4" />
@@ -1916,9 +2039,11 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
               <div className="p-8 rounded-xl bg-gradient-to-b from-amber-50/10 via-white to-amber-50/20 text-slate-900 border-4 border-double border-amber-600 shadow-md">
                 <div className="text-center mb-6">
                   <h2 className="text-2xl font-serif font-black uppercase text-slate-900 tracking-wider">
-                    Genius Public Model School
+                    {schoolSettings.schoolName}
                   </h2>
-                  <p className="text-xs text-slate-600 italic">Affiliated with Board of Intermediate & Secondary Education</p>
+                  {schoolSettings.schoolTagline && (
+                    <p className="text-xs text-slate-600 italic">{schoolSettings.schoolTagline}</p>
+                  )}
                   <div className="my-3 inline-block border-b-2 border-amber-600 pb-1 text-base font-serif font-bold tracking-widest uppercase text-amber-900">
                     Character Certificate
                   </div>
@@ -1926,7 +2051,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
 
                 <div className="space-y-4 text-xs leading-relaxed font-serif text-slate-800 text-justify">
                   <p>
-                    This is to certify that <strong>{student.name}</strong>, son/daughter of <strong>{student.family}</strong>, residing at {studentInfo.address || 'Local Campus Resident'}, is a bonafide student of this institution bearing Enrollment ID <strong>{student.id}</strong> in <strong>{student.class}</strong>, Section <strong>{student.section || 'A'}</strong>.
+                    This is to certify that <strong>{student.name}</strong>, son/daughter of <strong>{student.family}</strong>, residing at {studentInfo.address}, is a bonafide student of this institution bearing Enrollment ID <strong>{student.id}</strong> in <strong>{student.class}</strong>, Section <strong>{student.section || 'A'}</strong>.
                   </p>
                   <p>
                     During their tenure at our academy, they have borne an exemplary moral character, shown diligence in academic pursuits, and adhered strictly to institutional discipline.
@@ -1939,7 +2064,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <div className="grid grid-cols-2 gap-8 pt-12 text-xs font-serif text-slate-800 mt-6">
                   <div>
                     <p className="text-slate-600">Date: {new Date().toLocaleDateString('en-GB')}</p>
-                    <p className="text-slate-600">Ref No: GPS/CC/{student.id}/2026</p>
+                    <p className="text-slate-600">Ref No: CC/{student.id}/{new Date().getFullYear()}</p>
                   </div>
                   <div className="text-right">
                     <div className="inline-block border-t-2 border-slate-800 pt-1 text-center min-w-[140px]">
@@ -1957,8 +2082,8 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
       {/* MODAL 10: CREATE LETTER PAD */}
       {isLetterPadOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0f172a] border border-[#1e293b] rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 text-slate-100 flex flex-col max-h-[90vh]">
-            <div className="px-6 py-4 border-b border-[#1e293b] flex items-center justify-between bg-[#0b1120]">
+          <div className="bg-surface-15 border border-edge-13 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 text-slate-100 flex flex-col max-h-[90vh]">
+            <div className="px-6 py-4 border-b border-edge-13 flex items-center justify-between bg-[#0b1120]">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold">
                   <FileText className="w-4 h-4" />
@@ -1995,7 +2120,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                     type="text"
                     value={letterSubject}
                     onChange={(e) => setLetterSubject(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-[#141e2f] border border-[#22334e] text-white focus:outline-none focus:border-blue-500"
+                    className="w-full px-3 py-2 rounded-xl bg-surface-28 border border-edge-32 text-white focus:outline-none focus:border-blue-500"
                   />
                 </div>
                 <div>
@@ -2004,7 +2129,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                     rows={4}
                     value={letterBody}
                     onChange={(e) => setLetterBody(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-[#141e2f] border border-[#22334e] text-white focus:outline-none focus:border-blue-500"
+                    className="w-full px-3 py-2 rounded-xl bg-surface-28 border border-edge-32 text-white focus:outline-none focus:border-blue-500"
                   />
                 </div>
               </div>
@@ -2013,11 +2138,13 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
               <div className="p-8 rounded-xl bg-white text-slate-900 border border-slate-300 shadow-sm mt-4">
                 <div className="border-b-2 border-blue-900 pb-3 mb-6 flex items-center justify-between">
                   <div>
-                    <h3 className="font-extrabold text-lg uppercase tracking-wider text-blue-950">Genius Public School</h3>
-                    <p className="text-[11px] text-slate-600">Main Boulevard Campus • Phone: 042-35889901</p>
+                    <h3 className="font-extrabold text-lg uppercase tracking-wider text-blue-950">{schoolSettings.schoolName}</h3>
+                    <p className="text-[11px] text-slate-600">
+                      {schoolSettings.campusName}{schoolSettings.schoolPhone ? ` • Phone: ${schoolSettings.schoolPhone}` : ''}
+                    </p>
                   </div>
                   <div className="text-right text-[11px] text-slate-500">
-                    <p>Ref: GPS/LP/2026/09</p>
+                    <p>Ref: LP/{new Date().getFullYear()}/{String(new Date().getMonth() + 1).padStart(2, '0')}</p>
                     <p>Date: {new Date().toLocaleDateString('en-GB')}</p>
                   </div>
                 </div>
@@ -2035,7 +2162,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <div className="pt-8 flex justify-end">
                   <div className="text-center min-w-[160px]">
                     <div className="border-t border-slate-700 pt-1 text-xs font-bold">Authorized Signatory</div>
-                    <p className="text-[10px] text-slate-500">Genius Public School</p>
+                    <p className="text-[10px] text-slate-500">{schoolSettings.schoolName}</p>
                   </div>
                 </div>
               </div>
@@ -2047,7 +2174,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
       {/* MODAL 11: ADD OBSERVATION */}
       {isAddObservationOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0f172a] border border-[#1e293b] rounded-2xl w-full max-w-md shadow-2xl p-5 text-white">
+          <div className="bg-surface-15 border border-edge-13 rounded-2xl w-full max-w-md shadow-2xl p-5 text-white">
             <h3 className="text-sm font-bold text-white mb-1">Add Teacher Observation</h3>
             <p className="text-xs text-slate-400 mb-4">Record behavior or academic note for {student.name}:</p>
             
@@ -2059,7 +2186,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                   value={observationText}
                   onChange={(e) => setObservationText(e.target.value)}
                   placeholder="e.g. Shows great aptitude in team projects..."
-                  className="w-full px-3 py-2 rounded-xl bg-[#141e2f] border border-[#22334e] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 rounded-xl bg-surface-28 border border-edge-32 text-white focus:outline-none focus:border-blue-500"
                   autoFocus
                 />
               </div>
@@ -2089,7 +2216,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
       {/* MODAL 12: TERMINATE STUDENT */}
       {isTerminateOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0f172a] border border-red-500/30 rounded-2xl w-full max-w-md shadow-2xl p-5 text-white">
+          <div className="bg-surface-15 border border-red-500/30 rounded-2xl w-full max-w-md shadow-2xl p-5 text-white">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-9 h-9 rounded-xl bg-red-500/20 text-red-400 flex items-center justify-center font-bold">
                 <UserX className="w-5 h-5" />
@@ -2110,7 +2237,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 type="text"
                 value={terminationReason}
                 onChange={(e) => setTerminationReason(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-[#141e2f] border border-[#22334e] text-white focus:outline-none focus:border-red-500"
+                className="w-full px-3 py-2 rounded-xl bg-surface-28 border border-edge-32 text-white focus:outline-none focus:border-red-500"
               />
             </div>
 
@@ -2137,9 +2264,9 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
       {/* MODAL 13: SEND WHATSAPP */}
       {isWhatsAppOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0f172a] border border-[#1e293b] rounded-2xl w-full max-w-md shadow-2xl p-5 text-white">
+          <div className="bg-surface-15 border border-edge-13 rounded-2xl w-full max-w-md shadow-2xl p-5 text-white">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-9 h-9 rounded-xl bg-[#25D366]/20 text-[#25D366] flex items-center justify-center font-bold">
+              <div className="w-9 h-9 rounded-xl bg-whatsapp/20 text-whatsapp flex items-center justify-center font-bold">
                 <MessageCircle className="w-5 h-5" />
               </div>
               <div>
@@ -2148,12 +2275,12 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-[#141e2f] border border-[#22334e] mb-5 text-xs space-y-2">
+            <div className="p-3.5 rounded-xl bg-surface-28 border border-edge-32 mb-5 text-xs space-y-2">
               <p className="text-slate-300">
                 <strong>Sample Message:</strong>
               </p>
-              <div className="p-3 rounded-lg bg-[#0c131f] text-slate-300 font-mono text-[11px] leading-relaxed border border-[#1b273b]">
-                Dear Parent of {student.name}, this is an official update from Genius Public School. Current fee status: {studentInfo.totalDue} due. Thank you for your continued partnership.
+              <div className="p-3 rounded-lg bg-[#0c131f] text-slate-300 font-mono text-[11px] leading-relaxed border border-edge-8">
+                Dear Parent of {student.name}, this is an official update from {schoolSettings.schoolName}. Current fee status: {studentInfo.totalDue} due. Thank you for your continued partnership.
               </div>
             </div>
 
@@ -2168,7 +2295,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  navigator.clipboard.writeText(`Dear Parent of ${student.name}, this is an official update from Genius Public School.`);
+                  navigator.clipboard.writeText(`Dear Parent of ${student.name}, this is an official update from ${schoolSettings.schoolName}.`);
                   showToast('Message copied to clipboard');
                 }}
                 className="px-3 py-1.5 rounded-lg bg-[#152338] text-sky-400 border border-[#223755] cursor-pointer"
@@ -2180,7 +2307,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 target="_blank"
                 rel="noreferrer"
                 onClick={() => setIsWhatsAppOpen(false)}
-                className="px-4 py-1.5 rounded-lg bg-[#25D366] hover:bg-[#20ba5a] text-slate-950 font-bold flex items-center gap-1.5 cursor-pointer shadow-md"
+                className="px-4 py-1.5 rounded-lg bg-whatsapp hover:bg-[#20ba5a] text-slate-950 font-bold flex items-center gap-1.5 cursor-pointer shadow-md"
               >
                 <MessageCircle className="w-3.5 h-3.5" />
                 <span>Open WhatsApp</span>

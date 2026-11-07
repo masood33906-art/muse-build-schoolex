@@ -192,7 +192,11 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
       category: (formData.category as StaffCategory) || 'Teacher',
       department: formData.department || 'Academics',
       qualification: formData.qualification?.trim() || 'Certified',
-      salary: Number(formData.salary) || 60000,
+      // Fix #7b: validate() above already requires a positive salary,
+      // so this is the user's entered amount verbatim — the old
+      // `|| 60000` fallback was unreachable, and is removed so an
+      // invented salary can never be written if validation changes.
+      salary: Number(formData.salary),
       payStatus: editingStaff ? ((formData.payStatus as PayStatus) || 'Pending') : 'Pending',
       paidMonths: editingStaff?.paidMonths ?? [],
       status: (formData.status as StaffStatus) || 'Active',
@@ -224,7 +228,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
           <button
             type="button"
             onClick={onBack}
-            className="p-2 rounded-xl bg-[#141d2c] hover:bg-[#1a2538] border border-[#22314a] text-slate-300 hover:text-white transition-all cursor-pointer shadow-sm"
+            className="p-2 rounded-xl bg-[#141d2c] hover:bg-surface-43 border border-[#22314a] text-slate-300 hover:text-white transition-all cursor-pointer shadow-sm"
             title="Return to Staff Directory"
             id="btn-back-to-staff-directory"
           >
@@ -253,7 +257,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
           <button
             type="button"
             onClick={onBack}
-            className="px-4 py-2 rounded-xl bg-[#162030] hover:bg-[#1d2a40] border border-[#263753] text-slate-300 hover:text-white text-xs font-semibold cursor-pointer transition-all"
+            className="px-4 py-2 rounded-xl bg-surface-32 hover:bg-[#1d2a40] border border-edge-39 text-slate-300 hover:text-white text-xs font-semibold cursor-pointer transition-all"
             id="btn-cancel-add-staff"
           >
             Cancel
@@ -274,7 +278,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
       <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Photo Upload Card */}
         <div className="lg:col-span-4 space-y-5">
-          <div className="bg-[#121927] border border-[#1f2c42] rounded-2xl p-5 shadow-lg flex flex-col items-center text-center">
+          <div className="bg-surface-17 border border-edge-19 rounded-2xl p-5 shadow-lg flex flex-col items-center text-center">
             <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-1.5 self-start">
               <Camera className="w-4 h-4 text-emerald-400" />
               <span>Employee Photo</span>
@@ -318,7 +322,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
               className={`w-full p-4 rounded-xl border-2 border-dashed transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 ${
                 isDragOver
                   ? 'border-emerald-500 bg-emerald-500/10'
-                  : 'border-[#243550] hover:border-emerald-500/50 bg-[#162132] hover:bg-[#1a273b]'
+                  : 'border-edge-38 hover:border-emerald-500/50 bg-surface-39 hover:bg-[#1a273b]'
               }`}
             >
               <input
@@ -347,7 +351,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
           </div>
 
           {/* Quick Category Summary */}
-          <div className="bg-[#121927] border border-[#1f2c42] rounded-2xl p-5 text-xs space-y-3">
+          <div className="bg-surface-17 border border-edge-19 rounded-2xl p-5 text-xs space-y-3">
             <h4 className="font-semibold text-slate-300">Staff Category Guidelines:</h4>
             <ul className="space-y-1.5 text-[11px] text-slate-400 list-disc list-inside">
               <li><strong className="text-emerald-400">Teacher:</strong> Subject lecturers, class incharge</li>
@@ -362,7 +366,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
         {/* Right Column: Information Cards */}
         <div className="lg:col-span-8 space-y-5">
           {/* Section 1: Employment & Designation */}
-          <div className="bg-[#121927] border border-[#1f2c42] rounded-2xl p-5 shadow-lg space-y-4">
+          <div className="bg-surface-17 border border-edge-19 rounded-2xl p-5 shadow-lg space-y-4">
             <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
               <Briefcase className="w-4 h-4 text-emerald-400" />
               <span>Employment & Designation Details</span>
@@ -379,8 +383,8 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   value={formData.name || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                   placeholder="e.g. ABDUL RAFFAY"
-                  className={`w-full bg-[#162132] border rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors ${
-                    errors.name ? 'border-rose-500' : 'border-[#243550]'
+                  className={`w-full bg-surface-39 border rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors ${
+                    errors.name ? 'border-rose-500' : 'border-edge-38'
                   }`}
                   id="input-staff-name"
                 />
@@ -397,7 +401,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   value={formData.fatherName || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, fatherName: e.target.value }))}
                   placeholder="e.g. Muhammad Raffay"
-                  className="w-full bg-[#162132] border border-[#243550] rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                  className="w-full bg-surface-39 border border-edge-38 rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
                   id="input-staff-father"
                 />
               </div>
@@ -412,8 +416,8 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   value={formData.id || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, id: e.target.value }))}
                   placeholder="e.g. T0018 or STF-0012"
-                  className={`w-full bg-[#162132] border font-mono rounded-lg px-3 py-2.5 text-xs text-emerald-400 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors ${
-                    errors.id ? 'border-rose-500' : 'border-[#243550]'
+                  className={`w-full bg-surface-39 border font-mono rounded-lg px-3 py-2.5 text-xs text-emerald-400 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors ${
+                    errors.id ? 'border-rose-500' : 'border-edge-38'
                   }`}
                   id="input-staff-id"
                 />
@@ -430,7 +434,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   value={formData.cnic || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, cnic: e.target.value }))}
                   placeholder="e.g. 374054544635 or 13734-5360138-1"
-                  className="w-full bg-[#162132] border border-[#243550] font-mono rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                  className="w-full bg-surface-39 border border-edge-38 font-mono rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
                   id="input-staff-cnic"
                 />
               </div>
@@ -445,8 +449,8 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   value={formData.role || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value }))}
                   placeholder="e.g. otherStaff, Accountant, teacher"
-                  className={`w-full bg-[#162132] border rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors ${
-                    errors.role ? 'border-rose-500' : 'border-[#243550]'
+                  className={`w-full bg-surface-39 border rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors ${
+                    errors.role ? 'border-rose-500' : 'border-edge-38'
                   }`}
                   id="input-staff-role"
                 />
@@ -462,7 +466,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   <select
                     value={formData.category}
                     onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value as StaffCategory }))}
-                    className="w-full appearance-none bg-[#162132] border border-[#243550] rounded-lg px-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+                    className="w-full appearance-none bg-surface-39 border border-edge-38 rounded-lg px-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
                   >
                     {STAFF_CATEGORIES.map(cat => (
                       <option key={cat} value={cat}>{cat}</option>
@@ -481,7 +485,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   <select
                     value={formData.department}
                     onChange={(e) => setFormData(prev => ({ ...prev, department: e.target.value }))}
-                    className="w-full appearance-none bg-[#162132] border border-[#243550] rounded-lg px-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+                    className="w-full appearance-none bg-surface-39 border border-edge-38 rounded-lg px-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
                   >
                     {STAFF_DEPARTMENTS.map(dept => (
                       <option key={dept} value={dept}>{dept}</option>
@@ -500,7 +504,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   <select
                     value={formData.status}
                     onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value as StaffStatus }))}
-                    className="w-full appearance-none bg-[#162132] border border-[#243550] rounded-lg px-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+                    className="w-full appearance-none bg-surface-39 border border-edge-38 rounded-lg px-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
                   >
                     <option value="Active">Active</option>
                     <option value="On Leave">On Leave</option>
@@ -513,7 +517,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
           </div>
 
           {/* Section 2: Salary & Compensation */}
-          <div className="bg-[#121927] border border-[#1f2c42] rounded-2xl p-5 shadow-lg space-y-4">
+          <div className="bg-surface-17 border border-edge-19 rounded-2xl p-5 shadow-lg space-y-4">
             <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
               <DollarSign className="w-4 h-4 text-amber-400" />
               <span>Compensation & Salary Structure</span>
@@ -531,8 +535,8 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   value={formData.salary || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, salary: Number(e.target.value) }))}
                   placeholder="e.g. 85000"
-                  className={`w-full bg-[#162132] border font-mono rounded-lg px-3 py-2.5 text-xs text-amber-300 focus:outline-none focus:border-amber-500 transition-colors ${
-                    errors.salary ? 'border-rose-500' : 'border-[#243550]'
+                  className={`w-full bg-surface-39 border font-mono rounded-lg px-3 py-2.5 text-xs text-amber-300 focus:outline-none focus:border-amber-500 transition-colors ${
+                    errors.salary ? 'border-rose-500' : 'border-edge-38'
                   }`}
                   id="input-staff-salary"
                 />
@@ -548,7 +552,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   <select
                     value={formData.payStatus}
                     onChange={(e) => setFormData(prev => ({ ...prev, payStatus: e.target.value as PayStatus }))}
-                    className="w-full appearance-none bg-[#162132] border border-[#243550] rounded-lg px-3 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500 cursor-pointer"
+                    className="w-full appearance-none bg-surface-39 border border-edge-38 rounded-lg px-3 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500 cursor-pointer"
                   >
                     <option value="Paid">Paid</option>
                     <option value="Pending">Pending</option>
@@ -567,14 +571,14 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   type="date"
                   value={formData.joiningDate || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, joiningDate: e.target.value }))}
-                  className="w-full bg-[#162132] border border-[#243550] rounded-lg px-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-surface-39 border border-edge-38 rounded-lg px-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>
             </div>
           </div>
 
           {/* Section 3: Academic Qualifications & Degrees */}
-          <div className="bg-[#121927] border border-[#1f2c42] rounded-2xl p-5 shadow-lg space-y-4">
+          <div className="bg-surface-17 border border-edge-19 rounded-2xl p-5 shadow-lg space-y-4">
             <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
               <GraduationCap className="w-4 h-4 text-blue-400" />
               <span>Academic Qualifications</span>
@@ -590,7 +594,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   value={formData.qualification || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, qualification: e.target.value }))}
                   placeholder="e.g. M.Phil English Literature, B.Ed"
-                  className="w-full bg-[#162132] border border-[#243550] rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-surface-39 border border-edge-38 rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -602,7 +606,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   <select
                     value={formData.bloodGroup}
                     onChange={(e) => setFormData(prev => ({ ...prev, bloodGroup: e.target.value }))}
-                    className="w-full appearance-none bg-[#162132] border border-[#243550] rounded-lg px-3 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                    className="w-full appearance-none bg-surface-39 border border-edge-38 rounded-lg px-3 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500 cursor-pointer"
                   >
                     {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(bg => (
                       <option key={bg} value={bg}>{bg}</option>
@@ -615,7 +619,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
           </div>
 
           {/* Section 4: Contact & Personal Details */}
-          <div className="bg-[#121927] border border-[#1f2c42] rounded-2xl p-5 shadow-lg space-y-4">
+          <div className="bg-surface-17 border border-edge-19 rounded-2xl p-5 shadow-lg space-y-4">
             <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
               <Phone className="w-4 h-4 text-purple-400" />
               <span>Contact & Emergency Details</span>
@@ -632,8 +636,8 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   value={formData.phone || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
                   placeholder="e.g. +92 300 1234567"
-                  className={`w-full bg-[#162132] border rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-colors ${
-                    errors.phone ? 'border-rose-500' : 'border-[#243550]'
+                  className={`w-full bg-surface-39 border rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-colors ${
+                    errors.phone ? 'border-rose-500' : 'border-edge-38'
                   }`}
                   id="input-staff-phone"
                 />
@@ -650,7 +654,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   value={formData.email || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                   placeholder="e.g. name@schoollee.edu.pk"
-                  className="w-full bg-[#162132] border border-[#243550] rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                  className="w-full bg-surface-39 border border-edge-38 rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
                 />
               </div>
 
@@ -664,7 +668,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   value={formData.whatsapp || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, whatsapp: e.target.value }))}
                   placeholder="e.g. 3155285341"
-                  className="w-full bg-[#162132] border border-[#243550] rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                  className="w-full bg-surface-39 border border-edge-38 rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
                 />
               </div>
 
@@ -678,7 +682,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   value={formData.emergencyContact || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, emergencyContact: e.target.value }))}
                   placeholder="e.g. +92 321 9988771"
-                  className="w-full bg-[#162132] border border-[#243550] rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                  className="w-full bg-surface-39 border border-edge-38 rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
                 />
               </div>
 
@@ -692,7 +696,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   value={formData.address || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
                   placeholder="e.g. school, Gulberg III"
-                  className="w-full bg-[#162132] border border-[#243550] rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                  className="w-full bg-surface-39 border border-edge-38 rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
                 />
               </div>
 
@@ -706,7 +710,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   value={formData.notes || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
                   placeholder="e.g. -"
-                  className="w-full bg-[#162132] border border-[#243550] rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                  className="w-full bg-surface-39 border border-edge-38 rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
                 />
               </div>
             </div>

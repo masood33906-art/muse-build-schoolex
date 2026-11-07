@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, UserPlus, Save, AlertCircle, AlertTriangle, Link as LinkIcon, PlusCircle, CheckCircle2 } from 'lucide-react';
 import { Student, ClassInfo } from '../types';
+import { withClassIdFromName } from '../utils/classExportHelper';
 import { BOY_AVATAR_URL, GIRL_AVATAR_URL, getDefaultAvatarByGender } from '../utils/studentAvatarHelper';
 
 interface AddStudentModalProps {
@@ -270,7 +271,8 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
       ? formData.photo
       : getDefaultAvatarByGender(formData.gender);
 
-    onSave({
+    // Fix P0-3: stamp the stable classId of the selected class at save time.
+    onSave(withClassIdFromName({
       id: formData.id!.trim(),
       name: formData.name!.trim(),
       family: formData.family!.trim(),
@@ -285,7 +287,7 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
       admissionDate: formData.admissionDate || new Date().toISOString().slice(0, 10),
       isNewAdmission: editingStudent ? editingStudent.isNewAdmission : true,
       photo: finalPhoto
-    });
+    }, classes));
     onClose();
   };
 
@@ -296,7 +298,7 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
         id="modal-add-student"
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#232d42] flex items-center justify-between bg-[#171f2e]">
+        <div className="px-6 py-4 border-b border-edge-22 flex items-center justify-between bg-[#171f2e]">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center">
               <UserPlus className="w-5 h-5" />
@@ -322,8 +324,8 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 text-xs">
           {/* Avatar Preview & Gender Toggle */}
-          <div className="p-4 rounded-xl bg-[#0e1420] border border-[#212b3e] flex items-center gap-4">
-            <div className="relative w-16 h-16 rounded-xl overflow-hidden border-2 border-blue-500/40 shrink-0 bg-[#0a0e17]">
+          <div className="p-4 rounded-xl bg-surface-7 border border-[#212b3e] flex items-center gap-4">
+            <div className="relative w-16 h-16 rounded-xl overflow-hidden border-2 border-blue-500/40 shrink-0 bg-abyss">
               <img src={activeAvatarUrl} alt="Preview" className="w-full h-full object-cover" />
             </div>
             <div className="flex-1">
@@ -337,7 +339,7 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
                   className={`px-3 py-1 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all ${
                     formData.gender === 'Male'
                       ? 'bg-blue-600 text-white border-blue-500 shadow-sm'
-                      : 'bg-[#162032] border-[#283852] text-slate-400 hover:text-white'
+                      : 'bg-surface-36 border-edge-40 text-slate-400 hover:text-white'
                   }`}
                 >
                   <img src={BOY_AVATAR_URL} alt="Boy" className="w-4 h-4 rounded-full" />
@@ -349,7 +351,7 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
                   className={`px-3 py-1 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all ${
                     formData.gender === 'Female'
                       ? 'bg-pink-600 text-white border-pink-500 shadow-sm'
-                      : 'bg-[#162032] border-[#283852] text-slate-400 hover:text-white'
+                      : 'bg-surface-36 border-edge-40 text-slate-400 hover:text-white'
                   }`}
                 >
                   <img src={GIRL_AVATAR_URL} alt="Girl" className="w-4 h-4 rounded-full" />
@@ -370,8 +372,8 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
                 value={formData.name || ''}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="Student Name"
-                className={`w-full bg-[#182030] text-white rounded-lg px-3 py-2 border ${
-                  errors.name ? 'border-rose-500' : 'border-[#263248]'
+                className={`w-full bg-surface-37 text-white rounded-lg px-3 py-2 border ${
+                  errors.name ? 'border-rose-500' : 'border-edge-27'
                 }`}
               />
               {errors.name && <p className="text-rose-400 text-[10px] mt-1">{errors.name}</p>}
@@ -386,8 +388,8 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
                 value={formData.id || ''}
                 onChange={(e) => setFormData({ ...formData, id: e.target.value })}
                 placeholder="e.g. S-00101"
-                className={`w-full bg-[#182030] text-white rounded-lg px-3 py-2 font-mono border ${
-                  duplicateStudentConflict || errors.id ? 'border-rose-500 bg-rose-950/20' : 'border-[#263248]'
+                className={`w-full bg-surface-37 text-white rounded-lg px-3 py-2 font-mono border ${
+                  duplicateStudentConflict || errors.id ? 'border-rose-500 bg-rose-950/20' : 'border-edge-27'
                 }`}
               />
               {duplicateStudentConflict ? (
@@ -401,7 +403,7 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
           </div>
 
           {/* Family Selection & Guardian */}
-          <div className="p-3 rounded-xl bg-[#0e1420] border border-[#212b3e] space-y-3">
+          <div className="p-3 rounded-xl bg-surface-7 border border-[#212b3e] space-y-3">
             <div className="flex items-center justify-between">
               <span className="font-bold text-white text-xs">Family / Guardian Registration</span>
               <div className="flex items-center gap-1 bg-[#141b2a] p-0.5 rounded-lg border border-[#24334c]">
@@ -433,7 +435,7 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
               <select
                 value={selectedExistingFamilyCode}
                 onChange={(e) => handleSelectExistingFamily(e.target.value)}
-                className="w-full bg-[#182030] border border-[#263248] text-white rounded-lg px-3 py-2 text-xs"
+                className="w-full bg-surface-37 border border-edge-27 text-white rounded-lg px-3 py-2 text-xs"
               >
                 {existingFamilies.length === 0 ? (
                   <option value="">-- No registered families available yet --</option>
@@ -460,8 +462,8 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
                   value={formData.family || ''}
                   onChange={(e) => setFormData({ ...formData, family: e.target.value })}
                   placeholder="Guardian Name"
-                  className={`w-full bg-[#182030] text-white rounded-lg px-3 py-2 border ${
-                    errors.family ? 'border-rose-500' : 'border-[#263248]'
+                  className={`w-full bg-surface-37 text-white rounded-lg px-3 py-2 border ${
+                    errors.family ? 'border-rose-500' : 'border-edge-27'
                   }`}
                 />
                 {errors.family && <p className="text-rose-400 text-[10px] mt-1">{errors.family}</p>}
@@ -476,8 +478,8 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
                   value={formData.familyId || ''}
                   onChange={(e) => setFormData({ ...formData, familyId: e.target.value })}
                   placeholder="e.g. F-0080"
-                  className={`w-full bg-[#182030] text-white rounded-lg px-3 py-2 font-mono border ${
-                    duplicateFamilyCodeConflict || errors.familyId ? 'border-rose-500 bg-rose-950/20' : 'border-[#263248]'
+                  className={`w-full bg-surface-37 text-white rounded-lg px-3 py-2 font-mono border ${
+                    duplicateFamilyCodeConflict || errors.familyId ? 'border-rose-500 bg-rose-950/20' : 'border-edge-27'
                   }`}
                 />
                 {errors.familyId && <p className="text-rose-400 text-[10px] mt-1">{errors.familyId}</p>}
@@ -520,8 +522,8 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
                   setFormData({ ...formData, emergencyContact: val, phone: val });
                 }}
                 placeholder="+92 300 1234567"
-                className={`w-full bg-[#182030] text-white rounded-lg px-3 py-2 border ${
-                  errors.emergencyContact ? 'border-rose-500 ring-1 ring-rose-500/50' : 'border-[#263248]'
+                className={`w-full bg-surface-37 text-white rounded-lg px-3 py-2 border ${
+                  errors.emergencyContact ? 'border-rose-500 ring-1 ring-rose-500/50' : 'border-edge-27'
                 }`}
                 required
               />
@@ -545,7 +547,7 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
                     section: nextSecs[0] || ''
                   });
                 }}
-                className="w-full bg-[#182030] border border-[#263248] text-white rounded-lg px-3 py-2"
+                className="w-full bg-surface-37 border border-edge-27 text-white rounded-lg px-3 py-2"
               >
                 {availableClassNames.length === 0 ? (
                   <option value="">-- No classes available --</option>
@@ -564,7 +566,7 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
               <select
                 value={formData.section || ''}
                 onChange={(e) => setFormData({ ...formData, section: e.target.value })}
-                className="w-full bg-[#182030] border border-[#263248] text-white rounded-lg px-3 py-2"
+                className="w-full bg-surface-37 border border-edge-27 text-white rounded-lg px-3 py-2"
               >
                 {availableSectionsForClass.length === 0 ? (
                   <option value="">-- No sections available --</option>
@@ -578,11 +580,11 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
           </div>
 
           {/* Footer */}
-          <div className="pt-3 border-t border-[#232d42] flex items-center justify-end gap-3">
+          <div className="pt-3 border-t border-edge-22 flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg bg-[#141b28] hover:bg-[#1a2334] text-slate-300 font-semibold cursor-pointer"
+              className="px-4 py-2 rounded-lg bg-surface-19 hover:bg-surface-42 text-slate-300 font-semibold cursor-pointer"
             >
               Cancel
             </button>

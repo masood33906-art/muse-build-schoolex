@@ -61,7 +61,12 @@ export const PayStaffModal: React.FC<PayStaffModalProps> = ({
 
   if (!isOpen || !activeStaff) return null;
 
-  const baseSalary = activeStaff.salary || 60000;
+  // Fix #7b: the payslip/payment base is the staff member's OWN
+  // recorded salary — an unset salary is 0, exactly as this file's
+  // payroll aggregates above already treat it (`s.salary || 0`).
+  // The old code paid and printed a net computed from an invented
+  // 60,000 for anyone whose salary was unset or 0.
+  const baseSalary = activeStaff.salary || 0;
   const computedAllowances = Math.round((baseSalary * allowancePercent) / 100);
   const computedNetSalary = baseSalary + computedAllowances + (bonus || 0) - (deductions || 0);
   const targetMonth = owedMonthsOf(activeStaff)[0] || currentMonth;
@@ -96,11 +101,11 @@ export const PayStaffModal: React.FC<PayStaffModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
       <div 
-        className="bg-[#121824] border border-[#232f45] rounded-2xl w-full max-w-4xl max-h-[92vh] overflow-hidden flex flex-col shadow-2xl"
+        className="bg-surface-16 border border-[#232f45] rounded-2xl w-full max-w-4xl max-h-[92vh] overflow-hidden flex flex-col shadow-2xl"
         id="modal-pay-staff"
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#202c40] flex items-center justify-between bg-[#162030]">
+        <div className="px-6 py-4 border-b border-edge-18 flex items-center justify-between bg-surface-32">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
               <DollarSign className="w-5 h-5" />
@@ -159,7 +164,7 @@ export const PayStaffModal: React.FC<PayStaffModalProps> = ({
         </div>
 
         {/* Navigation Tabs inside modal */}
-        <div className="px-6 pt-3 border-b border-[#1f2b3e] flex items-center gap-2 bg-[#121824]">
+        <div className="px-6 pt-3 border-b border-edge-17 flex items-center gap-2 bg-surface-16">
           <button
             type="button"
             onClick={() => setActiveTab('individual')}
@@ -204,7 +209,7 @@ export const PayStaffModal: React.FC<PayStaffModalProps> = ({
                       const found = allStaff.find(s => s.id === e.target.value);
                       if (found) onSelectStaff(found);
                     }}
-                    className="w-full bg-[#162030] border border-[#233149] rounded-lg px-3 py-2.5 text-xs text-slate-200 font-medium focus:outline-none focus:border-amber-500 cursor-pointer"
+                    className="w-full bg-surface-32 border border-edge-26 rounded-lg px-3 py-2.5 text-xs text-slate-200 font-medium focus:outline-none focus:border-amber-500 cursor-pointer"
                   >
                     {allStaff.map(s => (
                       <option key={s.id} value={s.id}>
@@ -347,7 +352,7 @@ export const PayStaffModal: React.FC<PayStaffModalProps> = ({
               {/* Right Column: Payslip Preview Receipt */}
               <div className="lg:col-span-5 bg-[#0e141f] border border-[#202c42] rounded-xl p-5 flex flex-col justify-between">
                 <div>
-                  <div className="flex items-center justify-between border-b border-[#202d44] pb-3 mb-3">
+                  <div className="flex items-center justify-between border-b border-surface-48 pb-3 mb-3">
                     <div>
                       <h4 className="text-xs font-bold text-white uppercase tracking-wider">
                         Salary Slip Preview
@@ -470,8 +475,8 @@ export const PayStaffModal: React.FC<PayStaffModalProps> = ({
 
               {/* Pending List Quick Preview */}
               {pendingStaff.length > 0 && (
-                <div className="border border-[#202d44] rounded-xl overflow-hidden bg-[#111724]">
-                  <div className="px-4 py-2.5 bg-[#172030] text-xs font-semibold text-slate-300 border-b border-[#202d44]">
+                <div className="border border-surface-48 rounded-xl overflow-hidden bg-surface-12">
+                  <div className="px-4 py-2.5 bg-surface-34 text-xs font-semibold text-slate-300 border-b border-surface-48">
                     Pending Salary List ({pendingStaff.length})
                   </div>
                   <div className="max-h-48 overflow-y-auto divide-y divide-[#1b2538] text-xs">

@@ -24,8 +24,9 @@ export const FeesReportModal: React.FC<FeesReportModalProps> = ({
   const schoolSettings = getSchoolSettings();
   const bankSettings = getBankSettings();
   const schoolName = schoolSettings.schoolName || bankSettings.schoolName || 'Demo School Schooliee Pakistan';
-  const schoolPhone = schoolSettings.schoolPhone || bankSettings.schoolPhone || '03356226026';
-  const currentDateFormatted = '15 Sep 2026';
+  const schoolPhone = schoolSettings.schoolPhone || bankSettings.schoolPhone || '';
+  // Fix P0-4: the report is dated the day it is generated — never a fixed date.
+  const currentDateFormatted = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const isFamily = section === 'family';
 
   // Normalize items to standard FeeReportRowItem structure
@@ -83,9 +84,9 @@ export const FeesReportModal: React.FC<FeesReportModalProps> = ({
         }
       `}</style>
 
-      <div className="w-full max-w-5xl bg-[#0f1725] border border-[#20314b] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] text-slate-100 animate-in zoom-in-95 duration-200">
+      <div className="w-full max-w-5xl bg-surface-9 border border-[#20314b] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] text-slate-100 animate-in zoom-in-95 duration-200">
         {/* Modal Top Header */}
-        <div className="px-6 py-3.5 bg-[#141e30] border-b border-[#1f2e46] flex items-center justify-between no-print">
+        <div className="px-6 py-3.5 bg-surface-29 border-b border-edge-23 flex items-center justify-between no-print">
           <h2 className="text-sm font-bold text-white tracking-tight">
             Fees Report
           </h2>
@@ -93,7 +94,7 @@ export const FeesReportModal: React.FC<FeesReportModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-[#1f2b3e] transition-colors cursor-pointer"
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-edge-17 transition-colors cursor-pointer"
             id="btn-close-fees-report-x"
             title="Close"
           >
@@ -120,9 +121,11 @@ export const FeesReportModal: React.FC<FeesReportModalProps> = ({
                   <h1 className="text-sm sm:text-base font-black text-slate-900 tracking-tight leading-tight">
                     {schoolName}
                   </h1>
-                  <p className="text-xs text-slate-500 font-medium">
-                    Phone: {schoolPhone}
-                  </p>
+                  {schoolPhone && (
+                    <p className="text-xs text-slate-500 font-medium">
+                      Phone: {schoolPhone}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -191,12 +194,12 @@ export const FeesReportModal: React.FC<FeesReportModalProps> = ({
         </div>
 
         {/* Modal Bottom Footer: Simple bar with Close and Print / Save PDF on the right */}
-        <div className="px-6 py-3.5 bg-[#141e30] border-t border-[#1f2e46] flex items-center justify-end gap-3 no-print">
+        <div className="px-6 py-3.5 bg-surface-29 border-t border-edge-23 flex items-center justify-end gap-3 no-print">
           {/* Close Option */}
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-lg bg-[#1e293b] hover:bg-[#28374d] text-slate-200 border border-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+            className="px-4 py-2 rounded-lg bg-edge-13 hover:bg-[#28374d] text-slate-200 border border-slate-700 text-xs font-semibold transition-colors cursor-pointer"
             id="btn-close-fees-report"
           >
             Close

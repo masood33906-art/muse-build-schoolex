@@ -338,7 +338,11 @@ export function parseCSVToStaff(
       category,
       department: department.trim(),
       qualification: qualification.trim(),
-      salary: parsedSalary || 60000,
+      // Fix #7b: a row whose salary cell is missing/invalid is
+      // already flagged with an `invalid_salary` issue above — it
+      // must import with salary 0 (not recorded), never an invented
+      // 60,000 written into the staff record.
+      salary: parsedSalary > 0 ? parsedSalary : 0,
       payStatus: 'Pending',
       status,
       phone: phone.trim(),

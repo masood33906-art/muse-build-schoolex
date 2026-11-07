@@ -5,7 +5,7 @@ import {
   ChevronDown 
 } from 'lucide-react';
 import { StaffMember } from '../types';
-import { generateMonthlyIndividualSlipsCombinedPdf } from '../utils/staffPdfGenerator';
+import { generateMonthlyIndividualSlipsCombinedPdf, getSalarySlipTheme } from '../utils/staffPdfGenerator';
 import { DEFAULT_SCHOOL } from '../utils/pdfGenerator';
 import { getSchoolSettings } from '../utils/settingsHelper';
 
@@ -41,8 +41,11 @@ export const StaffSalarySlipsModal: React.FC<StaffSalarySlipsModalProps> = ({
   selectedStaffMember = null
 }) => {
   const [selectedMonth, setSelectedMonth] = useState<string>('September 2026');
-  const schoolSettings = getSchoolSettings();
-  const isMinimalClassic = schoolSettings.staffSalarySlipTemplate === 'minimal-classic';
+  // Design comes from the shared salary-slip theme (Fix P1-2) — the same
+  // mapping the PDF generators use — so this preview cannot drift from the
+  // printed payslip's template interpretation.
+  const salarySlipTheme = getSalarySlipTheme(getSchoolSettings().staffSalarySlipTemplate);
+  const isMinimalClassic = salarySlipTheme.isMinimalClassic;
 
   // List of staff to display in the PDF document preview
   const previewStaffList = useMemo(() => {
@@ -66,21 +69,21 @@ export const StaffSalarySlipsModal: React.FC<StaffSalarySlipsModalProps> = ({
       onClick={onClose}
     >
       <div 
-        className="bg-[#0b1019] border border-[#1e2a3c] rounded-2xl w-full max-w-5xl max-h-[94vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150"
+        className="bg-[#0b1019] border border-edge-14 rounded-2xl w-full max-w-5xl max-h-[94vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ================= MODAL HEADER: MONTHS DROPDOWN, PRINT & SAVE PDF, CLOSE ================= */}
-        <div className="bg-[#111724] border-b border-[#1b2638] px-5 py-3.5 flex items-center justify-between gap-4">
+        <div className="bg-surface-12 border-b border-edge-6 px-5 py-3.5 flex items-center justify-between gap-4">
           {/* Months Dropdown */}
           <div className="relative">
             <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="bg-[#172030] border border-[#24334a] text-slate-100 text-xs font-semibold rounded-lg px-3.5 py-2 pr-8 appearance-none cursor-pointer hover:border-slate-500 focus:outline-none focus:border-emerald-500 shadow-sm transition-colors"
+              className="bg-surface-34 border border-edge-31 text-slate-100 text-xs font-semibold rounded-lg px-3.5 py-2 pr-8 appearance-none cursor-pointer hover:border-slate-500 focus:outline-none focus:border-emerald-500 shadow-sm transition-colors"
               id="salary-slip-month-dropdown"
             >
               {MONTHS_LIST.map(m => (
-                <option key={m} value={m} className="bg-[#111724] text-white">
+                <option key={m} value={m} className="bg-surface-12 text-white">
                   {m}
                 </option>
               ))}

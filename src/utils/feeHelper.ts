@@ -17,6 +17,11 @@ export interface StudentFeeData {
   currentMonthCollection: number;
   balance: number;
   status: 'Unpaid' | 'Partially Paid' | 'Paid';
+  // The source Student record this fee row was derived from, when the caller
+  // has it at hand (FeesModule attaches it when building its fee list and when
+  // opening the pay flow for a student not yet present in that list). Lets
+  // consumers recover the registry record without a second lookup.
+  originalStudent?: Student;
 }
 
 export interface FamilyFeeSummary {

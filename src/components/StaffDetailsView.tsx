@@ -495,7 +495,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                 onOpenPayModal(staff);
               }
             }}
-            className="h-8 px-3 rounded-lg bg-[#141b28] hover:bg-[#1a2334] border border-[#222e44] text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer box-border"
+            className="h-8 px-3 rounded-lg bg-surface-19 hover:bg-surface-42 border border-[#222e44] text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer box-border"
             id="btn-details-salary-slip"
           >
             <FileText className="w-3.5 h-3.5 text-slate-300" />
@@ -506,7 +506,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
           <button
             type="button"
             onClick={handleGenerateExperienceLetter}
-            className="h-8 px-3 rounded-lg bg-[#141b28] hover:bg-[#1a2334] border border-[#222e44] text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer box-border"
+            className="h-8 px-3 rounded-lg bg-surface-19 hover:bg-surface-42 border border-[#222e44] text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer box-border"
             id="btn-details-exp-letter"
           >
             <Mail className="w-3.5 h-3.5 text-slate-300" />
@@ -517,7 +517,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
           <button
             type="button"
             onClick={() => onOpenIdCardModal(staff)}
-            className="h-8 px-3 rounded-lg bg-[#141b28] hover:bg-[#1a2334] border border-[#222e44] text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer box-border"
+            className="h-8 px-3 rounded-lg bg-surface-19 hover:bg-surface-42 border border-[#222e44] text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer box-border"
             id="btn-details-id-card"
           >
             <IdCard className="w-3.5 h-3.5 text-slate-300" />
@@ -528,7 +528,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
           <button
             type="button"
             onClick={() => onOpenEditModal(staff)}
-            className="h-8 px-3 rounded-lg bg-[#141b28] hover:bg-[#1a2334] border border-[#222e44] text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer box-border"
+            className="h-8 px-3 rounded-lg bg-surface-19 hover:bg-surface-42 border border-[#222e44] text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer box-border"
             id="btn-details-edit"
           >
             <Edit3 className="w-3.5 h-3.5 text-slate-300" />
@@ -555,7 +555,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
       {/* Two Main Cards Side by Side */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Left Card: Current balance / Loans */}
-        <div className="bg-[#101724] border border-[#1b2537] rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden shadow-xl min-h-[260px]">
+        <div className="bg-[#101724] border border-edge-4 rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden shadow-xl min-h-[260px]">
           {/* Subtle background ambient blur */}
           <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-bl from-blue-900/10 via-transparent to-transparent rounded-full pointer-events-none" />
 
@@ -579,7 +579,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsLoanModalOpen('repay')}
-              className="px-4 py-2 rounded-full bg-[#172030] hover:bg-[#1f2b40] border border-[#25344d] text-slate-200 text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all shadow-sm"
+              className="px-4 py-2 rounded-full bg-surface-34 hover:bg-[#1f2b40] border border-[#25344d] text-slate-200 text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all shadow-sm"
               id="btn-repay-loan"
             >
               <div className="w-5 h-5 rounded-full bg-slate-700/60 flex items-center justify-center text-slate-300">
@@ -591,7 +591,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsLoanModalOpen('issue')}
-              className="px-4 py-2 rounded-full bg-[#172030] hover:bg-[#1f2b40] border border-[#25344d] text-slate-200 text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all shadow-sm"
+              className="px-4 py-2 rounded-full bg-surface-34 hover:bg-[#1f2b40] border border-[#25344d] text-slate-200 text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all shadow-sm"
               id="btn-issue-loan"
             >
               <div className="w-5 h-5 rounded-full bg-slate-700/60 flex items-center justify-center text-slate-300">
@@ -603,13 +603,13 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
         </div>
 
         {/* Right Card: Staff Information */}
-        <div className="bg-[#101724] border border-[#1b2537] rounded-2xl p-6 shadow-xl relative">
-          <div className="flex items-center justify-between pb-4 border-b border-[#1a2334]">
+        <div className="bg-[#101724] border border-edge-4 rounded-2xl p-6 shadow-xl relative">
+          <div className="flex items-center justify-between pb-4 border-b border-surface-42">
             <h3 className="text-sm font-bold text-white tracking-tight">Staff Information</h3>
             <button
               type="button"
               onClick={() => onOpenEditModal(staff)}
-              className="px-2.5 py-1 rounded-md bg-[#162030] hover:bg-[#1e2a3f] border border-[#24344d] text-slate-300 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-2.5 py-1 rounded-md bg-surface-32 hover:bg-[#1e2a3f] border border-edge-34 text-slate-300 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
               id="btn-edit-staff-info"
             >
               <Edit3 className="w-3 h-3" />
@@ -617,7 +617,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
             </button>
           </div>
 
-          <div className="divide-y divide-[#162030] text-xs">
+          <div className="divide-y divide-surface-32 text-xs">
             {/* Full name */}
             <div className="py-2.5 flex items-center justify-between">
               <div className="flex items-center gap-2 text-slate-400">
@@ -705,9 +705,9 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
       </div>
 
       {/* Bottom Section: Tabbed Panel */}
-      <div className="bg-[#101724] border border-[#1b2537] rounded-2xl overflow-hidden shadow-xl">
+      <div className="bg-[#101724] border border-edge-4 rounded-2xl overflow-hidden shadow-xl">
         {/* Tab Headers */}
-        <div className="flex items-center border-b border-[#1b2537] px-5 bg-[#0e1420] overflow-x-auto">
+        <div className="flex items-center border-b border-edge-4 px-5 bg-surface-7 overflow-x-auto">
           <button
             type="button"
             onClick={() => setActiveTab('transactions')}
@@ -787,7 +787,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
               <div className="flex items-center gap-3 w-full sm:w-auto">
                 <button
                   type="button"
-                  className="px-3 py-1.5 rounded-lg bg-[#141b27] border border-[#1e2a3c] text-xs text-slate-300 font-medium flex items-center gap-2 cursor-pointer hover:bg-[#1a2332]"
+                  className="px-3 py-1.5 rounded-lg bg-[#141b27] border border-edge-14 text-xs text-slate-300 font-medium flex items-center gap-2 cursor-pointer hover:bg-[#1a2332]"
                 >
                   <span>01 - 11 Sep 2026</span>
                   <ChevronDown className="w-3 h-3 text-slate-400" />
@@ -800,7 +800,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                     value={transactionSearch}
                     onChange={(e) => setTransactionSearch(e.target.value)}
                     placeholder="Search..."
-                    className="w-full bg-[#141b27] border border-[#1e2a3c] rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-[#141b27] border border-edge-14 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   />
                 </div>
               </div>
@@ -808,7 +808,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsAddTransactionModalOpen(true)}
-                className="px-3 py-1.5 rounded-lg bg-[#141b27] hover:bg-[#1c2738] border border-[#1e2a3c] text-xs font-semibold text-slate-200 flex items-center gap-1.5 cursor-pointer ml-auto"
+                className="px-3 py-1.5 rounded-lg bg-[#141b27] hover:bg-surface-45 border border-edge-14 text-xs font-semibold text-slate-200 flex items-center gap-1.5 cursor-pointer ml-auto"
               >
                 <Plus className="w-3.5 h-3.5 text-blue-400" />
                 <span>Add Transaction</span>
@@ -816,9 +816,9 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
             </div>
 
             {/* Transactions Table */}
-            <div className="overflow-x-auto border border-[#1b2537] rounded-xl">
+            <div className="overflow-x-auto border border-edge-4 rounded-xl">
               <table className="w-full text-left border-collapse min-w-[700px]">
-                <thead className="bg-[#0e1420] border-b border-[#1b2537] text-[11px] font-semibold text-slate-400">
+                <thead className="bg-surface-7 border-b border-edge-4 text-[11px] font-semibold text-slate-400">
                   <tr>
                     <th className="py-3 px-4">Created By</th>
                     <th className="py-3 px-4">Amount</th>
@@ -829,7 +829,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                     <th className="py-3 px-4">Created At</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#162030] text-xs">
+                <tbody className="divide-y divide-surface-32 text-xs">
                   {transactions.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="py-16 text-center text-slate-400">
@@ -844,7 +844,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                         t.type.toLowerCase().includes(transactionSearch.toLowerCase())
                       )
                       .map((t) => (
-                        <tr key={t.id} className="hover:bg-[#141b28] transition-colors">
+                        <tr key={t.id} className="hover:bg-surface-19 transition-colors">
                           <td className="py-3 px-4 text-slate-300 font-medium">{t.createdBy}</td>
                           <td className="py-3 px-4 font-bold text-white">{t.amount.toLocaleString()} PKR</td>
                           <td className="py-3 px-4 text-slate-300">{t.reason}</td>
@@ -886,9 +886,9 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
               </button>
             </div>
 
-            <div className="overflow-x-auto border border-[#1b2537] rounded-xl">
+            <div className="overflow-x-auto border border-edge-4 rounded-xl">
               <table className="w-full text-left border-collapse min-w-[700px]">
-                <thead className="bg-[#0e1420] border-b border-[#1b2537] text-[11px] font-semibold text-slate-400">
+                <thead className="bg-surface-7 border-b border-edge-4 text-[11px] font-semibold text-slate-400">
                   <tr>
                     <th className="py-3 px-4">Month</th>
                     <th className="py-3 px-4">Basic Pay</th>
@@ -899,8 +899,8 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                     <th className="py-3 px-4 text-right">Slip</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#162030] text-xs">
-                  <tr className="hover:bg-[#141b28]">
+                <tbody className="divide-y divide-surface-32 text-xs">
+                  <tr className="hover:bg-surface-19">
                     <td className="py-3 px-4 font-bold text-white">September 2026</td>
                     <td className="py-3 px-4 text-slate-300">{staff.salary?.toLocaleString()} PKR</td>
                     <td className="py-3 px-4 font-extrabold text-emerald-400">{staff.salary?.toLocaleString()} PKR</td>
@@ -922,7 +922,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                     </td>
                   </tr>
 
-                  <tr className="hover:bg-[#141b28]">
+                  <tr className="hover:bg-surface-19">
                     <td className="py-3 px-4 font-bold text-white">August 2026</td>
                     <td className="py-3 px-4 text-slate-300">{staff.salary?.toLocaleString()} PKR</td>
                     <td className="py-3 px-4 font-extrabold text-emerald-400">{staff.salary?.toLocaleString()} PKR</td>
@@ -984,7 +984,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                     value={docSearch}
                     onChange={(e) => setDocSearch(e.target.value)}
                     placeholder="Search documents..."
-                    className="bg-[#141b27] border border-[#1e2a3c] rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="bg-[#141b27] border border-edge-14 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   />
                 </div>
 
@@ -1001,7 +1001,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
             </div>
 
             {documents.length === 0 ? (
-              <div className="text-center py-16 border border-dashed border-[#1f2b3e] rounded-xl">
+              <div className="text-center py-16 border border-dashed border-edge-17 rounded-xl">
                 <FileText className="w-10 h-10 text-slate-500 mx-auto mb-2" />
                 <h5 className="text-sm font-semibold text-slate-300">No documents uploaded yet</h5>
                 <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
@@ -1010,7 +1010,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsAddDocModalOpen(true)}
-                  className="mt-4 px-4 py-2 rounded-lg bg-[#192436] hover:bg-[#202e46] border border-[#263753] text-xs font-semibold text-slate-200 inline-flex items-center gap-2 cursor-pointer"
+                  className="mt-4 px-4 py-2 rounded-lg bg-[#192436] hover:bg-[#202e46] border border-edge-39 text-xs font-semibold text-slate-200 inline-flex items-center gap-2 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5 text-blue-400" />
                   <span>Upload First Document</span>
@@ -1023,13 +1023,13 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                   .map((doc) => (
                     <div 
                       key={doc.id}
-                      className="bg-[#131b28] border border-[#1e2a3c] hover:border-[#2b3c56] rounded-xl p-4 flex flex-col justify-between transition-all group"
+                      className="bg-surface-18 border border-edge-14 hover:border-[#2b3c56] rounded-xl p-4 flex flex-col justify-between transition-all group"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="w-9 h-9 rounded-lg bg-blue-950/60 border border-blue-800/40 text-blue-400 flex items-center justify-center shrink-0">
                           <FileCheck className="w-5 h-5" />
                         </div>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#1a2436] text-slate-300 border border-[#24334a]">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#1a2436] text-slate-300 border border-edge-31">
                           {doc.type}
                         </span>
                       </div>
@@ -1046,7 +1046,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                         </p>
                       </div>
 
-                      <div className="flex items-center justify-end gap-1.5 mt-4 pt-3 border-t border-[#1b2537]">
+                      <div className="flex items-center justify-end gap-1.5 mt-4 pt-3 border-t border-edge-4">
                         <button
                           type="button"
                           onClick={() => setPreviewDoc(doc)}
@@ -1115,7 +1115,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                     value={activitySearch}
                     onChange={(e) => setActivitySearch(e.target.value)}
                     placeholder="Search activities..."
-                    className="bg-[#141b27] border border-[#1e2a3c] rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="bg-[#141b27] border border-edge-14 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   />
                 </div>
 
@@ -1132,7 +1132,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
             </div>
 
             {activities.length === 0 ? (
-              <div className="text-center py-16 border border-dashed border-[#1f2b3e] rounded-xl">
+              <div className="text-center py-16 border border-dashed border-edge-17 rounded-xl">
                 <Clock className="w-10 h-10 text-slate-500 mx-auto mb-2" />
                 <h5 className="text-sm font-semibold text-slate-300">No activity notes recorded yet</h5>
                 <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
@@ -1141,22 +1141,22 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsAddActivityModalOpen(true)}
-                  className="mt-4 px-4 py-2 rounded-lg bg-[#192436] hover:bg-[#202e46] border border-[#263753] text-xs font-semibold text-slate-200 inline-flex items-center gap-2 cursor-pointer"
+                  className="mt-4 px-4 py-2 rounded-lg bg-[#192436] hover:bg-[#202e46] border border-edge-39 text-xs font-semibold text-slate-200 inline-flex items-center gap-2 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Log First Activity</span>
                 </button>
               </div>
             ) : (
-              <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#1f2b3e]">
+              <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-edge-17">
                 {activities
                   .filter(a => !activitySearch || a.note.toLowerCase().includes(activitySearch.toLowerCase()) || (a.type || '').toLowerCase().includes(activitySearch.toLowerCase()))
                   .map((act) => (
                     <div key={act.id} className="relative group">
                       {/* Timeline dot */}
-                      <div className="absolute -left-6 top-1.5 w-3.5 h-3.5 rounded-full bg-[#182335] border-2 border-emerald-500 shadow-sm shadow-emerald-500/20" />
+                      <div className="absolute -left-6 top-1.5 w-3.5 h-3.5 rounded-full bg-edge-3 border-2 border-emerald-500 shadow-sm shadow-emerald-500/20" />
 
-                      <div className="bg-[#131b28] border border-[#1e2a3c] rounded-xl p-4 hover:border-[#2b3c56] transition-colors">
+                      <div className="bg-surface-18 border border-edge-14 rounded-xl p-4 hover:border-[#2b3c56] transition-colors">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1.5">
                           <div className="flex items-center gap-2">
                             <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-950/60 text-emerald-300 border border-emerald-800/40">
@@ -1188,8 +1188,8 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
       {/* MODAL 1: Upload / Add Document */}
       {isAddDocModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-[#121927] border border-[#223048] rounded-2xl w-full max-w-md p-6 shadow-2xl">
-            <div className="flex items-center justify-between pb-4 border-b border-[#1b263a] mb-4">
+          <div className="bg-surface-17 border border-[#223048] rounded-2xl w-full max-w-md p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-edge-7 mb-4">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-lg bg-blue-950/60 text-blue-400 border border-blue-800/40">
                   <UploadCloud className="w-4 h-4" />
@@ -1216,7 +1216,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                   value={newDoc.title}
                   onChange={(e) => setNewDoc(prev => ({ ...prev, title: e.target.value }))}
                   placeholder="e.g. Master Degree Transcript, CNIC Copy"
-                  className="w-full bg-[#162030] border border-[#24334a] rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -1227,7 +1227,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                 <select
                   value={newDoc.type}
                   onChange={(e) => setNewDoc(prev => ({ ...prev, type: e.target.value }))}
-                  className="w-full bg-[#162030] border border-[#24334a] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                 >
                   <option value="CNIC Copy">CNIC Copy</option>
                   <option value="Contract">Employment Contract</option>
@@ -1274,11 +1274,11 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#1b263a]">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-edge-7">
                 <button
                   type="button"
                   onClick={() => setIsAddDocModalOpen(false)}
-                  className="px-3.5 py-2 rounded-lg bg-[#182234] text-slate-300 font-semibold hover:bg-[#202d44]"
+                  className="px-3.5 py-2 rounded-lg bg-surface-41 text-slate-300 font-semibold hover:bg-surface-48"
                 >
                   Cancel
                 </button>
@@ -1297,8 +1297,8 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
       {/* MODAL 2: Add Activity Note */}
       {isAddActivityModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-[#121927] border border-[#223048] rounded-2xl w-full max-w-md p-6 shadow-2xl">
-            <div className="flex items-center justify-between pb-4 border-b border-[#1b263a] mb-4">
+          <div className="bg-surface-17 border border-[#223048] rounded-2xl w-full max-w-md p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-edge-7 mb-4">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-lg bg-emerald-950/60 text-emerald-400 border border-emerald-800/40">
                   <Clock className="w-4 h-4" />
@@ -1322,7 +1322,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                 <select
                   value={newActivity.type}
                   onChange={(e) => setNewActivity(prev => ({ ...prev, type: e.target.value }))}
-                  className="w-full bg-[#162030] border border-[#24334a] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
                 >
                   <option value="General Note">General Note</option>
                   <option value="Performance Feedback">Performance Feedback</option>
@@ -1344,7 +1344,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                   value={newActivity.note}
                   onChange={(e) => setNewActivity(prev => ({ ...prev, note: e.target.value }))}
                   placeholder="Write activity note, supervisor remarks, or details here..."
-                  className="w-full bg-[#162030] border border-[#24334a] rounded-lg p-3 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 leading-relaxed"
+                  className="w-full bg-surface-32 border border-edge-31 rounded-lg p-3 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 leading-relaxed"
                 />
               </div>
 
@@ -1356,15 +1356,15 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                   type="text"
                   value={newActivity.author}
                   onChange={(e) => setNewActivity(prev => ({ ...prev, author: e.target.value }))}
-                  className="w-full bg-[#162030] border border-[#24334a] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#1b263a]">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-edge-7">
                 <button
                   type="button"
                   onClick={() => setIsAddActivityModalOpen(false)}
-                  className="px-3.5 py-2 rounded-lg bg-[#182234] text-slate-300 font-semibold hover:bg-[#202d44]"
+                  className="px-3.5 py-2 rounded-lg bg-surface-41 text-slate-300 font-semibold hover:bg-surface-48"
                 >
                   Cancel
                 </button>
@@ -1383,8 +1383,8 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
       {/* MODAL 3: Issue or Repay Loan */}
       {isLoanModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-[#121927] border border-[#223048] rounded-2xl w-full max-w-md p-6 shadow-2xl">
-            <div className="flex items-center justify-between pb-4 border-b border-[#1b263a] mb-4">
+          <div className="bg-surface-17 border border-[#223048] rounded-2xl w-full max-w-md p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-edge-7 mb-4">
               <div className="flex items-center gap-2">
                 <div className={`p-2 rounded-lg ${isLoanModalOpen === 'issue' ? 'bg-blue-950/60 text-blue-400' : 'bg-emerald-950/60 text-emerald-400'}`}>
                   {isLoanModalOpen === 'issue' ? <Plus className="w-4 h-4" /> : <Minus className="w-4 h-4" />}
@@ -1403,7 +1403,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
             </div>
 
             <div className="space-y-4 text-xs">
-              <div className="p-3 rounded-lg bg-[#162030] border border-[#202d44]">
+              <div className="p-3 rounded-lg bg-surface-32 border border-surface-48">
                 <span className="text-slate-400">Current Loan Balance:</span>{' '}
                 <span className="font-bold text-white">{loanBalance.toLocaleString()} PKR</span>
               </div>
@@ -1418,7 +1418,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                   step="500"
                   value={loanAmount}
                   onChange={(e) => setLoanAmount(Number(e.target.value))}
-                  className="w-full bg-[#162030] border border-[#24334a] rounded-lg px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-blue-500"
+                  className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -1431,15 +1431,15 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                   value={loanReason}
                   onChange={(e) => setLoanReason(e.target.value)}
                   placeholder={isLoanModalOpen === 'issue' ? 'e.g. Medical emergency advance' : 'e.g. Monthly salary installment deduction'}
-                  className="w-full bg-[#162030] border border-[#24334a] rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#1b263a]">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-edge-7">
                 <button
                   type="button"
                   onClick={() => setIsLoanModalOpen(null)}
-                  className="px-3.5 py-2 rounded-lg bg-[#182234] text-slate-300 font-semibold hover:bg-[#202d44]"
+                  className="px-3.5 py-2 rounded-lg bg-surface-41 text-slate-300 font-semibold hover:bg-surface-48"
                 >
                   Cancel
                 </button>
@@ -1461,8 +1461,8 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
       {/* MODAL 4: Add Custom Transaction */}
       {isAddTransactionModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-[#121927] border border-[#223048] rounded-2xl w-full max-w-md p-6 shadow-2xl">
-            <div className="flex items-center justify-between pb-4 border-b border-[#1b263a] mb-4">
+          <div className="bg-surface-17 border border-[#223048] rounded-2xl w-full max-w-md p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-edge-7 mb-4">
               <h3 className="text-base font-bold text-white">Add Staff Transaction</h3>
               <button 
                 type="button" 
@@ -1484,7 +1484,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                   min="1"
                   value={newTransaction.amount}
                   onChange={(e) => setNewTransaction(prev => ({ ...prev, amount: Number(e.target.value) }))}
-                  className="w-full bg-[#162030] border border-[#24334a] rounded-lg px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-blue-500"
+                  className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -1498,7 +1498,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                   value={newTransaction.reason}
                   onChange={(e) => setNewTransaction(prev => ({ ...prev, reason: e.target.value }))}
                   placeholder="e.g. Fuel allowance reimbursement, bonus"
-                  className="w-full bg-[#162030] border border-[#24334a] rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -1510,7 +1510,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                   <select
                     value={newTransaction.type}
                     onChange={(e) => setNewTransaction(prev => ({ ...prev, type: e.target.value }))}
-                    className="w-full bg-[#162030] border border-[#24334a] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                   >
                     <option value="Debit">Debit</option>
                     <option value="Credit">Credit</option>
@@ -1527,7 +1527,7 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                   <select
                     value={newTransaction.payment}
                     onChange={(e) => setNewTransaction(prev => ({ ...prev, payment: e.target.value }))}
-                    className="w-full bg-[#162030] border border-[#24334a] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-surface-32 border border-edge-31 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                   >
                     <option value="Bank Transfer">Bank Transfer</option>
                     <option value="Cash">Cash</option>
@@ -1537,11 +1537,11 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#1b263a]">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-edge-7">
                 <button
                   type="button"
                   onClick={() => setIsAddTransactionModalOpen(false)}
-                  className="px-3.5 py-2 rounded-lg bg-[#182234] text-slate-300 font-semibold hover:bg-[#202d44]"
+                  className="px-3.5 py-2 rounded-lg bg-surface-41 text-slate-300 font-semibold hover:bg-surface-48"
                 >
                   Cancel
                 </button>
@@ -1560,8 +1560,8 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
       {/* MODAL 5: Document Preview */}
       {previewDoc && (
         <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-[#121927] border border-[#223048] rounded-2xl w-full max-w-lg p-6 shadow-2xl">
-            <div className="flex items-center justify-between pb-4 border-b border-[#1b263a] mb-4">
+          <div className="bg-surface-17 border border-[#223048] rounded-2xl w-full max-w-lg p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-edge-7 mb-4">
               <div className="flex items-center gap-2">
                 <FileCheck className="w-5 h-5 text-blue-400" />
                 <h3 className="text-base font-bold text-white">{previewDoc.title}</h3>
@@ -1575,12 +1575,12 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
               </button>
             </div>
 
-            <div className="p-5 rounded-xl bg-[#162030] border border-[#202e46] text-center space-y-3">
+            <div className="p-5 rounded-xl bg-surface-32 border border-[#202e46] text-center space-y-3">
               {(previewBlobUrl || previewDoc.fileData) && /\.(png|jpe?g|webp|gif)$/i.test(previewDoc.fileName) ? (
                 <img
                   src={previewBlobUrl || previewDoc.fileData}
                   alt={previewDoc.title}
-                  className="max-h-56 mx-auto object-contain rounded-lg border border-[#23354e]"
+                  className="max-h-56 mx-auto object-contain rounded-lg border border-edge-35"
                 />
               ) : (
                 <div className="w-16 h-16 rounded-full bg-blue-950/80 border border-blue-800/60 text-blue-400 flex items-center justify-center mx-auto">
@@ -1599,11 +1599,11 @@ export const StaffDetailsView: React.FC<StaffDetailsViewProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-[#1b263a]">
+            <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-edge-7">
               <button
                 type="button"
                 onClick={() => setPreviewDoc(null)}
-                className="px-4 py-2 rounded-lg bg-[#182234] text-slate-300 font-semibold hover:bg-[#202d44]"
+                className="px-4 py-2 rounded-lg bg-surface-41 text-slate-300 font-semibold hover:bg-surface-48"
               >
                 Close
               </button>

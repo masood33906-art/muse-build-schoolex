@@ -1,5 +1,123 @@
 @import "tailwindcss";
 
+@theme {
+  /* Design tokens (Fix #8 / audit P2-1). Every value below is an EXACT copy of a
+     hex that the UI already used repeatedly (>=8 class usages, measured 2026-11-06);
+     classes were renamed to these tokens with zero visual change. The numbered
+     surface/edge steps are ordered darkest -> lightest. Near-identical steps are
+     deliberate: unifying them is a separate visual pass, not done here. */
+  /* Page */
+  --color-abyss: #0a0e17;
+  --color-canvas: #0b0f19;
+  /* Surfaces (panel / card / input backgrounds) */
+  --color-surface-1: #080d16;
+  --color-surface-2: #090d16;
+  --color-surface-3: #090f19;
+  --color-surface-4: #090f1a;
+  --color-surface-5: #0b101a;
+  --color-surface-6: #0c121e;
+  --color-surface-7: #0e1420;
+  --color-surface-8: #0e1626;
+  --color-surface-9: #0f1725;
+  --color-surface-10: #0f1726;
+  --color-surface-11: #101725;
+  --color-surface-12: #111724;
+  --color-surface-13: #101726;
+  --color-surface-14: #111726;
+  --color-surface-15: #0f172a;
+  --color-surface-16: #121824;
+  --color-surface-17: #121927;
+  --color-surface-18: #131b28;
+  --color-surface-19: #141b28;
+  --color-surface-20: #121b2b;
+  --color-surface-21: #141c2b;
+  --color-surface-22: #121c2e;
+  --color-surface-23: #141c2c;
+  --color-surface-24: #141d2b;
+  --color-surface-25: #131d2e;
+  --color-surface-26: #141d2d;
+  --color-surface-27: #141e2e;
+  --color-surface-28: #141e2f;
+  --color-surface-29: #141e30;
+  --color-surface-30: #151e30;
+  --color-surface-31: #151f30;
+  --color-surface-32: #162030;
+  --color-surface-33: #142033;
+  --color-surface-34: #172030;
+  --color-surface-35: #152033;
+  --color-surface-36: #162032;
+  --color-surface-37: #182030;
+  --color-surface-38: #152132;
+  --color-surface-39: #162132;
+  --color-surface-40: #182232;
+  --color-surface-41: #182234;
+  --color-surface-42: #1a2334;
+  --color-surface-43: #1a2538;
+  --color-surface-44: #1a263a;
+  --color-surface-45: #1c2738;
+  --color-surface-46: #1a273e;
+  --color-surface-47: #1c2a42;
+  --color-surface-48: #202d44;
+  /* Edges (borders / dividers) */
+  --color-edge-1: #172234;
+  --color-edge-2: #152238;
+  --color-edge-3: #182335;
+  --color-edge-4: #1b2537;
+  --color-edge-5: #19263a;
+  --color-edge-6: #1b2638;
+  --color-edge-7: #1b263a;
+  --color-edge-8: #1b273b;
+  --color-edge-9: #1d273a;
+  --color-edge-10: #1e2739;
+  --color-edge-11: #1b283d;
+  --color-edge-12: #1a2840;
+  --color-edge-13: #1e293b;
+  --color-edge-14: #1e2a3c;
+  --color-edge-15: #1b2b42;
+  --color-edge-16: #1d2b40;
+  --color-edge-17: #1f2b3e;
+  --color-edge-18: #202c40;
+  --color-edge-19: #1f2c42;
+  --color-edge-20: #202d42;
+  --color-edge-21: #1e2d45;
+  --color-edge-22: #232d42;
+  --color-edge-23: #1f2e46;
+  --color-edge-24: #223046;
+  --color-edge-25: #20304a;
+  --color-edge-26: #233149;
+  --color-edge-27: #263248;
+  --color-edge-28: #21334c;
+  --color-edge-29: #22334b;
+  --color-edge-30: #22334c;
+  --color-edge-31: #24334a;
+  --color-edge-32: #22334e;
+  --color-edge-33: #22344f;
+  --color-edge-34: #24344d;
+  --color-edge-35: #23354e;
+  --color-edge-36: #233550;
+  --color-edge-37: #26354d;
+  --color-edge-38: #243550;
+  --color-edge-39: #263753;
+  --color-edge-40: #283852;
+  --color-edge-41: #2a3c57;
+  --color-edge-42: #2c3f61;
+  /* Text */
+  --color-ink: #f1f5f9;
+  --color-muted: #94a3b8;
+  /* Accents */
+  --color-accent: #2563eb;
+  --color-accent-deep: #1e3a8a;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #f43f5e;
+  /* Printed-document palette (on-screen print previews) */
+  --color-doc: #4682b4;
+  --color-doc-soft: #7aa3c7;
+  --color-doc-deep: #1b365d;
+  /* Brand */
+  --color-whatsapp: #25d366;
+}
+
 /* Remove up and down spinner arrows on all number inputs across all browsers */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {
@@ -23,7 +141,7 @@ input[type="number"] {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1f2b3e;
+  background: var(--color-edge-17); /* #1f2b3e */
   border-radius: 4px;
 }
 

@@ -109,7 +109,7 @@ export const StaffIdCardModal: React.FC<StaffIdCardModalProps> = ({
         id="modal-staff-id-card"
       >
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-[#232d42] flex items-center justify-between bg-[#171f2e]">
+        <div className="px-6 py-4 border-b border-edge-22 flex items-center justify-between bg-[#171f2e]">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
               <Briefcase className="w-4 h-4" />
@@ -146,7 +146,7 @@ export const StaffIdCardModal: React.FC<StaffIdCardModalProps> = ({
                   type="button"
                   onClick={handlePrev}
                   disabled={currentIndex <= 0}
-                  className="p-2 rounded-lg bg-[#1a2334] border border-[#24334d] hover:bg-[#202d44] disabled:opacity-40 disabled:pointer-events-none text-slate-300 cursor-pointer"
+                  className="p-2 rounded-lg bg-surface-42 border border-[#24334d] hover:bg-surface-48 disabled:opacity-40 disabled:pointer-events-none text-slate-300 cursor-pointer"
                   title="Previous Employee"
                 >
                   <ChevronLeft className="w-4 h-4" />
@@ -158,7 +158,7 @@ export const StaffIdCardModal: React.FC<StaffIdCardModalProps> = ({
                     const found = allStaff.find(s => s.id === e.target.value);
                     if (found) onSelectStaff(found);
                   }}
-                  className="flex-1 bg-[#1a2334] border border-[#24334d] rounded-lg px-3 py-2 text-xs font-medium text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
+                  className="flex-1 bg-surface-42 border border-[#24334d] rounded-lg px-3 py-2 text-xs font-medium text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
                 >
                   {allStaff.map(s => (
                     <option key={s.id} value={s.id}>
@@ -171,7 +171,7 @@ export const StaffIdCardModal: React.FC<StaffIdCardModalProps> = ({
                   type="button"
                   onClick={handleNext}
                   disabled={currentIndex >= allStaff.length - 1}
-                  className="p-2 rounded-lg bg-[#1a2334] border border-[#24334d] hover:bg-[#202d44] disabled:opacity-40 disabled:pointer-events-none text-slate-300 cursor-pointer"
+                  className="p-2 rounded-lg bg-surface-42 border border-[#24334d] hover:bg-surface-48 disabled:opacity-40 disabled:pointer-events-none text-slate-300 cursor-pointer"
                   title="Next Employee"
                 >
                   <ChevronRight className="w-4 h-4" />
@@ -195,7 +195,7 @@ export const StaffIdCardModal: React.FC<StaffIdCardModalProps> = ({
                   className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                     template === 'modern-tech'
                       ? 'border-emerald-500 bg-emerald-500/10 text-white'
-                      : 'border-[#222f46] bg-[#172030] text-slate-300 hover:border-[#2f4060]'
+                      : 'border-[#222f46] bg-surface-34 text-slate-300 hover:border-[#2f4060]'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
@@ -212,7 +212,7 @@ export const StaffIdCardModal: React.FC<StaffIdCardModalProps> = ({
                   className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                     template === 'classic-academic'
                       ? 'border-emerald-500 bg-emerald-500/10 text-white'
-                      : 'border-[#222f46] bg-[#172030] text-slate-300 hover:border-[#2f4060]'
+                      : 'border-[#222f46] bg-surface-34 text-slate-300 hover:border-[#2f4060]'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
@@ -225,7 +225,7 @@ export const StaffIdCardModal: React.FC<StaffIdCardModalProps> = ({
             </div>
 
             {/* Employee Card Summary Info */}
-            <div className="bg-[#172030] border border-[#233048] rounded-xl p-4 text-xs space-y-2">
+            <div className="bg-surface-34 border border-[#233048] rounded-xl p-4 text-xs space-y-2">
               <div className="flex justify-between text-slate-400">
                 <span>Employee Name:</span>
                 <span className="font-semibold text-white">{staff.name}</span>
@@ -264,7 +264,7 @@ export const StaffIdCardModal: React.FC<StaffIdCardModalProps> = ({
                 type="button"
                 onClick={handleDownloadAll}
                 disabled={isGeneratingAll}
-                className="w-full py-2.5 px-4 rounded-xl bg-[#1d273a] hover:bg-[#25324a] border border-[#2b3b57] text-slate-200 font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all"
+                className="w-full py-2.5 px-4 rounded-xl bg-edge-9 hover:bg-[#25324a] border border-[#2b3b57] text-slate-200 font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all"
                 id="btn-download-all-staff-cards"
               >
                 <FileStack className="w-4 h-4 text-emerald-400" />

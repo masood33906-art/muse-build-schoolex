@@ -110,7 +110,7 @@ export const IdCardModal: React.FC<IdCardModalProps> = ({
         id="modal-id-card"
       >
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-[#232d42] flex items-center justify-between bg-[#171f2e]">
+        <div className="px-6 py-4 border-b border-edge-22 flex items-center justify-between bg-[#171f2e]">
           <div>
             <h2 className="text-base font-bold text-white flex items-center gap-2">
               <GraduationCap className="w-5 h-5 text-blue-400" />
@@ -131,7 +131,7 @@ export const IdCardModal: React.FC<IdCardModalProps> = ({
           {/* Left Column: Template Selection & Controls */}
           <div className="lg:col-span-5 space-y-5">
             {/* Student Navigation Bar */}
-            <div className="bg-[#182232] border border-[#26354d] rounded-xl p-3 flex items-center justify-between">
+            <div className="bg-surface-40 border border-edge-37 rounded-xl p-3 flex items-center justify-between">
               <button
                 type="button"
                 onClick={handlePrev}
@@ -172,7 +172,7 @@ export const IdCardModal: React.FC<IdCardModalProps> = ({
                   className={`text-left p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
                     template === 'modern-tech'
                       ? 'bg-blue-950/40 border-blue-500 ring-1 ring-blue-500/50'
-                      : 'bg-[#182232] border-[#26354d] hover:border-slate-600'
+                      : 'bg-surface-40 border-edge-37 hover:border-slate-600'
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -198,7 +198,7 @@ export const IdCardModal: React.FC<IdCardModalProps> = ({
                   className={`text-left p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
                     template === 'classic-academic'
                       ? 'bg-amber-950/30 border-amber-500 ring-1 ring-amber-500/50'
-                      : 'bg-[#182232] border-[#26354d] hover:border-slate-600'
+                      : 'bg-surface-40 border-edge-37 hover:border-slate-600'
                   }`}
                 >
                   <div className="flex items-center gap-3">
