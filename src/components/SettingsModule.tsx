@@ -13,7 +13,6 @@ import {
   Database,
   Download,
   AlertTriangle,
-  Sparkles,
   Wrench
 } from 'lucide-react';
 import { 
@@ -27,7 +26,7 @@ import {
 } from '../utils/settingsHelper';
 import { getBillingStartMonth, setBillingStartMonth } from '../utils/studentFeeLedgerHelper';
 import { downloadBackup, restoreBackup } from '../utils/backup';
-import { loadDummyData, resetSystem } from '../utils/systemActions';
+import { resetSystem } from '../utils/systemActions';
 import { Student, ClassInfo, StaffMember, AttendanceRecord } from '../types';
 import { TemplatesSubmodule } from './TemplatesSubmodule';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
@@ -73,8 +72,6 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
   const [pendingRestoreFile, setPendingRestoreFile] = useState<File | null>(null);
   const [isRestoring, setIsRestoring] = useState<boolean>(false);
-  const [showDummyConfirm, setShowDummyConfirm] = useState<boolean>(false);
-  const [isLoadingDummy, setIsLoadingDummy] = useState<boolean>(false);
   const [resetStep, setResetStep] = useState<0 | 1 | 2>(0);
   const [isResetting, setIsResetting] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -168,24 +165,6 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
     }
     setHasUnsavedChanges(false);
     onShowToast('Settings reset to defaults', 'info');
-  };
-
-  const handleLoadDummyData = async () => {
-    setIsLoadingDummy(true);
-    try {
-      const result = await loadDummyData();
-      setShowDummyConfirm(false);
-      onShowToast(
-        `Dummy data loaded: ${result.loaded.students} students, ${result.loaded.staff} staff, ${result.loaded.classes} classes. Reloading…`,
-        'success'
-      );
-      setTimeout(() => window.location.reload(), 1500);
-    } catch (err: any) {
-      setShowDummyConfirm(false);
-      onShowToast(err?.message || 'Could not load dummy data', 'error');
-    } finally {
-      setIsLoadingDummy(false);
-    }
   };
 
   const handleResetSystem = async () => {
@@ -303,31 +282,11 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
         </div>
         <div>
           <h2 className="text-sm font-bold text-white uppercase tracking-wider">System</h2>
-          <p className="text-xs text-slate-400">Practice data for training, or a full factory reset of this installation</p>
+          <p className="text-xs text-slate-400">A full factory reset of this installation</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* Load Dummy Data */}
-        <div className="p-4 rounded-xl bg-surface-2 border border-edge-21 space-y-2.5">
-          <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
-            <Sparkles className="w-4 h-4 text-violet-400" />
-            Load Dummy Data
-          </h3>
-          <p className="text-xs text-slate-400 leading-relaxed">
-            Fill the empty system with the sample school (117 students, 28 staff, 19 classes and related sample data) so you can practise safely. Only works while the system is empty.
-          </p>
-          <button
-            type="button"
-            onClick={() => setShowDummyConfirm(true)}
-            className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold flex items-center gap-2 cursor-pointer transition-all shadow-sm"
-            id="btn-settings-load-dummy-data"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>Load dummy data</span>
-          </button>
-        </div>
-
+      <div className="grid grid-cols-1 gap-3">
         {/* Reset System */}
         <div className="p-4 rounded-xl bg-rose-500/5 border border-rose-500/25 space-y-2.5">
           <h3 className="text-xs font-bold text-rose-300 flex items-center gap-1.5">
@@ -348,42 +307,6 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
           </button>
         </div>
       </div>
-
-      {/* Load Dummy Data Confirmation Dialog */}
-      {showDummyConfirm && (
-        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-xs">
-          <div className="bg-surface-17 border border-[#24344e] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-2.5 text-violet-400">
-              <Sparkles className="w-5 h-5 shrink-0" />
-              <h3 className="text-base font-bold text-white">Load dummy data</h3>
-            </div>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              This loads the sample school — <span className="text-white font-semibold">117 students, 28 staff and 19 classes</span>, with related sample fees and records — so you can practise with realistic data.
-            </p>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Dummy data can only be loaded into an <span className="text-white font-semibold">empty system</span>. If this system already holds data, nothing will be loaded and you will be told why.
-            </p>
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#1c283d]">
-              <button
-                type="button"
-                disabled={isLoadingDummy}
-                onClick={() => setShowDummyConfirm(false)}
-                className="px-3.5 py-2 rounded-lg bg-surface-41 text-slate-300 text-xs font-semibold hover:bg-surface-48 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isLoadingDummy}
-                onClick={handleLoadDummyData}
-                className="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold cursor-pointer"
-              >
-                {isLoadingDummy ? 'Loading...' : 'Load dummy data'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Reset System Confirmation — Step 1 */}
       {resetStep === 1 && (

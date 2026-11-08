@@ -1,10 +1,13 @@
 // SchoolEx Electron main process (CommonJS: Electron entry point).
-// Starts the local Express+SQLite server in-process on 127.0.0.1 with an
-// auto-chosen port, waits for /api/health, then opens the app window.
-// Fully offline: the window only ever talks to the local server.
+// Starts the local Express+SQLite server in-process on 127.0.0.1 on a
+// FIXED port (see ./port.cjs — a stable origin keeps the window's local
+// storage stable across launches), waits for /api/health, then opens the
+// app window. Fully offline: the window only ever talks to the local
+// server.
 const { app, BrowserWindow, shell } = require('electron');
 const path = require('path');
 const http = require('http');
+const { startWithPortFallback } = require('./port.cjs');
 
 let mainWindow = null;
 let serverHandle = null;
@@ -34,11 +37,11 @@ async function startServer() {
   // server/ is shipped inside the app (see electron-builder files config).
   const { pathToFileURL } = require('url');
   const serverModule = await import(pathToFileURL(path.join(__dirname, '..', 'server', 'index.js')).href);
-  serverHandle = await serverModule.startServer({
-    port: 0, // auto free port
+  serverHandle = await startWithPortFallback((port) => serverModule.startServer({
+    port,
     dbPath: process.env.SCHOOLEX_DB,
     distDir: path.join(__dirname, '..', 'dist'),
-  });
+  }));
   return serverHandle.port;
 }
 
@@ -72,7 +75,19 @@ if (!gotLock) {
   });
   app.whenReady().then(createWindow).catch((e) => { console.error(e); app.quit(); });
   app.on('window-all-closed', () => app.quit());
-  app.on('before-quit', async () => {
-    if (serverHandle) { try { await serverHandle.close(); } catch {} serverHandle = null; }
+  // Finalize before quitting (Change 3): Electron does NOT wait for an
+  // async 'before-quit' handler, so the first quit attempt is held with
+  // preventDefault while the server closes — serverHandle.close() closes
+  // the SQLite handle, which checkpoints the WAL (TRUNCATE) first, so
+  // schoolex.db on disk is complete and self-contained — then quit is
+  // re-issued and proceeds.
+  let quitFinalized = false;
+  app.on('before-quit', (e) => {
+    if (!serverHandle || quitFinalized) return;
+    e.preventDefault();
+    quitFinalized = true;
+    const handle = serverHandle;
+    serverHandle = null;
+    handle.close().catch(() => {}).finally(() => app.quit());
   });
 }

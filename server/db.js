@@ -7,6 +7,7 @@
 // with near-identical APIs; the small differences are normalised here.
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 
 export let driverName = 'none';
 
@@ -31,7 +32,12 @@ export function openDb(dbPath) {
     raw: db,
     exec: (sql) => db.exec(sql),
     prepare: (sql) => db.prepare(sql),
-    close: () => db.close(),
+    // Close ALWAYS checkpoints the WAL first (owner directive 2026-11-08:
+    // data must persist exactly as left across close/reopen). Without this,
+    // the newest writes can sit only in schoolex.db-wal and the main .db
+    // file looks stale; after a TRUNCATE checkpoint the .db file itself
+    // holds everything and the -wal file is empty/gone.
+    close: () => { try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); } catch {} db.close(); },
     checkpoint: () => { try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); } catch {} },
     // Run fn inside a single SQLite transaction: every write inside fn
     // commits together or rolls back together. better-sqlite3 has a native
@@ -90,6 +96,11 @@ export const MIGRATIONS = [
      data TEXT NOT NULL, created_at TEXT, updated_at TEXT)`,
   `CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT)`,
   `CREATE TABLE IF NOT EXISTS collections (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT)`,
+  // Server-internal bookkeeping (never user data): holds the data epoch
+  // (see getDataEpoch below). Deliberately NOT one of the tables wiped by
+  // POST /api/system/reset — reset ROTATES the epoch instead of deleting
+  // the table, which is exactly how clients learn their cache is stale.
+  `CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance_records(date)`,
   `CREATE INDEX IF NOT EXISTS idx_payments_student ON payments(student_id)`,
   `CREATE INDEX IF NOT EXISTS idx_marks_exam ON exam_marks(exam_id)`,
@@ -133,4 +144,31 @@ function migrate(db) {
   for (const sql of MIGRATIONS) db.exec(sql);
   db.prepare('INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)')
     .run(1, new Date().toISOString());
+}
+
+// ---------------------------------------------------------------------------
+// Data epoch (owner directive 2026-11-08, Change 1): a random token that
+// identifies the current GENERATION of this database's data. It is created
+// the first time it is read, survives restarts unchanged, and is ROTATED
+// by POST /api/system/reset (and implicitly differs on any brand-new
+// database file). The client (src/utils/storage.ts) stores the epoch it
+// last hydrated from; when the server's epoch does not match, the client's
+// cached collections belong to a dead generation — e.g. a leftover demo
+// dataset in browser storage — and are discarded instead of being synced
+// back up into the (empty) server. This is what stops an old cache from
+// resurrecting data into a fresh or reset database.
+// ---------------------------------------------------------------------------
+export function getDataEpoch(db) {
+  const row = db.prepare("SELECT value FROM app_meta WHERE key = 'data_epoch'").get();
+  if (row) return row.value;
+  const epoch = crypto.randomUUID();
+  db.prepare("INSERT OR IGNORE INTO app_meta(key, value) VALUES ('data_epoch', ?)").run(epoch);
+  const again = db.prepare("SELECT value FROM app_meta WHERE key = 'data_epoch'").get();
+  return again ? again.value : epoch;
+}
+
+export function rotateDataEpoch(db) {
+  const epoch = crypto.randomUUID();
+  db.prepare("INSERT INTO app_meta(key, value) VALUES ('data_epoch', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(epoch);
+  return epoch;
 }
