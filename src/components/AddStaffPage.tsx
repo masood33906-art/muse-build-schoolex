@@ -358,7 +358,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   type="text"
                   value={formData.name || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="e.g. ABDUL RAFFAY"
+                  placeholder="e.g. Full name"
                   className={`w-full bg-surface-39 border rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors ${
                     errors.name ? 'border-rose-500' : 'border-edge-38'
                   }`}
@@ -376,7 +376,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   type="text"
                   value={formData.fatherName || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, fatherName: e.target.value }))}
-                  placeholder="e.g. Muhammad Raffay"
+                  placeholder="e.g. Father's full name"
                   className="w-full bg-surface-39 border border-edge-38 rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
                   id="input-staff-father"
                 />
@@ -391,7 +391,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   type="text"
                   value={formData.id || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, id: e.target.value }))}
-                  placeholder="e.g. T0018 or STF-0012"
+                  placeholder="e.g. STF-0012"
                   className={`w-full bg-surface-39 border font-mono rounded-lg px-3 py-2.5 text-xs text-emerald-400 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors ${
                     errors.id ? 'border-rose-500' : 'border-edge-38'
                   }`}
@@ -409,7 +409,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   type="text"
                   value={formData.cnic || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, cnic: e.target.value }))}
-                  placeholder="e.g. 374054544635 or 13734-5360138-1"
+                  placeholder="e.g. 35202-1234567-1"
                   className="w-full bg-surface-39 border border-edge-38 font-mono rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
                   id="input-staff-cnic"
                 />
@@ -644,7 +644,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   type="text"
                   value={formData.whatsapp || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, whatsapp: e.target.value }))}
-                  placeholder="e.g. 3155285341"
+                  placeholder="e.g. 3001234567"
                   className="w-full bg-surface-39 border border-edge-38 rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
                 />
               </div>
@@ -672,7 +672,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   type="text"
                   value={formData.address || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
-                  placeholder="e.g. school, Gulberg III"
+                  placeholder="e.g. Street / area, City"
                   className="w-full bg-surface-39 border border-edge-38 rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
                 />
               </div>

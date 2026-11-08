@@ -34,7 +34,6 @@ const GENERATED_CHALLANS_STORAGE_KEY = 'schooliee_generated_challans_clean_v1';
 
 const SEED_DEFAULT_CHALLANS: GeneratedChallan[] = [];
 
-export const ARCHIVED_SEED_DEFAULT_CHALLANS: GeneratedChallan[] = [];
 
 export function getGeneratedChallans(): GeneratedChallan[] {
   return loadJSON<GeneratedChallan[]>(

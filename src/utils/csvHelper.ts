@@ -132,7 +132,7 @@ export function downloadSampleCSVTemplate(availableClasses: ClassInfo[] = []) {
   const c4 = getClassAndSec(3, 'Class 2', 'A');
 
   const sampleRows = [
-    `S-00301,1,Muhammad Rayan,Tariq Mahmood,F-0210,${c1.className},${c1.sectionName},Active,B+,+92 300 1122334,2025-01-10,2016-04-12`,
+    `S-00301,1,Muhammad Rayan,Sample Family,F-0210,${c1.className},${c1.sectionName},Active,B+,+92 300 1122334,2025-01-10,2016-04-12`,
     `S-00302,2,Areeba Noor,Zahid Hussain,F-0211,${c2.className},${c2.sectionName},Active,O+,+92 301 2233445,2025-02-15,2018-08-23`,
     `S-00303,3,Hamza Farooq,Farooq Azam,F-0212,${c3.className},${c3.sectionName},Active,A+,+92 302 3344556,2024-09-01,2013-11-05`,
     `,,Zainab Bilal,Bilal Ahmed,F-0213,${c4.className},${c4.sectionName},Active,AB+,+92 303 4455667,2025-01-05,2019-02-17`

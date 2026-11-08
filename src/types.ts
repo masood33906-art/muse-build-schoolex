@@ -123,9 +123,9 @@ export interface StaffTransaction {
 }
 
 export interface StaffMember {
-  id: string; // e.g. 'T0018', 'STF-0012'
+  id: string; // e.g. 'STF-0012'
   name: string;
-  cnic?: string; // CNIC e.g. 374054544635 or 13734-5360138-1
+  cnic?: string; // CNIC e.g. 35202-1234567-1
   fatherName?: string;
   role: string; // e.g. 'otherStaff', 'Accountant', 'teacher', 'Teacher'
   category: StaffCategory;

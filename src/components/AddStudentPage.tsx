@@ -586,7 +586,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
                     setErrors(prev => { const n = { ...prev }; delete n.name; return n; });
                   }
                 }}
-                placeholder="e.g. Ayesha Khan"
+                placeholder="e.g. Student full name"
                 className={`w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border ${
                   errors.name ? 'border-rose-500' : 'border-edge-40'
                 } focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors`}
@@ -1014,7 +1014,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
                     setErrors(prev => { const n = { ...prev }; delete n.family; return n; });
                   }
                 }}
-                placeholder="e.g. Tariq Mehmood"
+                placeholder="e.g. Guardian / father full name"
                 className={`w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border ${
                   errors.family ? 'border-rose-500' : 'border-edge-40'
                 } focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors`}
@@ -1247,7 +1247,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
                   type="text"
                   value={formData.fatherName || ''}
                   onChange={(e) => setFormData({ ...formData, fatherName: e.target.value })}
-                  placeholder="e.g. Tariq Mehmood"
+                  placeholder="e.g. Guardian / father full name"
                   className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
                   id="input-student-fatherName"
                 />

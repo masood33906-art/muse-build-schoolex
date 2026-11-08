@@ -892,7 +892,7 @@ function StudentIdCardPreview({
               </div>
             )}
             <h2 className="text-[15px] font-extrabold text-white mt-[3px] leading-[18px]">
-              {school.schoolName || 'DEMO SCHOOL'}
+              {school.schoolName || 'Your School Name'}
             </h2>
             <span className="text-[11px] font-semibold mt-[1px]" style={{ color: '#BED7E4' }}>
               {[school.campusName, school.session].filter(Boolean).join(' • ')}
@@ -942,7 +942,7 @@ function StudentIdCardPreview({
               </div>
             )}
             <h2 className="text-[15px] font-extrabold mt-[8px] leading-[18px]">
-              {school.schoolName || 'DEMO SCHOOL'}
+              {school.schoolName || 'Your School Name'}
             </h2>
             <span className="text-[11px] font-semibold mt-[1px]" style={{ color: '#BED7E4' }}>
               {school.campusName}
@@ -1021,7 +1021,7 @@ function StudentIdCardPreview({
         <div className="w-72 h-[420px] rounded-2xl bg-[#f8fafc] text-slate-900 border-2 border-accent-deep shadow-2xl flex flex-col justify-between overflow-hidden font-sans">
           <div className="bg-accent-deep text-white px-4 py-3 text-center border-b-4 border-amber-500">
             <h2 className="text-xs font-black uppercase tracking-wider">
-              {school.schoolName || 'DEMO SCHOOL'}
+              {school.schoolName || 'Your School Name'}
             </h2>
             <span className="text-[9px] font-semibold text-blue-200 tracking-widest block uppercase mt-0.5">
               STUDENT IDENTITY CARD
@@ -1189,7 +1189,7 @@ function StaffIdCardPreview({
         <div className="w-72 h-[420px] rounded-2xl bg-[#f8fafc] text-slate-900 border-2 border-edge-13 shadow-2xl flex flex-col justify-between overflow-hidden font-sans">
           <div className="bg-edge-13 text-white px-4 py-3 text-center border-b-4 border-amber-500">
             <h2 className="text-xs font-black uppercase tracking-wider">
-              {school.schoolName || 'DEMO SCHOOL'}
+              {school.schoolName || 'Your School Name'}
             </h2>
             <span className="text-[9px] font-semibold text-slate-300 tracking-widest block uppercase mt-0.5">
               FACULTY &amp; STAFF IDENTITY CARD
@@ -1550,7 +1550,7 @@ function StaffSalarySlipPreview({
     return (
       <div className="w-full max-w-2xl bg-white text-black p-4 font-sans shadow-2xl space-y-3 border border-black">
         <div className="text-center border-b border-black pb-2 space-y-1">
-          <h2 className="text-base font-black uppercase text-black">{school.schoolName || 'DEMO SCHOOL'}</h2>
+          <h2 className="text-base font-black uppercase text-black">{school.schoolName || 'Your School Name'}</h2>
           <p className="text-[10px] text-[#666]">{school.schoolAddress}</p>
           <span className="inline-block border border-black px-3 py-0.5 text-[11px] font-black uppercase text-black">
             OFFICIAL SALARY PAYSLIP — SEPTEMBER 2026
@@ -1603,7 +1603,7 @@ function StaffSalarySlipPreview({
     }`}>
       {isMinimalClassic ? (
         <div className="text-center border-b-2 border-black pb-3 space-y-1">
-          <h2 className="text-lg font-black uppercase">{school.schoolName || 'DEMO SCHOOL'}</h2>
+          <h2 className="text-lg font-black uppercase">{school.schoolName || 'Your School Name'}</h2>
           <p className="text-[11px] text-neutral-600">{school.schoolAddress}</p>
           <span className="inline-block border border-black px-3 py-0.5 text-xs font-black uppercase">
             OFFICIAL SALARY PAYSLIP — SEPTEMBER 2026
@@ -1612,7 +1612,7 @@ function StaffSalarySlipPreview({
       ) : (
         <div className="bg-slate-900 text-white p-4 rounded-xl flex items-center justify-between">
           <div>
-            <h2 className="text-base font-black uppercase tracking-tight">{school.schoolName || 'DEMO SCHOOL'}</h2>
+            <h2 className="text-base font-black uppercase tracking-tight">{school.schoolName || 'Your School Name'}</h2>
             <p className="text-[11px] text-slate-300">{[school.campusName, school.schoolAddress].filter(Boolean).join(' • ')}</p>
           </div>
           <div className="text-right">
@@ -1689,7 +1689,7 @@ function ExamDmcPreview({
         <div className="flex items-center justify-between pb-2 border-b border-black">
           <div>
             <h2 className="text-base font-black uppercase text-black">
-              {school.schoolName || 'DEMO SCHOOL'}
+              {school.schoolName || 'Your School Name'}
             </h2>
             <p className="text-[10px] font-semibold text-[#666]">{exam.name || 'Annual Examination 2026'}</p>
           </div>
@@ -1757,7 +1757,7 @@ function ExamDmcPreview({
       <div className={`flex items-center justify-between pb-3 ${isMinimalDmc ? 'border-b-2 border-black' : 'border-b-2 border-blue-900'}`}>
         <div>
           <h2 className={`text-base font-black uppercase ${isMinimalDmc ? 'text-black' : 'text-blue-950'}`}>
-            {school.schoolName || 'DEMO SCHOOL'}
+            {school.schoolName || 'Your School Name'}
           </h2>
           <p className="text-[11px] font-semibold text-neutral-600">{exam.name || 'Annual Examination 2026'}</p>
         </div>
@@ -1836,7 +1836,7 @@ function AttendanceRegisterPreview({
     return (
       <div className="w-full max-w-4xl bg-white text-black p-4 font-sans shadow-2xl space-y-3 border border-black">
         <div className="text-center border-b border-black pb-2 space-y-1">
-          <h2 className="text-base font-black uppercase text-black">{school.schoolName || 'DEMO SCHOOL'}</h2>
+          <h2 className="text-base font-black uppercase text-black">{school.schoolName || 'Your School Name'}</h2>
           <div className="flex items-center justify-center gap-2">
             <span className="inline-block px-3 py-0.5 text-[11px] font-black uppercase border border-black text-black bg-white">
               OFFICIAL WEEKLY ATTENDANCE REGISTER (STUDENTS)
@@ -1862,7 +1862,7 @@ function AttendanceRegisterPreview({
               </tr>
             </thead>
             <tbody>
-              {[student.name, 'Zainab Bibi', 'Ahmed Raza', 'Fatima Zahra'].map((name, sIdx) => (
+              {[student.name, 'Sample Student 1', 'Sample Student 2', 'Sample Student 3'].map((name, sIdx) => (
                 <tr key={name} className="border-b border-[#999]">
                   <td className="p-1.5 border-r border-[#999] font-bold">{name}</td>
                   <td className="p-1.5 border-r border-[#999] text-center">{student.class} ({student.section || 'A'})</td>
@@ -1895,7 +1895,7 @@ function AttendanceRegisterPreview({
       isCompactMono ? 'border border-black rounded-none' : 'border border-slate-300 rounded-xl'
     }`}>
       <div className="text-center border-b-2 border-slate-900 pb-3 space-y-1">
-        <h2 className="text-lg font-black uppercase">{school.schoolName || 'DEMO SCHOOL'}</h2>
+        <h2 className="text-lg font-black uppercase">{school.schoolName || 'Your School Name'}</h2>
         <div className="flex items-center justify-center gap-2">
           <span className={`inline-block px-3 py-0.5 text-xs font-black uppercase rounded ${
             isCompactMono ? 'border-2 border-black text-black bg-white' : 'bg-slate-900 text-white'
@@ -1923,7 +1923,7 @@ function AttendanceRegisterPreview({
             </tr>
           </thead>
           <tbody>
-            {[student.name, 'Zainab Bibi', 'Ahmed Raza', 'Fatima Zahra'].map((name, sIdx) => (
+            {[student.name, 'Sample Student 1', 'Sample Student 2', 'Sample Student 3'].map((name, sIdx) => (
               <tr key={name} className="border-b border-slate-200">
                 <td className="p-2 border-r border-slate-200 font-bold">{name}</td>
                 <td className="p-2 border-r border-slate-200 text-center">{student.class} ({student.section || 'A'})</td>
