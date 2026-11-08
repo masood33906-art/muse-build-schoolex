@@ -28,6 +28,7 @@ import {
   StudentImportPlan
 } from '../utils/csvHelper';
 import { backfillStudentClassIds } from '../utils/classExportHelper';
+import { assignMissingRollNumbers } from '../utils/rollNumber';
 
 interface BulkUploadModalProps {
   isOpen: boolean;
@@ -198,7 +199,17 @@ export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({
 
     // Fix P0-3: CSV rows reference classes by NAME — stamp each row with the
     // stable classId of the matching class record before handing them over.
-    const studentsToImport = backfillStudentClassIds(plan.importableStudents, effectiveClasses);
+    const stampedStudents = backfillStudentClassIds(plan.importableStudents, effectiveClasses);
+    // Roll numbers (derived per-class sequence, utils/rollNumber.ts): rows
+    // whose file carried a roll keep it; roll-less rows continue their
+    // class's sequence in file order. In replace mode the old registry is
+    // being discarded, so sequences start from the file itself; brand-new
+    // classes (just created above) start at 1.
+    const studentsToImport = assignMissingRollNumbers(
+      stampedStudents,
+      importMode === 'append' ? existingStudents : [],
+      effectiveClasses
+    );
     onImportStudents(studentsToImport, importMode);
 
     setSummary({

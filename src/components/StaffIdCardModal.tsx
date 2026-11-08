@@ -246,7 +246,7 @@ export const StaffIdCardModal: React.FC<StaffIdCardModalProps> = ({
               </div>
               <div className="flex justify-between text-slate-400">
                 <span>Qualification:</span>
-                <span className="text-slate-200">{staff.qualification || 'Certified'}</span>
+                <span className="text-slate-200">{staff.qualification || 'N/A'}</span>
               </div>
             </div>
 
@@ -326,7 +326,7 @@ export const StaffIdCardModal: React.FC<StaffIdCardModalProps> = ({
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400 font-semibold">Degree:</span>
-                    <span className="text-slate-100 truncate max-w-[120px]">{staff.qualification || 'Certified'}</span>
+                    <span className="text-slate-100 truncate max-w-[120px]">{staff.qualification || 'N/A'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400 font-semibold">Joined:</span>
@@ -391,7 +391,7 @@ export const StaffIdCardModal: React.FC<StaffIdCardModalProps> = ({
                   </div>
                   <div className="flex justify-between">
                     <span className="font-bold text-slate-600">Qualification:</span>
-                    <span className="text-slate-900 truncate max-w-[110px]">{staff.qualification || 'Certified'}</span>
+                    <span className="text-slate-900 truncate max-w-[110px]">{staff.qualification || 'N/A'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="font-bold text-slate-600">Phone:</span>

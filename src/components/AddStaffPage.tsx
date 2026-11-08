@@ -20,6 +20,7 @@ import { getInitials, getAvatarColor } from '../data/initialStudents';
 import { STAFF_DEPARTMENTS, STAFF_CATEGORIES } from '../data/initialStaff';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
 import { getStaffSalaryAccrualInfo } from '../utils/salaryAccrualHelper';
+import { buildStaffRecordFromForm } from '../utils/formRecords';
 import { localISODate } from '../utils/dates';
 
 interface AddStaffPageProps {
@@ -44,14 +45,17 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
     category: 'Teacher',
     department: 'Academics',
     qualification: '',
-    salary: 75000,
+    // No pre-filled salary, gender or blood group (owner rule, 2026-11-08):
+    // salary is a required field the admin must type (validate() enforces
+    // it); gender/blood group are optional facts that stay unset unless
+    // actually provided. The old defaults (75000 / 'Male' / 'B+') were
+    // stored on every record the user did not explicitly fill.
     payStatus: 'Pending',
     status: 'Active',
     phone: '',
     email: '',
     joiningDate: localISODate(),
-    gender: 'Male',
-    bloodGroup: 'B+',
+    bloodGroup: '',
     emergencyContact: '',
     address: '',
     photo: ''
@@ -73,14 +77,14 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
         category: 'Teacher',
         department: 'Academics',
         qualification: '',
-        salary: 75000,
+        // salary / gender / blood group intentionally unset — see the
+        // initial-state note above (blank in → blank stored).
         payStatus: 'Pending',
         status: 'Active',
         phone: '',
         email: '',
         joiningDate: localISODate(),
-        gender: 'Male',
-        bloodGroup: 'B+',
+        bloodGroup: '',
         emergencyContact: '',
         address: '',
         photo: ''
@@ -183,41 +187,10 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
     e.preventDefault();
     if (!validate()) return;
 
-    // No invented email: a staff member without an email on the form is
-    // saved with a blank email, never a fabricated address.
-    const emailVal = formData.email?.trim() || '';
-
-    const completedStaff: StaffMember = {
-      ...(editingStaff || {}),
-      id: formData.id!.trim(),
-      name: formData.name!.trim(),
-      role: formData.role!.trim(),
-      category: (formData.category as StaffCategory) || 'Teacher',
-      department: formData.department || 'Academics',
-      qualification: formData.qualification?.trim() || 'Certified',
-      // Fix #7b: validate() above already requires a positive salary,
-      // so this is the user's entered amount verbatim — the old
-      // `|| 60000` fallback was unreachable, and is removed so an
-      // invented salary can never be written if validation changes.
-      salary: Number(formData.salary),
-      payStatus: editingStaff ? ((formData.payStatus as PayStatus) || 'Pending') : 'Pending',
-      paidMonths: editingStaff?.paidMonths ?? [],
-      status: (formData.status as StaffStatus) || 'Active',
-      phone: formData.phone!.trim(),
-      whatsapp: formData.whatsapp?.trim() || formData.phone!.trim(),
-      cnic: formData.cnic?.trim() || editingStaff?.cnic || '',
-      fatherName: formData.fatherName?.trim() || editingStaff?.fatherName || '',
-      email: emailVal,
-      joiningDate: formData.joiningDate || localISODate(),
-      gender: formData.gender || 'Male',
-      bloodGroup: formData.bloodGroup || 'B+',
-      emergencyContact: formData.emergencyContact?.trim() || '',
-      address: formData.address?.trim() || '',
-      notes: formData.notes?.trim() || '',
-      photo: formData.photo || ''
-    };
-
-    onSave(completedStaff);
+    // The stored record is built by the shared save-path builder
+    // (utils/formRecords.ts), proof-tested in
+    // proof-no-invented-defaults.mts.
+    onSave(buildStaffRecordFromForm(formData, editingStaff));
   };
 
   const avatarColor = formData.name ? getAvatarColor(formData.name) : 'bg-emerald-600';
@@ -385,7 +358,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   type="text"
                   value={formData.name || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="e.g. ABDUL RAFFAY"
+                  placeholder="e.g. Full name"
                   className={`w-full bg-surface-39 border rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors ${
                     errors.name ? 'border-rose-500' : 'border-edge-38'
                   }`}
@@ -403,7 +376,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   type="text"
                   value={formData.fatherName || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, fatherName: e.target.value }))}
-                  placeholder="e.g. Muhammad Raffay"
+                  placeholder="e.g. Father's full name"
                   className="w-full bg-surface-39 border border-edge-38 rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
                   id="input-staff-father"
                 />
@@ -418,7 +391,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   type="text"
                   value={formData.id || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, id: e.target.value }))}
-                  placeholder="e.g. T0018 or STF-0012"
+                  placeholder="e.g. STF-0012"
                   className={`w-full bg-surface-39 border font-mono rounded-lg px-3 py-2.5 text-xs text-emerald-400 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors ${
                     errors.id ? 'border-rose-500' : 'border-edge-38'
                   }`}
@@ -436,7 +409,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   type="text"
                   value={formData.cnic || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, cnic: e.target.value }))}
-                  placeholder="e.g. 374054544635 or 13734-5360138-1"
+                  placeholder="e.g. 35202-1234567-1"
                   className="w-full bg-surface-39 border border-edge-38 font-mono rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
                   id="input-staff-cnic"
                 />
@@ -611,6 +584,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                     onChange={(e) => setFormData(prev => ({ ...prev, bloodGroup: e.target.value }))}
                     className="w-full appearance-none bg-surface-39 border border-edge-38 rounded-lg px-3 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500 cursor-pointer"
                   >
+                    <option value="">— Select —</option>
                     {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(bg => (
                       <option key={bg} value={bg}>{bg}</option>
                     ))}
@@ -670,7 +644,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   type="text"
                   value={formData.whatsapp || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, whatsapp: e.target.value }))}
-                  placeholder="e.g. 3155285341"
+                  placeholder="e.g. 3001234567"
                   className="w-full bg-surface-39 border border-edge-38 rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
                 />
               </div>
@@ -698,7 +672,7 @@ export const AddStaffPage: React.FC<AddStaffPageProps> = ({
                   type="text"
                   value={formData.address || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
-                  placeholder="e.g. school, Gulberg III"
+                  placeholder="e.g. Street / area, City"
                   className="w-full bg-surface-39 border border-edge-38 rounded-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
                 />
               </div>

@@ -48,7 +48,10 @@ export const FeePaymentModal: React.FC<FeePaymentModalProps> = ({
   const [amount, setAmount] = useState<number>(totalDue);
   const [method, setMethod] = useState<PaymentMethod>('Cash');
   const [date, setDate] = useState<string>(() => localISODate());
-  const [notes, setNotes] = useState<string>('Monthly tuition fee installment');
+  // No pre-filled note (owner rule, 2026-11-08): the old initial value
+  // 'Monthly tuition fee installment' was stored verbatim on every
+  // payment whose note the user never typed. Blank in → blank stored.
+  const [notes, setNotes] = useState<string>('');
   const [useCredit, setUseCredit] = useState<boolean>(false);
 
   useEffect(() => {
@@ -56,6 +59,7 @@ export const FeePaymentModal: React.FC<FeePaymentModalProps> = ({
       setAmount(totalDue);
       setDate(localISODate());
       setUseCredit(false);
+      setNotes('');
     }
   }, [isOpen, totalDue]);
 

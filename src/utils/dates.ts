@@ -57,6 +57,41 @@ export function nextSubjectStartDate(prevValue?: string): string {
   return formatSubjectStartDate(tomorrow);
 }
 
+/**
+ * Academic session helpers. The session convention across the app is
+ * Apr–Mar: a session runs from April of its first year to March of its
+ * second (e.g. '2026 - 2027' = Apr 2026 … Mar 2027). Display labels use
+ * the compact en-dash form ('2026–2027').
+ */
+
+/** The [firstYear, secondYear] of the session containing a date. */
+export function sessionYearsContainingDate(d = new Date()): [number, number] {
+  const y = d.getFullYear();
+  return d.getMonth() + 1 >= 4 ? [y, y + 1] : [y - 1, y];
+}
+
+/** Parse the years out of a stored session string ('2026 - 2027', '2026–2027', …). */
+export function parseSessionYears(session?: string | null): [number, number] | null {
+  const years = (session || '').match(/\d{4}/g)?.map(Number) ?? [];
+  if (years.length >= 2) return [years[0], years[1]];
+  if (years.length === 1) return [years[0], years[0] + 1];
+  return null;
+}
+
+/**
+ * The session that applies right now: the one in Settings when it holds
+ * a parseable value, otherwise the session containing `today`.
+ */
+export function resolveSessionYears(session?: string | null, today = new Date()): [number, number] {
+  return parseSessionYears(session) ?? sessionYearsContainingDate(today);
+}
+
+/** Display label for the applicable session, e.g. '2026–2027'. */
+export function resolveSessionLabel(session?: string | null, today = new Date()): string {
+  const [first, second] = resolveSessionYears(session, today);
+  return `${first}–${second}`;
+}
+
 /** Inclusive list of 'YYYY-MM' keys. */
 export function monthKeysBetween(startKey: string, endKey: string): string[] {
   const out: string[] = [];

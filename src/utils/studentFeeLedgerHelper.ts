@@ -146,3 +146,112 @@ export function setStudentCreditBalance(studentId: string, amount: number): void
   all[studentId] = Math.max(0, amount);
   mustSave(STUDENT_CREDIT_STORAGE_KEY, all);
 }
+
+// ============================================================================
+// FEE SUMMARIES — the ONE computation behind the Student / Family details
+// pages' money figures (owner request, 2026-11-08): every rupee against a
+// student, derived LIVE from the stored fee ledger — Total Billed (every
+// head), Total Paid, Total Due (billed − paid), plus a per-head breakdown
+// so no charge type is ever left out. These replace the hand-maintained
+// Student.totalDue / totalPaid snapshot fields on those pages, which
+// could drift away from the ledger. The source is the same stored ledger
+// the pages' Fee Timelines render, so a page's summary and its timeline
+// always agree. An empty ledger yields honest zeros — never invented
+// figures.
+// ============================================================================
+
+export type FeeSummaryStatus = 'Paid' | 'Partially Paid' | 'Unpaid' | 'No Charges';
+
+export interface FeeHeadSummary {
+  type: StudentFeeItem['type'];
+  label: string;
+  billed: number;
+  paid: number;
+  due: number;
+}
+
+export interface StudentFeeSummary {
+  billed: number;
+  paid: number;
+  due: number;
+  status: FeeSummaryStatus;
+  heads: FeeHeadSummary[];
+}
+
+/** Display label per fee head (type). 'Monthly Fee' is the tuition head. */
+export const FEE_HEAD_LABELS: Record<StudentFeeItem['type'], string> = {
+  Admission: 'Admission Fee',
+  'Monthly Fee': 'Tuition Fee',
+  Fund: 'Fund',
+  Fine: 'Fine',
+  Security: 'Security Fee',
+  Other: 'Other Charges'
+};
+
+/** Stable display order for the per-head breakdown. */
+const FEE_HEAD_ORDER: Array<StudentFeeItem['type']> = [
+  'Admission', 'Monthly Fee', 'Fund', 'Fine', 'Security', 'Other'
+];
+
+/** Summarize a set of ledger items into billed / paid / due + per-head rows. */
+export function summarizeFeeItems(items: StudentFeeItem[]): StudentFeeSummary {
+  let billed = 0;
+  let paid = 0;
+  const byType = new Map<StudentFeeItem['type'], FeeHeadSummary>();
+  items.forEach(item => {
+    billed += item.total;
+    paid += item.paidAmount;
+    const head = byType.get(item.type) || {
+      type: item.type,
+      label: FEE_HEAD_LABELS[item.type],
+      billed: 0,
+      paid: 0,
+      due: 0
+    };
+    head.billed += item.total;
+    head.paid += item.paidAmount;
+    head.due = head.billed - head.paid;
+    byType.set(item.type, head);
+  });
+  const due = billed - paid;
+  const heads = FEE_HEAD_ORDER
+    .filter(t => byType.has(t))
+    .map(t => byType.get(t)!);
+  const status: FeeSummaryStatus =
+    billed === 0 ? 'No Charges'
+    : due <= 0 ? 'Paid'
+    : paid > 0 ? 'Partially Paid'
+    : 'Unpaid';
+  return { billed, paid, due, status, heads };
+}
+
+/** Live fee summary for ONE student, from the stored ledger. */
+export function summarizeStudentFees(studentId: string): StudentFeeSummary {
+  return summarizeFeeItems(loadAllLedgerItems()[studentId] || []);
+}
+
+export interface FamilyChildFeeSummary extends StudentFeeSummary {
+  studentId: string;
+  name: string;
+}
+
+export interface FamilyFeeSummary extends StudentFeeSummary {
+  perChild: FamilyChildFeeSummary[];
+}
+
+/**
+ * Live fee summary for a whole family: the aggregate across ALL children
+ * plus one summary per child (the Family details page's per-child lines).
+ */
+export function summarizeFamilyFees(
+  children: Array<{ id: string; name: string }>
+): FamilyFeeSummary {
+  const ledgers = loadAllLedgerItems();
+  const perChild = children.map(c => ({
+    studentId: c.id,
+    name: c.name,
+    ...summarizeFeeItems(ledgers[c.id] || [])
+  }));
+  const aggregate = summarizeFeeItems(children.flatMap(c => ledgers[c.id] || []));
+  return { ...aggregate, perChild };
+}

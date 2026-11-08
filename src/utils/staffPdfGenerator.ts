@@ -149,10 +149,13 @@ function renderStaffCardOnPage(doc: jsPDF, staff: StaffMember, template: CardTem
     };
 
     drawField('Emp ID:', staff.id, startY);
-    drawField('Degree:', staff.qualification || 'Certified', startY + rowH);
-    drawField('Joined:', staff.joiningDate || '2023', startY + rowH * 2);
+    // Blank fields print as N/A, never as an invented fact (owner rule,
+    // 2026-11-08): the old fallbacks printed a fabricated degree
+    // ('Certified'), joining year ('2023') and blood group ('O+').
+    drawField('Degree:', staff.qualification || 'N/A', startY + rowH);
+    drawField('Joined:', staff.joiningDate || 'N/A', startY + rowH * 2);
     drawField('Phone:', staff.phone || 'N/A', startY + rowH * 3);
-    drawField('Blood Grp:', staff.bloodGroup || 'O+', startY + rowH * 4);
+    drawField('Blood Grp:', staff.bloodGroup || 'N/A', startY + rowH * 4);
 
     // Barcode representation
     doc.setFillColor(255, 255, 255);
@@ -893,7 +896,7 @@ function renderSinglePayslipSheet(
   doc.setFontSize(8);
   doc.setTextColor(...mutedColor);
   doc.text(`Net Salary Payable: Rs. ${net.toLocaleString()} · Outstanding Balance: Rs. ${b.outstanding.toLocaleString()} (salary for ${month}).`, margin, finalY + 27);
-  doc.text(`Disbursed to Employee via ${b.paymentMethod || staff.paymentMethod || '—'}. Account: ${staff.bankAccount || 'Verified On File'}`, margin, finalY + 32);
+  doc.text(`Disbursed to Employee via ${b.paymentMethod || staff.paymentMethod || '—'}. Account: ${staff.bankAccount || '—'}`, margin, finalY + 32);
 
   // Signatures
   const signY = finalY + 52;
