@@ -17,6 +17,7 @@ import {
 import { Student } from '../types';
 import { getAvatarColor, getInitials } from '../data/initialStudents';
 import { FamilyData } from './FamilyDetailsView';
+import { groupStudentsIntoFamilies } from '../utils/familyHelper';
 
 interface FamilyViewProps {
   students: Student[];
@@ -43,56 +44,16 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
   const [editingFamily, setEditingFamily] = useState<FamilyData | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Group students by Family
-  const familyGroups: FamilyData[] = useMemo(() => {
-    const map = new Map<string, FamilyData>();
-
-    students.forEach((student) => {
-      const key = (student.familyId || student.family || 'unknown').trim().toLowerCase();
-      if (!map.has(key)) {
-        map.set(key, {
-          familyId: student.familyId || 'F0000',
-          familyName: student.family || 'Unknown Family',
-          phone: student.phone || student.emergencyContact || '',
-          guardianCnic: student.guardianCnic || '7647646475',
-          guardianOccupation: student.guardianOccupation || 'Business',
-          motherName: student.motherName || '-',
-          motherCnic: student.motherCnic || '-',
-          motherOccupation: student.motherOccupation || 'Homemaker',
-          whatsapp: student.whatsapp || student.phone || '',
-          email: student.email || 'guardian@school.edu.pk',
-          address: student.address || 'House #14, Sector G-10, Islamabad',
-          caste: student.caste || '-',
-          religion: student.religion || 'Islam',
-          emergencyContact: student.emergencyContact || student.phone,
-          notes: student.note || 'Registered Family Account',
-          students: [],
-          totalDue: 0,
-          totalPaid: 0
-        });
-      }
-      const group = map.get(key)!;
-      group.students.push(student);
-      
-      // Update with student's guardian info if missing
-      if (!group.phone && student.phone) group.phone = student.phone;
-      if (!group.guardianCnic && student.guardianCnic) group.guardianCnic = student.guardianCnic;
-      if (!group.address && student.address) group.address = student.address;
-    });
-
-    return Array.from(map.values()).map(fam => {
-      const totalDue = fam.students.reduce((sum, s) => sum + (s.totalDue ?? 0), 0);
-      // Fix #7b: an unrecorded totalPaid contributes 0 — the old
-      // `?? 40000` invented 40,000 PKR of payments per student (the
-      // same fabrication Fix #4b removed from FamilyDetailsView).
-      const totalPaid = fam.students.reduce((sum, s) => sum + (s.totalPaid ?? 0), 0);
-      return {
-        ...fam,
-        totalDue,
-        totalPaid
-      };
-    });
-  }, [students]);
+  // Group students by Family — the shared derivation in
+  // utils/familyHelper.ts. This view previously kept an inline copy of
+  // the grouping whose fallbacks fabricated a guardian CNIC, email,
+  // religion and street address for families missing them (owner rule,
+  // 2026-11-08: blank in → blank stored/shown); the shared helper is
+  // now the single source and carries no invented values.
+  const familyGroups: FamilyData[] = useMemo(
+    () => groupStudentsIntoFamilies(students),
+    [students]
+  );
 
   // Filter and sort
   const filteredFamilies = useMemo(() => {
@@ -141,20 +102,24 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
     const form = e.currentTarget;
     const formData = new FormData(form);
 
+    // The form's values are stored as submitted (owner rule, 2026-11-08):
+    // the old `|| editingFamily.…` fallbacks resurrected the previous
+    // value whenever the user cleared a field, so a field could never
+    // be emptied from this form.
     const updated: FamilyData = {
       ...editingFamily,
-      familyName: (formData.get('familyName') as string) || editingFamily.familyName,
-      phone: (formData.get('phone') as string) || editingFamily.phone,
-      guardianCnic: (formData.get('guardianCnic') as string) || editingFamily.guardianCnic,
-      guardianOccupation: (formData.get('guardianOccupation') as string) || editingFamily.guardianOccupation,
-      whatsapp: (formData.get('whatsapp') as string) || editingFamily.whatsapp,
-      email: (formData.get('email') as string) || editingFamily.email,
-      address: (formData.get('address') as string) || editingFamily.address,
-      motherName: (formData.get('motherName') as string) || editingFamily.motherName,
-      motherCnic: (formData.get('motherCnic') as string) || editingFamily.motherCnic,
-      motherOccupation: (formData.get('motherOccupation') as string) || editingFamily.motherOccupation,
-      caste: (formData.get('caste') as string) || editingFamily.caste,
-      religion: (formData.get('religion') as string) || editingFamily.religion
+      familyName: (formData.get('familyName') as string) || '',
+      phone: (formData.get('phone') as string) || '',
+      guardianCnic: (formData.get('guardianCnic') as string) || '',
+      guardianOccupation: (formData.get('guardianOccupation') as string) || '',
+      whatsapp: (formData.get('whatsapp') as string) || '',
+      email: (formData.get('email') as string) || '',
+      address: (formData.get('address') as string) || '',
+      motherName: (formData.get('motherName') as string) || '',
+      motherCnic: (formData.get('motherCnic') as string) || '',
+      motherOccupation: (formData.get('motherOccupation') as string) || '',
+      caste: (formData.get('caste') as string) || '',
+      religion: (formData.get('religion') as string) || ''
     };
 
     onUpdateFamily?.(updated);
@@ -330,7 +295,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                       {/* 3. CNIC */}
                       <td className="py-3.5 px-4">
                         <span className="text-slate-300 font-mono font-medium tracking-tight">
-                          {family.guardianCnic || '7647646475'}
+                          {family.guardianCnic || '—'}
                         </span>
                       </td>
 
@@ -475,7 +440,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                   <input
                     type="text"
                     name="whatsapp"
-                    defaultValue={editingFamily.whatsapp || editingFamily.phone}
+                    defaultValue={editingFamily.whatsapp || ''}
                     className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white font-mono focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
@@ -484,7 +449,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                   <input
                     type="text"
                     name="guardianOccupation"
-                    defaultValue={editingFamily.guardianOccupation || 'Business'}
+                    defaultValue={editingFamily.guardianOccupation || ''}
                     className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
@@ -496,7 +461,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                   <input
                     type="email"
                     name="email"
-                    defaultValue={editingFamily.email || 'guardian@school.edu.pk'}
+                    defaultValue={editingFamily.email || ''}
                     className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
@@ -505,7 +470,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                   <input
                     type="text"
                     name="address"
-                    defaultValue={editingFamily.address || 'House #14, Sector G-10, Islamabad'}
+                    defaultValue={editingFamily.address || ''}
                     className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
@@ -521,7 +486,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                     <input
                       type="text"
                       name="motherName"
-                      defaultValue={editingFamily.motherName || '-'}
+                      defaultValue={editingFamily.motherName || ''}
                       className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
                     />
                   </div>
@@ -530,7 +495,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                     <input
                       type="text"
                       name="motherCnic"
-                      defaultValue={editingFamily.motherCnic || '-'}
+                      defaultValue={editingFamily.motherCnic || ''}
                       className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white font-mono focus:ring-1 focus:ring-purple-500 focus:outline-none"
                     />
                   </div>
@@ -539,7 +504,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                     <input
                       type="text"
                       name="motherOccupation"
-                      defaultValue={editingFamily.motherOccupation || 'Homemaker'}
+                      defaultValue={editingFamily.motherOccupation || ''}
                       className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
                     />
                   </div>
@@ -552,7 +517,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                   <input
                     type="text"
                     name="religion"
-                    defaultValue={editingFamily.religion || 'Islam'}
+                    defaultValue={editingFamily.religion || ''}
                     className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
@@ -561,7 +526,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({
                   <input
                     type="text"
                     name="caste"
-                    defaultValue={editingFamily.caste || '-'}
+                    defaultValue={editingFamily.caste || ''}
                     className="w-full bg-surface-36 border border-edge-34 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>

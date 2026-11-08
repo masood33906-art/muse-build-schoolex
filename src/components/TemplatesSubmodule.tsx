@@ -752,7 +752,7 @@ function RollNumberSlipPreview({
               <span>SESSION: {school.session}</span>
             </div>
             <h3 className="text-base font-black uppercase tracking-tight text-black">
-              {school.schoolName || 'DEMO SCHOOL SYSTEM'}
+              {school.schoolName || ''}
             </h3>
             <p className="text-[10px] font-bold uppercase tracking-wider bg-black text-white inline-block px-3 py-0.5 mt-1">
               {examTitle} — Roll Number Slip

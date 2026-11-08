@@ -115,7 +115,7 @@ export function exportFamiliesToCSV(families: FamilyData[], filename?: string) {
 }
 
 export function downloadSampleCSVTemplate(availableClasses: ClassInfo[] = []) {
-  const sampleHeaders = 'Student ID,Student Name,Family Name,Family ID,Class,Section,Status,Blood Group,Contact Phone,Admission Date,Date of Birth';
+  const sampleHeaders = 'Student ID,Roll No,Student Name,Family Name,Family ID,Class,Section,Status,Blood Group,Contact Phone,Admission Date,Date of Birth';
   
   const getClassAndSec = (index: number, fallbackClass: string, fallbackSec: string) => {
     if (availableClasses.length > 0) {
@@ -132,10 +132,10 @@ export function downloadSampleCSVTemplate(availableClasses: ClassInfo[] = []) {
   const c4 = getClassAndSec(3, 'Class 2', 'A');
 
   const sampleRows = [
-    `S-00301,Muhammad Rayan,Tariq Mahmood,F-0210,${c1.className},${c1.sectionName},Active,B+,+92 300 1122334,2025-01-10,2016-04-12`,
-    `S-00302,Areeba Noor,Zahid Hussain,F-0211,${c2.className},${c2.sectionName},Active,O+,+92 301 2233445,2025-02-15,2018-08-23`,
-    `S-00303,Hamza Farooq,Farooq Azam,F-0212,${c3.className},${c3.sectionName},Active,A+,+92 302 3344556,2024-09-01,2013-11-05`,
-    `,Zainab Bilal,Bilal Ahmed,F-0213,${c4.className},${c4.sectionName},Active,AB+,+92 303 4455667,2025-01-05,2019-02-17`
+    `S-00301,1,Muhammad Rayan,Tariq Mahmood,F-0210,${c1.className},${c1.sectionName},Active,B+,+92 300 1122334,2025-01-10,2016-04-12`,
+    `S-00302,2,Areeba Noor,Zahid Hussain,F-0211,${c2.className},${c2.sectionName},Active,O+,+92 301 2233445,2025-02-15,2018-08-23`,
+    `S-00303,3,Hamza Farooq,Farooq Azam,F-0212,${c3.className},${c3.sectionName},Active,A+,+92 302 3344556,2024-09-01,2013-11-05`,
+    `,,Zainab Bilal,Bilal Ahmed,F-0213,${c4.className},${c4.sectionName},Active,AB+,+92 303 4455667,2025-01-05,2019-02-17`
   ];
 
   const csvContent = [sampleHeaders, ...sampleRows].join('\r\n');
@@ -200,9 +200,20 @@ export function parseCSVToStudents(
 
   const headerRow = parseLine(lines[0]).map(h => h.toLowerCase().replace(/[\s/_-]+/g, ''));
 
+  // Roll No column: a dedicated roll column feeds the student's rollNo —
+  // but ONLY when the file also has its own Student ID column. Historically
+  // a lone "Roll No" column was read as the student ID (the import had no
+  // roll field), and files built that way must keep parsing identically:
+  // in that case the column stays the ID source and rolls are left to the
+  // per-class auto-assignment at import time (utils/rollNumber.ts).
+  const idColumnIndex = headerRow.findIndex(h => h.includes('studentid') || h === 'id');
+  const rollColumnIndex = headerRow.findIndex(h => h === 'rollno' || h === 'rollnumber' || h === 'roll');
+  const effectiveIdIndex = idColumnIndex !== -1 ? idColumnIndex : rollColumnIndex;
+
   // Determine column indexes
   const colIndex = {
-    id: headerRow.findIndex(h => h.includes('studentid') || h === 'id' || h === 'rollno'),
+    id: effectiveIdIndex,
+    rollNo: rollColumnIndex !== -1 && rollColumnIndex !== effectiveIdIndex ? rollColumnIndex : -1,
     name: headerRow.findIndex(h => h.includes('studentname') || h === 'name' || h.includes('fullname')),
     family: headerRow.findIndex(h => h.includes('family') || h.includes('guardian') || h.includes('father')),
     familyId: headerRow.findIndex(h => h.includes('familyid') || h.includes('fcode') || h.includes('fid')),
@@ -385,7 +396,11 @@ export function parseCSVToStudents(
       s => s.trim().toLowerCase() === (studentSectionInput || matchedClassObj.sections[0] || '').toLowerCase()
     ) || studentSectionInput.toUpperCase() || 'A';
 
-    const family = (colIndex.family !== -1 ? cells[colIndex.family] : (cells[2] || 'Guardian')) || 'Guardian';
+    // Blank in → blank stored (owner rule, 2026-11-08): a row with no
+    // guardian/family cell imports with an EMPTY family name — the old
+    // `|| 'Guardian'` stored the literal word 'Guardian' as the father's
+    // name on every such student.
+    const family = (colIndex.family !== -1 ? cells[colIndex.family] : cells[2]) || '';
     const familyId = (colIndex.familyId !== -1 ? cells[colIndex.familyId] : (cells[3] || `F-${String(autoIdCounter).padStart(4, '0')}`)) || `F-${String(autoIdCounter).padStart(4, '0')}`;
 
     const rawStatus = colIndex.status !== -1 ? cells[colIndex.status] : (cells[6] || 'Active');
@@ -394,6 +409,10 @@ export function parseCSVToStudents(
     const bloodGroup = colIndex.bloodGroup !== -1 ? cells[colIndex.bloodGroup] : cells[7];
     const phone = colIndex.phone !== -1 ? cells[colIndex.phone] : cells[8];
     const admissionDate = colIndex.admissionDate !== -1 ? cells[colIndex.admissionDate] : cells[9];
+    // The file's own roll for this student (kept verbatim at import); a
+    // blank cell stays unset and the import auto-assigns the class's next
+    // roll instead (utils/rollNumber.ts).
+    const rollNo = colIndex.rollNo !== -1 ? (cells[colIndex.rollNo] || '').trim() : '';
 
     // Date of Birth: only enforced when the file actually has a DOB column
     // (files built from the sample template do). A blank or unreadable DOB
@@ -432,6 +451,7 @@ export function parseCSVToStudents(
       phone: phone?.trim() || '',
       admissionDate: admissionDate?.trim() || new Date().toISOString().slice(0, 10),
       ...(dob ? { dob } : {}),
+      ...(rollNo ? { rollNo } : {}),
       isNewAdmission: true
     });
     parsedRowNumbers.push(rowNumber);

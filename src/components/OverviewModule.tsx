@@ -40,7 +40,7 @@ import {
   ArrowUpRight
 } from 'lucide-react';
 import { Student, ClassInfo, StaffMember, AttendanceRecord } from '../types';
-import { SchoolSettings } from '../utils/settingsHelper';
+import { SchoolSettings, getSchoolSettings } from '../utils/settingsHelper';
 import { 
   LedgerTransaction, 
   getLedgerTransactions, 
@@ -76,7 +76,7 @@ import { RecordTransactionModal } from './RecordTransactionModal';
 import { AppModule } from './VerticalNavBar';
 import { getAvatarColor, getInitials } from '../data/initialStudents';
 import { listPayrollPeriods, listPayrollRecords } from '../utils/payrollApi';
-import { monthKeyOf } from '../utils/dates';
+import { monthKeyOf, resolveSessionLabel, resolveSessionYears } from '../utils/dates';
 
 export type DashboardDateRange = 'this-month' | 'last-30' | 'this-week' | 'today' | 'academic-year';
 
@@ -287,6 +287,13 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
     };
   }, []);
 
+  // Academic session for display + session-scoped metrics: the session
+  // from Settings when set, otherwise the session containing today
+  // (Apr–Mar convention — see utils/dates). Never a hard-coded year.
+  const settingsSession = schoolSettings?.session || getSchoolSettings().session;
+  const sessionLabel = resolveSessionLabel(settingsSession);
+  const [sessionStartYear] = resolveSessionYears(settingsSession);
+
   // =========================================================================
   // 2. CORE REAL METRIC CALCULATIONS
   // =========================================================================
@@ -302,13 +309,15 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
     const active = students.filter(s => s.status === 'Active').length;
     const inactive = total - active;
     
-    // New students: admitted in 2025/2026
+    // New students: admitted in the current academic session, which
+    // starts on 1 April of the session's first year (Settings session,
+    // or the session containing today when Settings has none).
+    const sessionStart = new Date(sessionStartYear, 3, 1);
     const newStudents = students.filter(s => {
       if (!s.admissionDate) return false;
       try {
         const adm = new Date(s.admissionDate);
-        const cutoff = new Date('2025-01-01');
-        return adm >= cutoff;
+        return adm >= sessionStart;
       } catch {
         return false;
       }
@@ -320,7 +329,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
       inactive,
       newCount: newStudents.length
     };
-  }, [students]);
+  }, [students, sessionStartYear]);
 
   // Staff breakdown; salary-due figures come from the payroll aggregate
   // fetched above (prepared periods only, derived from actual payments).
@@ -476,21 +485,30 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
   // Real-time Monthly Attendance Percentages (12 months calculated strictly from allAttendance)
   const monthlyAttendanceData = useMemo(() => {
     const targetType = attendanceTarget === 'students' ? 'student' : 'staff';
-    const monthsDef = [
-      { id: 'm1', prefix: '2025-10', month: "Oct '25", shortMonth: 'Oct' },
-      { id: 'm2', prefix: '2025-11', month: "Nov '25", shortMonth: 'Nov' },
-      { id: 'm3', prefix: '2025-12', month: "Dec '25", shortMonth: 'Dec' },
-      { id: 'm4', prefix: '2026-01', month: "Jan '26", shortMonth: 'Jan' },
-      { id: 'm5', prefix: '2026-02', month: "Feb '26", shortMonth: 'Feb' },
-      { id: 'm6', prefix: '2026-03', month: "Mar '26", shortMonth: 'Mar' },
-      { id: 'm7', prefix: '2026-04', month: "Apr '26", shortMonth: 'Apr' },
-      { id: 'm8', prefix: '2026-05', month: "May '26", shortMonth: 'May' },
-      { id: 'm9', prefix: '2026-06', month: "Jun '26", shortMonth: 'Jun' },
-      { id: 'm10', prefix: '2026-07', month: "Jul '26", shortMonth: 'Jul' },
-      { id: 'm11', prefix: '2026-08', month: "Aug '26", shortMonth: 'Aug' },
-      { id: 'm12', prefix: '2026-09', month: "Sep '26", shortMonth: 'Sep' },
-      { id: 'm13', prefix: '2026-10', month: "Oct '26", shortMonth: 'Oct 26' }
-    ];
+    // Rolling 13-month window ending with the CURRENT month — generated
+    // from today, never a hard-coded year range (the previous literal
+    // window, Oct 2025–Oct 2026, silently excluded every later month).
+    const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthsDef = (() => {
+      const now = new Date();
+      const defs: { id: string; prefix: string; month: string; shortMonth: string }[] = [];
+      for (let back = 12; back >= 0; back--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - back, 1);
+        const yy = String(d.getFullYear()).slice(2);
+        const mon = SHORT_MONTHS[d.getMonth()];
+        defs.push({
+          id: `m${13 - back}`,
+          prefix: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+          month: `${mon} '${yy}`,
+          shortMonth: mon
+        });
+      }
+      // First and last entries are the same calendar month a year apart;
+      // disambiguate the last one's short label with its year.
+      const lastDef = defs[defs.length - 1];
+      lastDef.shortMonth = `${lastDef.shortMonth} ${String(now.getFullYear()).slice(2)}`;
+      return defs;
+    })();
 
     const dates = Object.keys(allAttendance);
 
@@ -866,7 +884,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
               <span>Overview</span>
             </h1>
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-500/10 border border-blue-500/20 text-blue-400">
-              Academic Session 2025–2026
+              Academic Session {sessionLabel}
             </span>
           </div>
         </div>

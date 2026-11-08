@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { Exam, ExamSubject, ExamGradingTier, StudentMarkEntry, calculateGrade, saveStoredExams, getStoredExams } from '../utils/examStore';
 import { Student, ClassInfo } from '../types';
+import { compareStudentsByRoll } from '../utils/rollNumber';
 import { SchoolSettings } from '../utils/settingsHelper';
 import { findClassByName, studentsInClassSection } from '../utils/classExportHelper';
 import { ExamDetailExportModal, ExamExportType } from './ExamDetailExportModal';
@@ -186,7 +187,9 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
         if (!a.hasMarks && b.hasMarks) return 1;
         if (b.pct !== a.pct) return b.pct - a.pct;
         if (b.totalObt !== a.totalObt) return b.totalObt - a.totalObt;
-        return (a.rollNo || a.name).localeCompare(b.rollNo || b.name);
+        // Tie-break by roll NUMERICALLY (2 before 10) — a plain string
+        // compare of rolls ordered '10' before '2' (utils/rollNumber.ts).
+        return compareStudentsByRoll(a, b);
       });
 
       return list.map(item => item.id);
@@ -240,8 +243,9 @@ export const ExamDetailView: React.FC<ExamDetailViewProps> = ({
         return statB.totalObt - statA.totalObt;
       }
 
-      // 4. Secondary tie-breaker: sort by roll number or student name
-      return (a.rollNo || a.name).localeCompare(b.rollNo || b.name);
+      // 4. Secondary tie-breaker: sort by roll number (numeric — 2
+      // before 10) or student name (utils/rollNumber.ts)
+      return compareStudentsByRoll(a, b);
     });
 
     setStudentOrder(sorted.map(s => s.id));

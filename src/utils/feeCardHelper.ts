@@ -3,6 +3,8 @@ import { SchoolSettings, getSchoolSettings } from './settingsHelper';
 import { loadAllLedgerItems, ensureStudentLedgerGenerated, StudentFeeItem } from './studentFeeLedgerHelper';
 import { feeHeadGroup } from '../components/FeeChallanSheet';
 import { getStudentFeeDefaults } from './feeHelper';
+import { getStudentAvatar } from './studentAvatarHelper';
+import { drawImageCover } from './pdfGenerator';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -219,10 +221,13 @@ export function buildStudentFeeCardData(
     schoolAddress: settings.schoolAddress || '',
     schoolPhone: settings.schoolPhone || '',
     academicSession: settings.session || '',
-    className: student.class || 'Class 1',
-    section: student.section || 'A',
+    // Blank in → blank printed (owner rule, 2026-11-08): the old
+    // fallbacks invented a class ('Class 1'), a section ('A') and an
+    // account number ('A/C-101') for records missing those fields.
+    className: student.class || '',
+    section: student.section || '',
     rollNo: student.rollNo || student.id || '',
-    accountNo: student.id || `A/C-${student.rollNo || '101'}`,
+    accountNo: student.id || '',
     fatherName: student.fatherName || student.family || '',
     phone: student.phone || student.whatsapp || '',
     address: (student as any).address || (student as any).city || '',
@@ -593,16 +598,23 @@ export function generateFeeCardPdf(
 // are omitted, never filled with another school's identity), student
 // particulars printed on dotted lines, a display heading flanked by
 // pinstripes, and a 12-month table with black header row and rounded
-// outer corners.
+// outer corners. A bordered photo frame at the right of the particulars
+// holds the student's own photo (uploaded photo, else the gender
+// default avatar), cover-fitted — owner request, 2026-11-08.
 // The owner's change on top of the reference: the single FEE column is
-// split into ADMISSION FEE | TUITION FEE | FINE / EXTRA. The amounts
-// are the student's REAL ledger charges for each month, grouped
-// through feeHeadGroup — the same classification the fee challan uses
-// (FeeChallanSheet) — so a head can never land in a different column
-// on the two documents. A cell is blank when that group has no charge
-// that month. The two signature columns stay blank: they are for
-// handwriting at collection time and the system records no per-month
-// signatures, so nothing is ever fabricated into them.
+// split into ADMISSION FEE | TUITION FEE | FINE / EXTRA.
+// AMOUNT CELLS ARE DELIBERATELY EMPTY (owner decision, 2026-11-08):
+// this card is a paper register — like the signature columns, the
+// amount columns are filled in BY HAND at collection time. The card
+// previously printed the student's ledger CHARGES, which never reflect
+// payments, so a student who had paid still carried the full charged
+// figures on paper and the card "never updated according to the
+// status". The downloaded/previewed card therefore carries identity
+// only — school (from Settings), student, class, roll, session — and
+// no numbers in any month cell. buildRegisterCardData still computes
+// the real per-month charge totals (grouped through feeHeadGroup, the
+// classification shared with the fee challan); the renderers simply
+// never draw them. Nothing is fabricated into the blank cells.
 
 export interface RegisterCardMonthRow {
   month: string;       // 'JANUARY' … 'DECEMBER'
@@ -643,6 +655,11 @@ export function registerCardSessionYears(session: string): [number, number] {
 /**
  * Per-month, per-group REAL charge totals for one student, in calendar
  * order JANUARY..DECEMBER for the session in Settings.
+ * NOTE: the register-card renderers (PDF + sheet) intentionally do NOT
+ * print these amounts — the printed card's amount cells stay empty for
+ * handwriting (owner decision, 2026-11-08). The totals remain computed
+ * here so the data layer, the shared feeHeadGroup classification and
+ * any future consumer stay intact.
  */
 export function buildRegisterCardData(
   student: Student,
@@ -858,6 +875,26 @@ export function buildRegisterCardPdfDoc(
       y += 2;
     }
 
+    // --- Student photo frame (owner request, 2026-11-08): a bordered
+    // frame at the right of the particulars block holding THIS student's
+    // photo — their uploaded photo, or the gender default avatar when
+    // they have none (getStudentAvatar resolves both, incl. healing
+    // legacy avatar paths). Cover-fitted with the ID card's
+    // drawImageCover so the photo is never stretched. The frame border
+    // ALWAYS prints, even on a blank-settings card; if an image cannot
+    // be drawn the frame simply stays empty. The particulars text is
+    // shortened to end before the frame.
+    const frameW = 25;
+    const frameH = 31;
+    const frameX = x1 - frameW;
+    const frameY = y - 9;
+    drawImageCover(doc, getStudentAvatar(data.student), frameX + 0.7, frameY + 0.7, frameW - 1.4, frameH - 1.4, 0);
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.9);
+    doc.rect(frameX, frameY, frameW, frameH);
+    const frameBottom = frameY + frameH;
+    const textRight = frameX - 5;
+
     // --- Student particulars on dotted lines (real values printed) ---
     const classValue = data.className + (data.section ? ` (${data.section})` : '');
     doc.setFont('times', 'normal');
@@ -865,7 +902,7 @@ export function buildRegisterCardPdfDoc(
     // Line 1 — Name of the Student : ..........
     doc.text('Name of the Student :', x0, y);
     const nameLabelW = doc.getTextWidth('Name of the Student :');
-    drawDotRow(doc, x0 + nameLabelW + 2.5, x1, y + 0.7);
+    drawDotRow(doc, x0 + nameLabelW + 2.5, textRight, y + 0.7);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11.5);
     doc.text(data.studentName, x0 + nameLabelW + 5, y - 0.5);
@@ -885,16 +922,17 @@ export function buildRegisterCardPdfDoc(
         doc.text(value, segX + lw + 4.5, y - 0.5);
       }
     };
-    seg('Class', classValue, x0, 68);
+    seg('Class', classValue, x0, 62);
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
-    doc.text(',', 69.5, y);
-    seg('Roll', data.rollNo, 73, 120);
+    doc.text(',', 63.5, y);
+    seg('Roll', data.rollNo, 67, 104);
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
-    doc.text(',', 121.5, y);
-    seg('Session', data.academicSession, 125, x1);
-    y += 4.5;
+    doc.text(',', 105.5, y);
+    seg('Session', data.academicSession, 109, textRight);
+    // Flow past whichever is lower: the particulars text or the photo frame.
+    y = Math.max(y + 4.5, frameBottom + 4);
     doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(0.55);
     doc.line(x0, y, x1, y);
@@ -977,20 +1015,18 @@ export function buildRegisterCardPdfDoc(
     headTwo("TEACHER'S", 'SIGNATURE', 4);
     headTwo("FATHER'S", 'SIGNATURE', 5);
 
-    // Body rows — real charged amounts, blank when no charge
+    // Body rows — month names only. The ADMISSION FEE / TUITION FEE /
+    // FINE / EXTRA cells are intentionally left EMPTY (owner decision,
+    // 2026-11-08): the register card is filled in by hand at collection
+    // time, like the signature columns. Charged amounts are never
+    // printed here — they do not reflect payments, so the printed card
+    // could never show the student's real paid status.
     doc.setTextColor(0, 0, 0);
     data.months.forEach((row, i) => {
       const base = tableTop + headH + i * rowH + rowH / 2 + 1.9;
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10.5);
       doc.text(row.month, colX[0] + 3, base);
-      doc.setFont('helvetica', 'normal');
-      const cells = [row.admissionFee, row.tuitionFee, row.fineExtra];
-      cells.forEach((v, c) => {
-        const t = formatOrBlank(v);
-        if (t) doc.text(t, colX[c + 1] + cols[c + 1] - 2.5, base, { align: 'right' });
-      });
-      // Signature columns intentionally left blank for handwriting.
     });
 
     // Outer table stroke last, so the rounded corners mask the grid ends

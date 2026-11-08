@@ -208,7 +208,7 @@ function renderMinimalStreamSlipPDF(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(0, 0, 0);
-  const schoolName = (school.schoolName || 'DEMO SCHOOL SYSTEM').toUpperCase();
+  const schoolName = (school.schoolName || '').toUpperCase();
   doc.text(schoolName, x + w / 2, curY, { align: 'center' });
 
   // Black Badge: [EXAM TITLE] — ROLL NUMBER SLIP
@@ -295,7 +295,7 @@ function renderMinimalStreamSlipPDF(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
   doc.setTextColor(0, 0, 0);
-  doc.text(`${slip.student.class} (${slip.student.section || 'A'})`, col1X, rowY);
+  doc.text(`${slip.student.class}${slip.student.section ? ` (${slip.student.section})` : ''}`, col1X, rowY);
 
   // Roll Number Black Pill
   const rollStr = String(slip.rollNo);
@@ -453,7 +453,7 @@ function renderClassicBorderedSlipPDF(
   doc.setFont('times', 'bold');
   doc.setFontSize(13.5);
   doc.setTextColor(0, 0, 0);
-  const schoolName = (school.schoolName || 'DEMO SCHOOL SYSTEM').toUpperCase();
+  const schoolName = (school.schoolName || '').toUpperCase();
   doc.text(schoolName, x + w / 2, curY, { align: 'center' });
 
   curY += 3.8;
@@ -540,7 +540,7 @@ function renderClassicBorderedSlipPDF(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
   doc.setTextColor(0, 0, 0);
-  doc.text(`${slip.student.class} (${slip.student.section || 'A'})`, col1X, rowY);
+  doc.text(`${slip.student.class}${slip.student.section ? ` (${slip.student.section})` : ''}`, col1X, rowY);
   doc.text(`${slip.rollNo}  •  ${slip.student.id}`, col2X, rowY);
 
   curY = sectionTopY + photoH + 3;
@@ -696,7 +696,7 @@ function renderMinimalProfessionalSlipPDF(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(0, 0, 0);
-  const schoolName = (school.schoolName || 'DEMO SCHOOL SYSTEM').toUpperCase();
+  const schoolName = (school.schoolName || '').toUpperCase();
   doc.text(schoolName, x + w / 2, curY, { align: 'center' });
 
   curY += 3.8;
@@ -787,7 +787,7 @@ function renderMinimalProfessionalSlipPDF(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
   doc.setTextColor(0, 0, 0);
-  doc.text(`${slip.student.class} (${slip.student.section || 'A'})`, col1X, rowY);
+  doc.text(`${slip.student.class}${slip.student.section ? ` (${slip.student.section})` : ''}`, col1X, rowY);
   doc.text(`${slip.rollNo}  •  ${slip.student.id}`, col2X, rowY);
 
   // Student section bottom border line

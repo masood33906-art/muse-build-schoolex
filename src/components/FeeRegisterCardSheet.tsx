@@ -1,5 +1,6 @@
 import React from 'react';
-import { RegisterCardData, formatOrBlank } from '../utils/feeCardHelper';
+import { RegisterCardData } from '../utils/feeCardHelper';
+import { getStudentAvatar } from '../utils/studentAvatarHelper';
 
 /**
  * The ONE Student Fee Card "Register Card" design — the same
@@ -12,9 +13,15 @@ import { RegisterCardData, formatOrBlank } from '../utils/feeCardHelper';
  * Black & white register card after the owner's reference: double-ruled
  * border, arched school name with grey corner swooshes, principal /
  * address / Mob. lines from Settings (omitted when blank), student
- * particulars on dotted lines, a pinstriped FEE REGISTER heading, and
- * the 12-month table split ADMISSION FEE | TUITION FEE | FINE / EXTRA
- * with the two signature columns blank for handwriting.
+ * particulars on dotted lines beside a bordered photo frame holding
+ * the student's own photo (uploaded or gender default avatar,
+ * cover-cropped), a pinstriped FEE REGISTER heading, and
+ * the 12-month table split ADMISSION FEE | TUITION FEE | FINE / EXTRA.
+ * ALL amount cells are EMPTY by design (owner decision, 2026-11-08),
+ * exactly like the two signature columns: this is a paper register to
+ * be filled in by hand at collection time. Charged amounts are never
+ * rendered here — they do not reflect payments, so the card could
+ * never show the student's real paid status.
  */
 export const FeeRegisterCardSheet: React.FC<{
   data: RegisterCardData;
@@ -87,29 +94,43 @@ export const FeeRegisterCardSheet: React.FC<{
               </>
             )}
 
-            {/* Student particulars on dotted lines */}
-            <div className="mt-2 text-[13px]">
-              <div className="flex items-end gap-1">
-                <span style={serif} className="shrink-0">Name of the Student :</span>
-                <span className="flex-1 border-b-2 border-dotted border-black font-bold px-2 min-h-[18px]">
-                  {data.studentName}
-                </span>
+            {/* Student particulars on dotted lines + photo frame at the
+                right (owner request, 2026-11-08): the frame holds THIS
+                student's photo — uploaded photo or gender default avatar
+                (getStudentAvatar) — cover-cropped via object-cover, the
+                same never-stretch rule as the PDF's drawImageCover. The
+                frame always renders, even with blank school settings. */}
+            <div className="mt-2 flex items-start gap-3">
+              <div className="flex-1 text-[13px]">
+                <div className="flex items-end gap-1">
+                  <span style={serif} className="shrink-0">Name of the Student :</span>
+                  <span className="flex-1 border-b-2 border-dotted border-black font-bold px-2 min-h-[18px]">
+                    {data.studentName}
+                  </span>
+                </div>
+                <div className="flex items-end gap-1 mt-2.5">
+                  <span style={serif} className="shrink-0">Class</span>
+                  <span className="border-b-2 border-dotted border-black font-bold px-2 min-h-[18px]" style={{ width: '27%' }}>
+                    {classValue}
+                  </span>
+                  <span style={serif}>,</span>
+                  <span style={serif} className="shrink-0">Roll</span>
+                  <span className="border-b-2 border-dotted border-black font-bold px-2 min-h-[18px]" style={{ width: '17%' }}>
+                    {data.rollNo}
+                  </span>
+                  <span style={serif}>,</span>
+                  <span style={serif} className="shrink-0">Session</span>
+                  <span className="flex-1 border-b-2 border-dotted border-black font-bold px-2 min-h-[18px]">
+                    {data.academicSession}
+                  </span>
+                </div>
               </div>
-              <div className="flex items-end gap-1 mt-2.5">
-                <span style={serif} className="shrink-0">Class</span>
-                <span className="border-b-2 border-dotted border-black font-bold px-2 min-h-[18px]" style={{ width: '27%' }}>
-                  {classValue}
-                </span>
-                <span style={serif}>,</span>
-                <span style={serif} className="shrink-0">Roll</span>
-                <span className="border-b-2 border-dotted border-black font-bold px-2 min-h-[18px]" style={{ width: '17%' }}>
-                  {data.rollNo}
-                </span>
-                <span style={serif}>,</span>
-                <span style={serif} className="shrink-0">Session</span>
-                <span className="flex-1 border-b-2 border-dotted border-black font-bold px-2 min-h-[18px]">
-                  {data.academicSession}
-                </span>
+              <div className="shrink-0 border-2 border-black bg-white p-[2px]" style={{ width: 88, height: 110 }}>
+                <img
+                  src={getStudentAvatar(data.student)}
+                  alt={`Photo of ${data.studentName}`}
+                  className="w-full h-full object-cover"
+                />
               </div>
             </div>
 
@@ -130,7 +151,7 @@ export const FeeRegisterCardSheet: React.FC<{
               </span>
             </div>
 
-            {/* 12-month register table — charges split three ways */}
+            {/* 12-month register table — amount columns blank for handwriting */}
             <div className="rounded-[6px] border-2 border-black overflow-hidden">
               <table className="w-full border-collapse text-[11px]">
                 <thead>
@@ -149,15 +170,12 @@ export const FeeRegisterCardSheet: React.FC<{
                       <td className="py-[9px] pl-3 pr-1 font-bold border-r-[1.5px] border-black whitespace-nowrap">
                         {row.month}
                       </td>
-                      <td className="py-[9px] px-2 text-right font-mono border-r-[1.5px] border-black">
-                        {formatOrBlank(row.admissionFee)}
-                      </td>
-                      <td className="py-[9px] px-2 text-right font-mono border-r-[1.5px] border-black">
-                        {formatOrBlank(row.tuitionFee)}
-                      </td>
-                      <td className="py-[9px] px-2 text-right font-mono border-r-[1.5px] border-black">
-                        {formatOrBlank(row.fineExtra)}
-                      </td>
+                      {/* Amount cells intentionally EMPTY — filled in by hand at
+                          collection time (owner decision, 2026-11-08). The data's
+                          computed charges are never rendered on this card. */}
+                      <td className="py-[9px] px-2 border-r-[1.5px] border-black"></td>
+                      <td className="py-[9px] px-2 border-r-[1.5px] border-black"></td>
+                      <td className="py-[9px] px-2 border-r-[1.5px] border-black"></td>
                       {/* Signature columns stay blank — handwritten at collection time. */}
                       <td className="border-r-[1.5px] border-black"></td>
                       <td></td>

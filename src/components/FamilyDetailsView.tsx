@@ -44,7 +44,7 @@ import { Student, AttendanceRecord, AttendanceStatus, HolidayRecord } from '../t
 import { getAvatarColor, getInitials } from '../data/initialStudents';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
 import { listPayments } from '../utils/paymentStore';
-import { loadAllLedgerItems } from '../utils/studentFeeLedgerHelper';
+import { loadAllLedgerItems, summarizeFamilyFees } from '../utils/studentFeeLedgerHelper';
 import { getSchoolSettings } from '../utils/settingsHelper';
 import { monthKeyOf, monthLabelFromKey } from '../utils/dates';
 
@@ -125,10 +125,13 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
   const [formEmail, setFormEmail] = useState(family.email || '');
   const [formAddress, setFormAddress] = useState(family.address || '');
   const [formOccupation, setFormOccupation] = useState(family.guardianOccupation || '');
-  const [formMotherName, setFormMotherName] = useState(family.motherName || '-');
-  const [formMotherCnic, setFormMotherCnic] = useState(family.motherCnic || '-');
+  // Blank stays blank in the edit form too (owner rule, 2026-11-08):
+  // the old `|| '-'` initializers put a literal dash into the input,
+  // which Save then stored as the mother's name / CNIC / caste.
+  const [formMotherName, setFormMotherName] = useState(family.motherName || '');
+  const [formMotherCnic, setFormMotherCnic] = useState(family.motherCnic || '');
   const [formMotherOccupation, setFormMotherOccupation] = useState(family.motherOccupation || '');
-  const [formCaste, setFormCaste] = useState(family.caste || '-');
+  const [formCaste, setFormCaste] = useState(family.caste || '');
   const [formReligion, setFormReligion] = useState(family.religion || '');
 
   // Fine form
@@ -158,27 +161,8 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Financial aggregates
-  const financialTotals = useMemo(() => {
-    const totalDue = family.students.reduce((sum, s) => sum + (s.totalDue ?? 0), 0);
-    const totalPaid = family.students.reduce((sum, s) => sum + (s.totalPaid ?? 0), 0);
-    return {
-      totalDueFormatted: `${totalDue.toLocaleString()} PKR`,
-      totalPaidFormatted: `${totalPaid.toLocaleString()} PKR`,
-      totalDue,
-      totalPaid
-    };
-  }, [family.students]);
-
-  // Display name format: e.g. "gulzar, (F0080)"
-  const displayName = `${family.familyName}, (${family.familyId})`;
-
-  // Fix P0-4: the Fee Timeline and Transactions tabs below render this
-  // family's REAL records — its children's fee-ledger items and its recorded
-  // payments from the payment store — or an honest empty state. (Previously
-  // both tabs showed hardcoded rows: a flat 10,000 PKR × children "bills
-  // history" with fixed receipt numbers/dates and invented transaction
-  // rows, identical for every family.)
+  // Live-data refresh counter for every fee figure on this page
+  // (declared before the financial aggregates that depend on it).
   const [feeDataVersion, setFeeDataVersion] = useState(0);
   useEffect(() => {
     const refresh = () => setFeeDataVersion(v => v + 1);
@@ -189,6 +173,39 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
       window.removeEventListener('ledgerTransactionsUpdated', refresh);
     };
   }, []);
+
+  // Financial aggregates — derived LIVE from the children's real fee
+  // ledgers via the shared summarizeFamilyFees helper (every head:
+  // tuition, admission, fund, fine, security, other). (These figures
+  // previously summed the hand-maintained totalDue / totalPaid snapshot
+  // fields on each child record, which could drift from the ledger.)
+  const familyFeeSummary = useMemo(() => {
+    return summarizeFamilyFees(family.students.map(s => ({ id: s.id, name: s.name })));
+    // feeDataVersion re-runs this after payments are recorded elsewhere.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [family.students, feeDataVersion]);
+
+  const financialTotals = useMemo(() => {
+    return {
+      totalDueFormatted: `${familyFeeSummary.due.toLocaleString()} PKR`,
+      totalPaidFormatted: `${familyFeeSummary.paid.toLocaleString()} PKR`,
+      totalBilledFormatted: `${familyFeeSummary.billed.toLocaleString()} PKR`,
+      totalDue: familyFeeSummary.due,
+      totalPaid: familyFeeSummary.paid,
+      totalBilled: familyFeeSummary.billed
+    };
+  }, [familyFeeSummary]);
+
+  // Display name format: e.g. "gulzar, (F0080)"
+  const displayName = `${family.familyName}, (${family.familyId})`;
+
+  // Fix P0-4: the Fee Timeline and Transactions tabs below render this
+  // family's REAL records — its children's fee-ledger items and its recorded
+  // payments from the payment store — or an honest empty state. (Previously
+  // both tabs showed hardcoded rows: a flat 10,000 PKR × children "bills
+  // history" with fixed receipt numbers/dates and invented transaction
+  // rows, identical for every family.) The feeDataVersion refresh state
+  // these memos depend on is declared with the financial aggregates above.
 
   const fmtRecordDate = (iso: string) => {
     const d = new Date(iso);
@@ -561,28 +578,28 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
       {/* ======================================================== */}
       {/* 3. KPI FINANCIAL SUMMARY CARDS (MATCHING REFERENCE)     */}
       {/* ======================================================== */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-        
-        {/* Total Due Card */}
-        <div 
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+
+        {/* Total Billed Card — every charge head, all children */}
+        <div
           className="bg-surface-13 border border-edge-8 rounded-2xl p-4 sm:p-5 flex items-center justify-between shadow-lg"
-          id="kpi-card-total-due"
+          id="kpi-card-total-billed"
         >
           <div>
             <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              {financialTotals.totalDueFormatted}
+              {financialTotals.totalBilledFormatted}
             </div>
             <div className="text-xs text-slate-400 mt-1 font-medium">
-              Total Due (All Children)
+              Total Billed (All Children)
             </div>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-[#2a171a] border border-[#4d2328] flex items-center justify-center text-red-400 shadow-inner">
-            <Stars className="w-6 h-6 stroke-[2.2]" />
+          <div className="w-12 h-12 rounded-xl bg-[#16233a] border border-[#27436e] flex items-center justify-center text-blue-400 shadow-inner">
+            <FileText className="w-6 h-6 stroke-[2.2]" />
           </div>
         </div>
 
         {/* Total Paid Card */}
-        <div 
+        <div
           className="bg-surface-13 border border-edge-8 rounded-2xl p-4 sm:p-5 flex items-center justify-between shadow-lg"
           id="kpi-card-total-paid"
         >
@@ -599,6 +616,83 @@ export const FamilyDetailsView: React.FC<FamilyDetailsViewProps> = ({
           </div>
         </div>
 
+        {/* Total Due Card */}
+        <div
+          className="bg-surface-13 border border-edge-8 rounded-2xl p-4 sm:p-5 flex items-center justify-between shadow-lg"
+          id="kpi-card-total-due"
+        >
+          <div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              {financialTotals.totalDueFormatted}
+            </div>
+            <div className="text-xs text-slate-400 mt-1 font-medium">
+              Total Due (All Children)
+            </div>
+          </div>
+          <div className="w-12 h-12 rounded-xl bg-[#2a171a] border border-[#4d2328] flex items-center justify-center text-red-400 shadow-inner">
+            <Stars className="w-6 h-6 stroke-[2.2]" />
+          </div>
+        </div>
+
+      </div>
+
+      {/* ======================================================== */}
+      {/* 3b. FEE SUMMARY — PER-HEAD + PER-CHILD (LIVE LEDGERS)   */}
+      {/* ======================================================== */}
+      <div className="bg-surface-13 border border-edge-8 rounded-2xl p-4 sm:p-5 shadow-lg mb-5" id="fee-summary-breakdown">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold text-white">Fee Summary — All Charges (All Children)</h3>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+            familyFeeSummary.status === 'Paid'
+              ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+              : familyFeeSummary.status === 'Partially Paid'
+              ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+              : familyFeeSummary.status === 'No Charges'
+              ? 'bg-slate-500/20 text-slate-300 border-slate-500/30'
+              : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+          }`}>
+            {familyFeeSummary.status}
+          </span>
+        </div>
+        {familyFeeSummary.heads.length === 0 ? (
+          <p className="text-xs text-slate-400">No fee charges recorded for this family yet.</p>
+        ) : (
+          <div className="text-xs">
+            <div className="grid grid-cols-4 gap-2 pb-2 border-b border-edge-10 text-slate-400 font-semibold">
+              <span>Fee Head</span>
+              <span className="text-right">Billed</span>
+              <span className="text-right">Paid</span>
+              <span className="text-right">Due</span>
+            </div>
+            {familyFeeSummary.heads.map(h => (
+              <div key={h.type} className="grid grid-cols-4 gap-2 py-2 border-b border-edge-10/60">
+                <span className="text-slate-200 font-medium">{h.label}</span>
+                <span className="text-right text-slate-300">{h.billed.toLocaleString()}</span>
+                <span className="text-right text-emerald-400">{h.paid.toLocaleString()}</span>
+                <span className={`text-right font-semibold ${h.due > 0 ? 'text-rose-400' : 'text-slate-300'}`}>{h.due.toLocaleString()}</span>
+              </div>
+            ))}
+            <div className="grid grid-cols-4 gap-2 pt-2 pb-3 font-bold text-white border-b border-edge-10">
+              <span>Total</span>
+              <span className="text-right">{familyFeeSummary.billed.toLocaleString()}</span>
+              <span className="text-right">{familyFeeSummary.paid.toLocaleString()}</span>
+              <span className="text-right">{familyFeeSummary.due.toLocaleString()}</span>
+            </div>
+            {/* Per-child lines: each child's own paid / due */}
+            <div className="pt-3 space-y-2">
+              {familyFeeSummary.perChild.map(c => (
+                <div key={c.studentId} className="flex items-center justify-between">
+                  <span className="text-slate-200 font-medium">{c.name}</span>
+                  <span className="text-slate-400">
+                    Paid <span className="text-emerald-400 font-semibold">{c.paid.toLocaleString()} PKR</span>
+                    {'  •  '}
+                    Due <span className={`font-semibold ${c.due > 0 ? 'text-rose-400' : 'text-slate-300'}`}>{c.due.toLocaleString()} PKR</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ======================================================== */}

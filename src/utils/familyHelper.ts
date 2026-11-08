@@ -9,22 +9,33 @@ export function groupStudentsIntoFamilies(students: Student[]): FamilyData[] {
   students.forEach((student) => {
     const key = (student.familyId || student.family || 'unknown').trim().toLowerCase();
     if (!map.has(key)) {
+      // Blank in → blank shown/stored (owner rule, 2026-11-08): every
+      // descriptive field below takes the student's OWN value or stays
+      // empty. The old fallbacks fabricated a CNIC ('7647646475'), an
+      // occupation ('Business' / 'Homemaker'), an email
+      // ('guardian@school.edu.pk'), a religion ('Islam') and a full
+      // street address ('House #14, Sector G-10, Islamabad') — and
+      // because the Family Details edit form initializes from this
+      // record, pressing Save there wrote those inventions onto every
+      // student in the family. phone/whatsapp/emergencyContact still
+      // fall back to the family's OWN other number (derived contact
+      // view of real data, never a foreign value).
       map.set(key, {
-        familyId: student.familyId || 'F0000',
-        familyName: student.family || 'Unknown Family',
+        familyId: student.familyId || '',
+        familyName: student.family || '',
         phone: student.phone || student.emergencyContact || '',
-        guardianCnic: student.guardianCnic || '7647646475',
-        guardianOccupation: student.guardianOccupation || 'Business',
-        motherName: student.motherName || '-',
-        motherCnic: student.motherCnic || '-',
-        motherOccupation: student.motherOccupation || 'Homemaker',
+        guardianCnic: student.guardianCnic || '',
+        guardianOccupation: student.guardianOccupation || '',
+        motherName: student.motherName || '',
+        motherCnic: student.motherCnic || '',
+        motherOccupation: student.motherOccupation || '',
         whatsapp: student.whatsapp || student.phone || '',
-        email: student.email || 'guardian@school.edu.pk',
-        address: student.address || 'House #14, Sector G-10, Islamabad',
-        caste: student.caste || '-',
-        religion: student.religion || 'Islam',
+        email: student.email || '',
+        address: student.address || '',
+        caste: student.caste || '',
+        religion: student.religion || '',
         emergencyContact: student.emergencyContact || student.phone,
-        notes: student.note || 'Registered Family Account',
+        notes: student.note || '',
         students: [],
         totalDue: 0,
         totalPaid: 0

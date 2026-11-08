@@ -45,7 +45,7 @@ import { getAvatarColor, getInitials } from '../data/initialStudents';
 import { getStudentAvatar } from '../utils/studentAvatarHelper';
 import { MemberAttendanceSection } from './MemberAttendanceSection';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
-import { loadAllLedgerItems } from '../utils/studentFeeLedgerHelper';
+import { loadAllLedgerItems, summarizeStudentFees } from '../utils/studentFeeLedgerHelper';
 import { listPayments } from '../utils/paymentStore';
 import { getStoredExams, calculateGrade } from '../utils/examStore';
 import { getSchoolSettings } from '../utils/settingsHelper';
@@ -201,6 +201,20 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
       ? iso
       : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   };
+
+  // Complete money summary for the KPI cards + per-head breakdown:
+  // derived LIVE from this student's real fee ledger (every head —
+  // tuition, admission, fund, fine, security, other), via the shared
+  // summarizeStudentFees helper. (The header cards previously read the
+  // hand-maintained student.totalDue / totalPaid snapshot fields, which
+  // could drift from the ledger; the same snapshots are no longer used
+  // for any figure on this page.)
+  const feeSummary = useMemo(() => {
+    return summarizeStudentFees(student.id);
+    // feeDataVersion re-runs this after payments are recorded elsewhere.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [student.id, feeDataVersion]);
+  const fmtPkr = (n: number) => `${n.toLocaleString()} PKR`;
 
   const studentFeeTimeline = useMemo(() => {
     const items = loadAllLedgerItems()[student.id] || [];
@@ -589,34 +603,34 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
       {/* ======================================================== */}
       {/* 3. KPI FINANCIAL SUMMARY CARDS (MATCHING PICTURE)       */}
       {/* ======================================================== */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-        
-        {/* Total Due Card */}
-        <div 
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+
+        {/* Total Billed Card — every charge head in the ledger */}
+        <div
           className="bg-surface-13 border border-edge-8 rounded-2xl p-4 sm:p-5 flex items-center justify-between shadow-lg"
-          id="kpi-card-total-due"
+          id="kpi-card-total-billed"
         >
           <div>
             <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              {studentInfo.totalDue}
+              {fmtPkr(feeSummary.billed)}
             </div>
             <div className="text-xs text-slate-400 mt-1 font-medium">
-              Total Due
+              Total Billed
             </div>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-[#2a171a] border border-[#4d2328] flex items-center justify-center text-red-400 shadow-inner">
-            <Stars className="w-6 h-6 stroke-[2.2]" />
+          <div className="w-12 h-12 rounded-xl bg-[#16233a] border border-[#27436e] flex items-center justify-center text-blue-400 shadow-inner">
+            <Coins className="w-6 h-6 stroke-[2.2]" />
           </div>
         </div>
 
         {/* Total Paid Card */}
-        <div 
+        <div
           className="bg-surface-13 border border-edge-8 rounded-2xl p-4 sm:p-5 flex items-center justify-between shadow-lg"
           id="kpi-card-total-paid"
         >
           <div>
             <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              {studentInfo.totalPaid}
+              {fmtPkr(feeSummary.paid)}
             </div>
             <div className="text-xs text-slate-400 mt-1 font-medium">
               Total Paid
@@ -627,6 +641,70 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
           </div>
         </div>
 
+        {/* Total Due Card */}
+        <div
+          className="bg-surface-13 border border-edge-8 rounded-2xl p-4 sm:p-5 flex items-center justify-between shadow-lg"
+          id="kpi-card-total-due"
+        >
+          <div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              {fmtPkr(feeSummary.due)}
+            </div>
+            <div className="text-xs text-slate-400 mt-1 font-medium">
+              Total Due
+            </div>
+          </div>
+          <div className="w-12 h-12 rounded-xl bg-[#2a171a] border border-[#4d2328] flex items-center justify-center text-red-400 shadow-inner">
+            <Stars className="w-6 h-6 stroke-[2.2]" />
+          </div>
+        </div>
+
+      </div>
+
+      {/* ======================================================== */}
+      {/* 3b. FEE SUMMARY — PER-HEAD BREAKDOWN (LIVE LEDGER)      */}
+      {/* ======================================================== */}
+      <div className="bg-surface-13 border border-edge-8 rounded-2xl p-4 sm:p-5 shadow-lg mb-5" id="fee-summary-breakdown">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold text-white">Fee Summary — All Charges</h3>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+            feeSummary.status === 'Paid'
+              ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+              : feeSummary.status === 'Partially Paid'
+              ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+              : feeSummary.status === 'No Charges'
+              ? 'bg-slate-500/20 text-slate-300 border-slate-500/30'
+              : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+          }`}>
+            {feeSummary.status}
+          </span>
+        </div>
+        {feeSummary.heads.length === 0 ? (
+          <p className="text-xs text-slate-400">No fee charges recorded for this student yet.</p>
+        ) : (
+          <div className="text-xs">
+            <div className="grid grid-cols-4 gap-2 pb-2 border-b border-edge-10 text-slate-400 font-semibold">
+              <span>Fee Head</span>
+              <span className="text-right">Billed</span>
+              <span className="text-right">Paid</span>
+              <span className="text-right">Due</span>
+            </div>
+            {feeSummary.heads.map(h => (
+              <div key={h.type} className="grid grid-cols-4 gap-2 py-2 border-b border-edge-10/60">
+                <span className="text-slate-200 font-medium">{h.label}</span>
+                <span className="text-right text-slate-300">{h.billed.toLocaleString()}</span>
+                <span className="text-right text-emerald-400">{h.paid.toLocaleString()}</span>
+                <span className={`text-right font-semibold ${h.due > 0 ? 'text-rose-400' : 'text-slate-300'}`}>{h.due.toLocaleString()}</span>
+              </div>
+            ))}
+            <div className="grid grid-cols-4 gap-2 pt-2 font-bold text-white">
+              <span>Total</span>
+              <span className="text-right">{feeSummary.billed.toLocaleString()}</span>
+              <span className="text-right">{feeSummary.paid.toLocaleString()}</span>
+              <span className="text-right">{feeSummary.due.toLocaleString()}</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ======================================================== */}
@@ -2280,7 +2358,7 @@ export const StudentDetailsView: React.FC<StudentDetailsViewProps> = ({
                 <strong>Sample Message:</strong>
               </p>
               <div className="p-3 rounded-lg bg-[#0c131f] text-slate-300 font-mono text-[11px] leading-relaxed border border-edge-8">
-                Dear Parent of {student.name}, this is an official update from {schoolSettings.schoolName}. Current fee status: {studentInfo.totalDue} due. Thank you for your continued partnership.
+                Dear Parent of {student.name}, this is an official update from {schoolSettings.schoolName}. Current fee status: {fmtPkr(feeSummary.due)} due. Thank you for your continued partnership.
               </div>
             </div>
 

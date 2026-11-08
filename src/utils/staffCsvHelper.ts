@@ -201,7 +201,9 @@ export function parseCSVToStaff(
     phone: headerRow.findIndex(h => h.includes('phone') || h.includes('contact') || h.includes('mobile')),
     email: headerRow.findIndex(h => h.includes('email') || h.includes('mail')),
     status: headerRow.findIndex(h => h.includes('employmentstatus') || h.includes('status')),
-    joiningDate: headerRow.findIndex(h => h.includes('joining') || h.includes('date'))
+    joiningDate: headerRow.findIndex(h => h.includes('joining') || h.includes('date')),
+    gender: headerRow.findIndex(h => h.includes('gender') || h.includes('sex')),
+    bloodGroup: headerRow.findIndex(h => h.includes('blood'))
   };
 
   const existingIdMap = new Map<string, string>();
@@ -307,7 +309,10 @@ export function parseCSVToStaff(
     }
 
     const department = (colIndex.department !== -1 ? cells[colIndex.department] : cells[4]) || (category === 'Teacher' ? 'Academics' : 'Administration');
-    const qualification = (colIndex.qualification !== -1 ? cells[colIndex.qualification] : cells[5]) || 'Graduate';
+    // Blank in → blank stored (owner rule, 2026-11-08): a missing
+    // qualification cell imports as an empty qualification — the old
+    // `|| 'Graduate'` fabricated one on every such record.
+    const qualification = (colIndex.qualification !== -1 ? cells[colIndex.qualification] : cells[5]) || '';
 
     const rawSalary = colIndex.salary !== -1 ? cells[colIndex.salary] : cells[6];
     const parsedSalary = Number(String(rawSalary || '0').replace(/[^0-9.]/g, ''));
@@ -324,6 +329,17 @@ export function parseCSVToStaff(
     const phone = (colIndex.phone !== -1 ? cells[colIndex.phone] : cells[7]) || '';
     const email = (colIndex.email !== -1 ? cells[colIndex.email] : cells[8]) || '';
 
+    // Gender / Blood Group are read ONLY from real file columns when the
+    // file has them (blank in → blank stored, owner rule 2026-11-08).
+    // The old code never looked at the file at all and stamped every
+    // imported staff member as gender 'Male', blood group 'B+'.
+    const rawGender = colIndex.gender !== -1 ? (cells[colIndex.gender] || '').trim().toLowerCase() : '';
+    const parsedGender: StaffMember['gender'] =
+      rawGender === 'male' ? 'Male' :
+      rawGender === 'female' ? 'Female' :
+      rawGender === 'other' ? 'Other' : undefined;
+    const parsedBloodGroup = colIndex.bloodGroup !== -1 ? (cells[colIndex.bloodGroup] || '').trim() : '';
+
     const rawStatus = colIndex.status !== -1 ? cells[colIndex.status]?.toLowerCase() || 'active' : 'active';
     let status: StaffStatus = 'Active';
     if (rawStatus.includes('leave')) status = 'On Leave';
@@ -334,7 +350,10 @@ export function parseCSVToStaff(
     parsedStaff.push({
       id,
       name,
-      role: role || 'Teaching Faculty',
+      // A missing role stays blank (the row already carries a
+      // missing_required_field issue and cannot be confirmed for import);
+      // the old `|| 'Teaching Faculty'` invented a designation.
+      role,
       category,
       department: department.trim(),
       qualification: qualification.trim(),
@@ -348,8 +367,8 @@ export function parseCSVToStaff(
       phone: phone.trim(),
       email: email.trim(),
       joiningDate: joiningDate.trim(),
-      gender: 'Male',
-      bloodGroup: 'B+'
+      ...(parsedGender ? { gender: parsedGender } : {}),
+      ...(parsedBloodGroup ? { bloodGroup: parsedBloodGroup } : {})
     });
   }
 

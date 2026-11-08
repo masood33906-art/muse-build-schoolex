@@ -15,7 +15,8 @@ import {
   Wallet
 } from 'lucide-react';
 import { Student, ClassInfo, StudentStatus } from '../types';
-import { withClassIdFromName } from '../utils/classExportHelper';
+import { buildStudentRecordFromForm } from '../utils/formRecords';
+import { classRefForName, nextRollNumber, ROLL_NUMBER_CAP } from '../utils/rollNumber';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
 import {
   BOY_AVATAR_URL,
@@ -89,7 +90,9 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
     class: availableClassNames[0] || '',
     section: (availableClassNames[0] && availableClassMap.get(availableClassNames[0])?.[0]) || '',
     status: 'Active',
-    gender: 'Male',
+    // No pre-picked gender (owner rule, 2026-11-08): gender is an optional
+    // fact about the student — if the user never selects one, the saved
+    // record carries none. The toggle buttons start unselected.
     bloodGroup: '',
     phone: '',
     emergencyContact: '',
@@ -132,6 +135,29 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
     }
     return [];
   }, [formData.class, availableClassMap]);
+
+  // Roll number — a derived per-class sequence (utils/rollNumber.ts).
+  // In ADD mode the field shows the selected class's next roll as soon
+  // as a class is chosen, and recomputes when the class selection (or
+  // the registry) changes — until the user types over it; from then on
+  // their value is respected for the rest of this form session. Edit
+  // mode never derives: an existing student's roll stays exactly as it is.
+  const [rollTouched, setRollTouched] = useState(false);
+  const selectedClassRef = useMemo(
+    () => classRefForName(classes, formData.class),
+    [classes, formData.class]
+  );
+  const autoRoll = useMemo(() => {
+    if (editingStudent || !formData.class?.trim()) return undefined;
+    return nextRollNumber(allStudents, selectedClassRef);
+  }, [editingStudent, formData.class, allStudents, selectedClassRef]);
+  const rollCapReached = autoRoll === null;
+
+  useEffect(() => {
+    if (editingStudent || rollTouched) return;
+    const next = autoRoll === undefined || autoRoll === null ? '' : String(autoRoll);
+    setFormData(prev => (prev.rollNo === next ? prev : { ...prev, rollNo: next }));
+  }, [autoRoll, editingStudent, rollTouched]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
@@ -236,7 +262,6 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
         class: defaultClass,
         section: defaultSecs[0] || '',
         status: 'Active',
-        gender: 'Male',
         bloodGroup: '',
         phone: '',
         emergencyContact: '',
@@ -269,6 +294,7 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
       setOpenSections({});
       setFamilyMode('new');
       setSelectedExistingFamilyCode('');
+      setRollTouched(false);
     }
     setErrors({});
   }, [editingStudent, totalStudentCount, availableClassNames, availableClassMap, allStudents, existingFamilies]);
@@ -447,51 +473,11 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
       return;
     }
 
-    const emergencyNumber = (formData.emergencyContact || formData.phone || '').trim();
-    // Photo: save only a real uploaded photo (base64) — never the gender
-    // default, and legacy default-URL values count as no photo.
-    const rawPhoto = formData.photo?.trim() ? formData.photo : '';
-    const finalPhoto = rawPhoto && !isLegacyDefaultAvatar(rawPhoto) ? rawPhoto : '';
-
-    // Fix P0-3: stamp the stable classId of the selected class at save time.
-    onSave(withClassIdFromName({
-      id: formData.id!.trim(),
-      name: formData.name!.trim(),
-      family: formData.family!.trim(),
-      familyId: formData.familyId!.trim(),
-      class: formData.class!.trim(),
-      section: formData.section!.trim().toUpperCase(),
-      status: formData.status || 'Active',
-      gender: formData.gender || 'Male',
-      bloodGroup: formData.bloodGroup || '',
-      phone: emergencyNumber,
-      emergencyContact: emergencyNumber,
-      admissionDate: formData.admissionDate || localISODate(),
-      isNewAdmission: formData.isNewAdmission !== undefined ? formData.isNewAdmission : (editingStudent ? editingStudent.isNewAdmission : true),
-      photo: finalPhoto,
-      rollNo: (formData.rollNo || '').trim(),
-      dob: (formData.dob || '').trim(),
-      fatherName: (formData.fatherName || '').trim(),
-      cnic: (formData.cnic || '').trim(),
-      religion: (formData.religion || '').trim(),
-      caste: (formData.caste || '').trim(),
-      whatsapp: (formData.whatsapp || '').trim(),
-      email: (formData.email || '').trim(),
-      address: (formData.address || '').trim(),
-      guardianCnic: (formData.guardianCnic || '').trim(),
-      guardianOccupation: (formData.guardianOccupation || '').trim(),
-      motherName: (formData.motherName || '').trim(),
-      motherCnic: (formData.motherCnic || '').trim(),
-      motherOccupation: (formData.motherOccupation || '').trim(),
-      previousSchool: (formData.previousSchool || '').trim(),
-      previousClass: (formData.previousClass || '').trim(),
-      previousResult: (formData.previousResult || '').trim(),
-      reference: (formData.reference || '').trim(),
-      note: (formData.note || '').trim(),
-      discount: (formData.discount || '').trim(),
-      admissionFee: (typeof formData.admissionFee === 'string' ? formData.admissionFee.trim() : formData.admissionFee) ?? '',
-      classFee: (typeof formData.classFee === 'string' ? formData.classFee.trim() : formData.classFee) ?? ''
-    }, classes));
+    // The stored record is built by the shared save-path builder
+    // (utils/formRecords.ts) — the exact same transform the Add Student
+    // modal uses, so both paths store identical shapes and the transform
+    // itself is proof-tested (proof-no-invented-defaults.mts).
+    onSave(buildStudentRecordFromForm(formData, editingStudent, classes));
   };
 
   return (
@@ -859,11 +845,24 @@ export const AddStudentPage: React.FC<AddStudentPageProps> = ({
               <input
                 type="text"
                 value={formData.rollNo || ''}
-                onChange={(e) => setFormData({ ...formData, rollNo: e.target.value })}
+                onChange={(e) => {
+                  setRollTouched(true);
+                  setFormData({ ...formData, rollNo: e.target.value });
+                }}
                 placeholder="e.g. 12"
                 className="w-full bg-surface-36 text-slate-100 text-sm rounded-lg px-3.5 py-2.5 border border-edge-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
                 id="input-student-rollNo"
               />
+              {!editingStudent && rollCapReached && (
+                <p className="text-amber-400 text-[11px] mt-1">
+                  This class already has {ROLL_NUMBER_CAP} roll numbers, so automatic numbering has stopped. Type a roll number by hand if you want one.
+                </p>
+              )}
+              {!editingStudent && !rollCapReached && autoRoll !== undefined && !rollTouched && (
+                <p className="text-slate-400 text-[11px] mt-1">
+                  Assigned automatically — the next roll number in {formData.class}. You can type over it.
+                </p>
+              )}
             </div>
 
             {/* Status Dropdown */}

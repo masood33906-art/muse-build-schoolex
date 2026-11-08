@@ -711,7 +711,7 @@ export function MinimalStreamSlipCard({
             <span>SESSION: {school.session}</span>
           </div>
           <h3 className="text-base sm:text-lg font-black uppercase tracking-tight text-black">
-            {school.schoolName || 'DEMO SCHOOL SYSTEM'}
+            {school.schoolName || ''}
           </h3>
           <p className="text-[10px] font-medium text-black">
             {[school.campusName, school.schoolAddress].filter(Boolean).join(' • ')}
@@ -836,7 +836,7 @@ export function MinimalStreamSlipCard({
               <span>SESSION: {school.session}</span>
             </div>
             <h3 className="text-base sm:text-lg font-serif font-black uppercase tracking-tight text-black">
-              {school.schoolName || 'DEMO SCHOOL SYSTEM'}
+              {school.schoolName || ''}
             </h3>
             <p className="text-[10px] font-medium text-neutral-700">
               {[school.campusName, school.schoolAddress].filter(Boolean).join(' • ')}
@@ -957,7 +957,7 @@ export function MinimalStreamSlipCard({
           <span>SESSION: {school.session}</span>
         </div>
         <h3 className="text-base font-black uppercase tracking-tight text-black">
-          {school.schoolName || 'DEMO SCHOOL SYSTEM'}
+          {school.schoolName || ''}
         </h3>
         <p className="text-[10px] font-bold uppercase tracking-wider bg-black text-white inline-block px-3 py-0.5 mt-1">
           {examTitle} — Roll Number Slip

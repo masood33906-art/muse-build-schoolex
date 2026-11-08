@@ -309,7 +309,7 @@ function renderCardOnPage(doc: jsPDF, student: Student, template: CardTemplateTy
       { label: 'Class / Section:', val: `${student.class} - ${student.section}` },
       { label: 'Father Name:', val: student.family },
       { label: 'Family Code:', val: student.familyId },
-      { label: 'Blood Group:', val: student.bloodGroup || 'O+' },
+      { label: 'Blood Group:', val: student.bloodGroup || 'N/A' },
       { label: 'Emergency Contact:', val: student.phone || school.phone },
       { label: 'Enrollment Status:', val: student.status }
     ];
@@ -605,7 +605,7 @@ function imageNaturalSize(dataUri: string): { w: number; h: number } | null {
  * false if the image could not be drawn at all (caller falls back to
  * initials). An unknown natural size is treated as square.
  */
-function drawImageCover(doc: jsPDF, img: string, x: number, y: number, w: number, h: number, radius: number): boolean {
+export function drawImageCover(doc: jsPDF, img: string, x: number, y: number, w: number, h: number, radius: number): boolean {
   if (!img) return false;
   const size = imageNaturalSize(img);
   const iw = size && size.w > 0 ? size.w : 1;
