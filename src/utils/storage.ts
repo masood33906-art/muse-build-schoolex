@@ -84,7 +84,11 @@ const SYNC_PREFIXES = ['schoollee_', 'schooliee_', 'schoolex_'];
 // (Fix P1-5). The key is excluded from sync itself, so the outbox is
 // never mirrored to the backend.
 export const SYNC_OUTBOX_KEY = 'schoolex_sync_outbox_v1';
-const shouldSync = (k: string) => k !== SYNC_OUTBOX_KEY && SYNC_PREFIXES.some(p => k.startsWith(p));
+// The data epoch this client last hydrated from (see the epoch guard in
+// the hydration block at the bottom of this file). Client-local
+// bookkeeping only: it is never mirrored to the backend.
+export const DATA_EPOCH_KEY = 'schoolex_data_epoch';
+const shouldSync = (k: string) => k !== SYNC_OUTBOX_KEY && k !== DATA_EPOCH_KEY && SYNC_PREFIXES.some(p => k.startsWith(p));
 let applyingRemote = false;
 // Whether this session actually has a backend. The standalone app is
 // served BY its backend, so a successful /api/collections response at
@@ -191,6 +195,33 @@ function clearOutboxEntry(key: string) {
   const entries = readOutbox();
   const next = entries.filter(e => e.key !== key);
   if (next.length !== entries.length) writeOutbox(next);
+}
+
+// ---------------------------------------------------------------------------
+// Data-epoch guard (owner directive 2026-11-08, Change 1). The server
+// stamps its data with an epoch (generation token): a brand-new database
+// gets a fresh one, POST /api/system/reset rotates it, and a restored
+// backup brings its own. If the epoch this client cached does not match
+// the server's, everything in the local cache belongs to a DEAD data
+// generation and must be discarded — never uploaded. Without this, a
+// leftover cache (e.g. a demo dataset in the installed app's browser
+// storage) silently refills a fresh or reset database on next launch:
+// hydration only overwrites keys the server HAS, so stale local-only
+// collections survived and the app's save effects pushed them back up.
+// Corrupt-key quarantines (`__corrupt_` copies) are kept: they are inert
+// raw text for the StorageFaultScreen, never loaded as live data.
+// ---------------------------------------------------------------------------
+function purgeStaleClientCache() {
+  applyingRemote = true; // removals must not queue sync DELETEs
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)!;
+      if (shouldSync(k) && !k.includes('__corrupt_')) keys.push(k);
+    }
+    keys.forEach(k => { try { localStorage.removeItem(k); } catch { /* ignore */ } });
+    writeOutbox([]); // queued uploads belong to the dead generation too
+  } finally { applyingRemote = false; }
 }
 
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -302,6 +333,27 @@ try {
         ? r.json().then(data => ({ data, ok: true }))
         : Promise.resolve({ data: null, ok: false })))
       .then(({ data, ok }) => {
+        // Epoch guard FIRST, before anything is applied or uploaded: if
+        // this cache belongs to a dead data generation, discard it (see
+        // purgeStaleClientCache above). Rules:
+        //  - stored epoch exists and differs from the server's → purge
+        //    (a reset happened, or the database file was swapped/restored);
+        //  - no stored epoch (first run of this client version, or the
+        //    client state was just reset) AND the server has NO data at
+        //    all → purge: a completely empty database cannot own this
+        //    cache, so the cache is a leftover from another dataset;
+        //  - no stored epoch and the server HAS data → adopt: the server
+        //    collections below overwrite the cache, server is the truth.
+        const serverEpoch: string | null = typeof data?.epoch === 'string' ? data.epoch : null;
+        if (serverEpoch) {
+          let storedEpoch: string | null = null;
+          try { storedEpoch = localStorage.getItem(DATA_EPOCH_KEY); } catch { /* ignore */ }
+          const serverHasData = !!(data?.collections && Object.keys(data.collections).length > 0);
+          if (storedEpoch !== serverEpoch && (storedEpoch !== null || !serverHasData)) {
+            purgeStaleClientCache();
+          }
+          try { localStorage.setItem(DATA_EPOCH_KEY, serverEpoch); } catch { /* ignore */ }
+        }
         if (data?.collections) {
           applyingRemote = true;
           try {

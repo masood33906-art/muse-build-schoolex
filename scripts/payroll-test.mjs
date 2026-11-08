@@ -1,12 +1,15 @@
 // SchoolEx payroll test — PAYROLL_PLAN §5.
-// Boots the server on a temp DB (fresh installs start empty; the 28-staff
-// sample school is loaded on demand via /api/system/load-dummy-data),
-// drives the payroll API with fetch, and checks the owner's 10 tests +
-// the migration fixture + system reset.
+// Boots the server on a temp DB (fresh installs start empty and there is
+// NO dummy-data facility in the app anymore; the 28-staff fixture school
+// is inserted through the normal collections API from
+// scripts/fixtures.mjs — test-only, never shipped), drives the payroll
+// API with fetch, and checks the owner's 10 tests + the migration
+// fixture + system reset.
 // Run: npm run test:payroll  (or node scripts/payroll-test.mjs)
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { fixtureStaff } from './fixtures.mjs';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'schoolex-payroll-'));
 const dbPath = path.join(tmp, 'payroll.db');
@@ -41,9 +44,10 @@ const STAFF_KEY = 'schoollee_offline_staff_clean_v1';
 const LEDGER_KEY = 'schoollee_ledger_transactions_clean_v1';
 
 const staffBeforeLoad = await getCollection(STAFF_KEY);
-check('fresh install is empty before dummy load (no auto-seed)', staffBeforeLoad.length === 0, `len=${staffBeforeLoad.length}`);
-const dummyLoad = await api('POST', '/api/system/load-dummy-data');
-check('dummy data loads on demand', dummyLoad.ok && dummyLoad.data?.loaded?.staff === 28, dummyLoad.data?.error || '');
+check('fresh install is empty before fixture insert (no auto-seed)', staffBeforeLoad.length === 0, `len=${staffBeforeLoad.length}`);
+const staffFixture = fixtureStaff();
+const fixturePut = await api('PUT', `/api/collections/${STAFF_KEY}`, { value: staffFixture });
+check('test fixture inserted via the collections API', fixturePut.ok, fixturePut.data?.error || '');
 const staffSeed = await getCollection(STAFF_KEY);
 check('seed staff collection has 28 staff', staffSeed.length === 28, `len=${staffSeed.length}`);
 const salaryOf = (id) => (staffSeed.find(s => s.id === id) || {}).salary || 0;
@@ -321,8 +325,9 @@ await h.close();
   const healthRes = await (await fetch(`${base}/api/health`)).json();
   check('RESET all entity counts are 0 after reset',
     Object.values(healthRes.counts || {}).every(c => c === 0), JSON.stringify(healthRes.counts));
-  const reload = await api('POST', '/api/system/load-dummy-data');
-  check('RESET dummy data loads again after reset', reload.ok && reload.data?.loaded?.staff === 28, reload.data?.error || '');
+  const reload = await api('PUT', `/api/collections/${STAFF_KEY}`, { value: fixtureStaff() });
+  const staffReloaded = await getCollection(STAFF_KEY);
+  check('RESET fixtures insert again after reset', reload.ok && staffReloaded.length === 28, `len=${staffReloaded.length}`);
 }
 
 await h.close();

@@ -391,20 +391,15 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
       }
     });
 
-    // Also include direct Incoming transactions recorded in the Ledger
-    const allTimeLedgerIncome = ledgerTransactions
-      .filter(t => t.type === 'Incoming')
-      .reduce((sum, t) => sum + t.amount, 0);
-
-    // Non-fee or standalone ledger income (or if no students exist yet, all ledger income)
-    const directLedgerIncome = students.length === 0
-      ? allTimeLedgerIncome
-      : ledgerTransactions
-          .filter(t => t.type === 'Incoming' && !t.reason.toLowerCase().startsWith('fee payment (') && !t.reason.toLowerCase().startsWith('challan fee collection'))
-          .reduce((sum, t) => sum + t.amount, 0);
-
-    const totalCollected = studentCollected + directLedgerIncome;
-    const totalBilled = studentBilled + directLedgerIncome;
+    // Fees Collected / Total Billed count ONLY real student fee charges
+    // and payments (owner directive 2026-11-08): money added directly in
+    // the Ledger as "Incoming" (the opposite of an expense) is school
+    // income, but it is NOT a fee payment, so it must never inflate the
+    // fee figures — previously it was added into both totals here. Ledger
+    // income still appears in the Ledger module and in the ledger
+    // income/expense graph above, where it belongs.
+    const totalCollected = studentCollected;
+    const totalBilled = studentBilled;
 
     // Sort defaulters by outstanding amount descending
     defaultersList.sort((a, b) => b.remainingDue - a.remainingDue);
@@ -419,7 +414,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
       collectionRate,
       defaultersList
     };
-  }, [students, feeVersion, ledgerTransactions]);
+  }, [students, feeVersion]);
 
   // Filtered Defaulters
   const displayedDefaulters = useMemo(() => {

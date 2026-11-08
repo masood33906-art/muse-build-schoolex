@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
-import { openDb, driverName } from './db.js';
+import { openDb, driverName, getDataEpoch, rotateDataEpoch } from './db.js';
 import { registerPayrollRoutes } from './payroll.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -27,55 +27,13 @@ const ENTITIES = {
 };
 const num = (v) => (v === undefined || v === null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
 
-// Dummy (sample) data. Fix P0-2 context: the frontend never calls the
-// relational API — its only backend contact is the /api/collections mirror
-// (src/utils/storage.ts hydration), so the sample data must land BOTH in
-// the entity tables and verbatim into `collections` under the app's exact
-// storage keys (src/App.tsx) for hydration to deliver it. seed-data.json
-// was generated FROM the frontend's own archived initial data
-// (scripts/generate-seed.mjs) and is verified deep-equal to it.
-//
-// Fresh installs start EMPTY: nothing is seeded at server start. This data
-// is loaded only on demand via POST /api/system/load-dummy-data (Settings →
-// Load Dummy Data), which refuses when the system already holds data.
-// Safety: a collection that already holds a non-empty array is never
-// overwritten; an absent or empty-array collection is replaced with the
-// sample records.
-const SEED_COLLECTION_KEYS = {
-  students: 'schoollee_offline_students_clean_v1',
-  staff: 'schoollee_offline_staff_clean_v1',
-  classes: 'schoollee_classes_clean_v1',
-};
-
-function seedDummyData(db) {
-  const seedPath = path.join(__dirname, 'seed-data.json');
-  if (!fs.existsSync(seedPath)) return null;
-  const seed = parse(fs.readFileSync(seedPath, 'utf-8'), {});
-  let n = 0;
-  for (const key of ['students', 'staff', 'classes']) {
-    const cfg = ENTITIES[key];
-    for (const rec of seed[key] || []) { upsert(db, cfg, rec); n++; }
-  }
-  let collectionsSeeded = 0;
-  for (const [entity, key] of Object.entries(SEED_COLLECTION_KEYS)) {
-    const records = seed[entity];
-    if (!Array.isArray(records) || records.length === 0) continue;
-    const existing = db.prepare('SELECT value FROM collections WHERE key = ?').get(key);
-    const existingVal = existing ? parse(existing.value, null) : null;
-    if (Array.isArray(existingVal) && existingVal.length > 0) continue; // real data — never clobber
-    db.prepare('INSERT INTO collections(key, value, updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at')
-      .run(key, JSON.stringify(records), now());
-    collectionsSeeded++;
-  }
-  return { records: n, collectionsSeeded };
-}
-
-export function seedIfEmpty(db) {
-  const count = db.prepare('SELECT COUNT(*) AS c FROM students').get().c;
-  if (count > 0) return { seeded: false };
-  const r = seedDummyData(db);
-  return r ? { seeded: true, ...r } : { seeded: false };
-}
+// No built-in / sample data exists in this app — by design (owner
+// directive, 2026-11-08). There is no seed file, no seeding at startup and
+// no endpoint that inserts sample records: a database starts completely
+// empty and only ever contains data the user entered (plus what
+// Backup/Restore or the payroll migration legitimately writes from the
+// user's own records). The only way all data leaves is POST
+// /api/system/reset below.
 
 function upsert(db, cfg, rec) {
   const id = String(rec.id ?? crypto.randomUUID());
@@ -97,8 +55,7 @@ function upsert(db, cfg, rec) {
 
 export function createApp({ dbPath, distDir = path.join(APP_ROOT, 'dist') } = {}) {
   let db = openDb(dbPath);
-  // Fresh installs start EMPTY — no seeding here. Dummy data is loaded on
-  // demand via POST /api/system/load-dummy-data below.
+  // Fresh installs start EMPTY — nothing is ever seeded here.
   const app = express();
   app.disable('x-powered-by');
 
@@ -107,7 +64,7 @@ export function createApp({ dbPath, distDir = path.join(APP_ROOT, 'dist') } = {}
     for (const cfg of Object.values(ENTITIES)) {
       try { counts[cfg.table] = db.prepare(`SELECT COUNT(*) AS c FROM ${cfg.table}`).get().c; } catch {}
     }
-    res.json({ ok: true, app: 'SchoolEx', driver: driverName, dbPath, counts, time: now() });
+    res.json({ ok: true, app: 'SchoolEx', driver: driverName, dbPath, counts, epoch: getDataEpoch(db), time: now() });
   });
 
   // Generic CRUD for core entities
@@ -159,7 +116,10 @@ export function createApp({ dbPath, distDir = path.join(APP_ROOT, 'dist') } = {}
   // Collections: mirror of legacy localStorage keys (value stored as raw JSON text)
   app.get('/api/collections', (_req, res) => {
     const rows = db.prepare('SELECT key, value, updated_at FROM collections').all();
-    res.json({ keys: rows.map(r => r.key), collections: Object.fromEntries(rows.map(r => [r.key, parse(r.value, r.value)])) });
+    // `epoch` rides along so the client's hydration (src/utils/storage.ts)
+    // can validate its cache against this database's data generation
+    // before applying or uploading anything.
+    res.json({ keys: rows.map(r => r.key), collections: Object.fromEntries(rows.map(r => [r.key, parse(r.value, r.value)])), epoch: getDataEpoch(db) });
   });
   app.get('/api/collections/:key', (req, res) => {
     const row = db.prepare('SELECT value, updated_at FROM collections WHERE key = ?').get(req.params.key);
@@ -208,38 +168,16 @@ export function createApp({ dbPath, distDir = path.join(APP_ROOT, 'dist') } = {}
   // the closure so /api/restore swapping the handle keeps payroll working.
   registerPayrollRoutes(app, () => db);
 
-  // System: dummy data on demand + full reset. Fresh installs start empty;
-  // these are the only two ways sample data enters or all data leaves.
-  // Handlers reference the closure `db`, so /api/restore's handle swap is
-  // picked up automatically.
+  // System: full reset only. There is deliberately NO endpoint that
+  // inserts sample/built-in data — a fresh install starts empty and stays
+  // that way until the user adds their own records. The handler references
+  // the closure `db`, so /api/restore's handle swap is picked up
+  // automatically.
   const SYSTEM_DATA_TABLES = [
     'payroll_payments', 'payroll_records', 'payroll_periods', // FK order: children first
     'attendance_records', 'exam_marks', 'exams', 'payments', 'ledger_entries',
     'holidays', 'students', 'staff', 'classes', 'collections', 'settings',
   ];
-  const coreCounts = () => {
-    const t = (table) => db.prepare(`SELECT COUNT(*) AS c FROM ${table}`).get().c;
-    return { students: t('students'), staff: t('staff'), classes: t('classes') };
-  };
-
-  app.post('/api/system/load-dummy-data', (_req, res) => {
-    const counts = coreCounts();
-    let collectionHasData = false;
-    for (const key of Object.values(SEED_COLLECTION_KEYS)) {
-      const row = db.prepare('SELECT value FROM collections WHERE key = ?').get(key);
-      const v = row ? parse(row.value, null) : null;
-      if (Array.isArray(v) && v.length > 0) { collectionHasData = true; break; }
-    }
-    if (counts.students > 0 || counts.staff > 0 || counts.classes > 0 || collectionHasData) {
-      return res.status(409).json({
-        error: `Dummy data can only be loaded into an empty system. This system already has data (${counts.students} students, ${counts.staff} staff, ${counts.classes} classes). If you really want the sample school, use Reset System first — that permanently deletes the current data.`,
-        counts,
-      });
-    }
-    const r = seedDummyData(db);
-    if (!r) return res.status(500).json({ error: 'Dummy data is unavailable (seed file missing).' });
-    res.json({ ok: true, loaded: coreCounts(), records: r.records, collectionsSeeded: r.collectionsSeeded });
-  });
 
   app.post('/api/system/reset', (_req, res) => {
     const wiped = {};
@@ -249,7 +187,11 @@ export function createApp({ dbPath, distDir = path.join(APP_ROOT, 'dist') } = {}
         db.prepare(`DELETE FROM ${table}`).run();
       }
     });
-    res.json({ ok: true, wiped });
+    // Rotating the epoch is part of the reset: any client still holding
+    // pre-reset cached collections now fails its next hydration check and
+    // discards them, so wiped data cannot come back from a stale cache.
+    const epoch = rotateDataEpoch(db);
+    res.json({ ok: true, wiped, epoch });
   });
 
   app.use('/api', (_req, res) => res.status(404).json({ error: 'unknown API route' }));
@@ -269,12 +211,18 @@ export function startServer(opts = {}) {
   const port = opts.port ?? (process.env.SCHOOLEX_PORT || process.env.PORT ? Number(process.env.SCHOOLEX_PORT || process.env.PORT) : 0);
   const dbPath = opts.dbPath || process.env.SCHOOLEX_DB || path.join(APP_ROOT, 'data', 'schoolex.db');
   const { app, getDb } = createApp({ dbPath, distDir: opts.distDir });
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const server = app.listen(port, '127.0.0.1', () => {
+      server.removeListener('error', onListenError);
       const actual = server.address().port;
       console.log(`SchoolEx server http://127.0.0.1:${actual} db=${dbPath} driver=${driverName}`);
       resolve({ server, port: actual, dbPath, getDb, close: () => new Promise(r => server.close(() => { try { getDb().close(); } catch {} r(); })) });
     });
+    // Reject on listen failure (e.g. EADDRINUSE for a preferred fixed port)
+    // so callers can fall back to another port instead of hanging forever.
+    // Removed again once listening succeeds.
+    const onListenError = (err) => { try { getDb().close(); } catch {} reject(err); };
+    server.once('error', onListenError);
   });
 }
 

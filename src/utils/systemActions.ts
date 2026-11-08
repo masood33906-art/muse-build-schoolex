@@ -1,36 +1,15 @@
 import { DEFAULT_SCHOOL_SETTINGS, saveSchoolSettings } from './settingsHelper';
 import { clearAllFiles } from './blobStore';
 
-// Client side of Settings → System (Load Dummy Data / Reset System).
-// The server endpoints live in server/index.js:
-//   POST /api/system/load-dummy-data — seeds the sample school into an
-//     EMPTY system only (409 with a plain message when data exists).
+// Client side of Settings → System (Reset System).
+// The server endpoint lives in server/index.js:
 //   POST /api/system/reset — wipes every data table (schema kept).
-// A fresh install therefore boots empty; these actions are the only way
-// sample data enters the system.
+// A fresh install boots completely empty and there is NO built-in /
+// sample data anywhere in the app (owner directive, 2026-11-08): the
+// database only ever holds data the user entered. Reset is the only
+// system action.
 
 const APP_KEY_PREFIXES = ['schoollee_', 'schooliee_', 'schoolex_'];
-
-export interface DummyDataResult {
-  ok: true;
-  loaded: { students: number; staff: number; classes: number };
-  records: number;
-  collectionsSeeded: number;
-}
-
-export async function loadDummyData(): Promise<DummyDataResult> {
-  let res: Response;
-  try {
-    res = await fetch('/api/system/load-dummy-data', { method: 'POST' });
-  } catch {
-    throw new Error('Could not reach the SchoolEx app server. Dummy data can only be loaded when the app server is running.');
-  }
-  const data = await res.json().catch(() => ({} as any));
-  if (!res.ok) {
-    throw new Error((data as any)?.error || `Could not load dummy data (HTTP ${res.status}).`);
-  }
-  return data as DummyDataResult;
-}
 
 /** Remove every app-owned localStorage key (collections, settings, the
  *  sync outbox, migration flags, corrupt-key quarantines). */
