@@ -23,6 +23,7 @@
     "better-sqlite3": "^13.0.3",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
+    "fflate": "^0.8.3",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^0.546.0",
@@ -77,6 +78,6 @@
       "uninstallDisplayName": "SchoolEx"
     }
   },
-  "description": "SchoolEx \u2014 complete offline school management system",
+  "description": "SchoolEx — complete offline school management system",
   "author": "SchoolEx"
 }

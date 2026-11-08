@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   Database,
   Download,
+  FileArchive,
   AlertTriangle,
   Wrench
 } from 'lucide-react';
@@ -26,6 +27,7 @@ import {
 } from '../utils/settingsHelper';
 import { getBillingStartMonth, setBillingStartMonth } from '../utils/studentFeeLedgerHelper';
 import { downloadBackup, restoreBackup } from '../utils/backup';
+import { downloadDataExport } from '../utils/dataExport';
 import { resetSystem } from '../utils/systemActions';
 import { Student, ClassInfo, StaffMember, AttendanceRecord } from '../types';
 import { TemplatesSubmodule } from './TemplatesSubmodule';
@@ -206,6 +208,23 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             <span>Download full backup</span>
           </button>
 
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await downloadDataExport();
+                onShowToast('All data exported as ZIP (CSV + JSON)', 'success');
+              } catch (err: any) {
+                onShowToast(err?.message || 'Data export failed', 'error');
+              }
+            }}
+            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-2 cursor-pointer transition-all shadow-sm"
+            id="btn-settings-export-all-data"
+          >
+            <FileArchive className="w-4 h-4" />
+            <span>Export all data (ZIP)</span>
+          </button>
+
           <input
             ref={restoreInputRef}
             type="file"
@@ -228,6 +247,12 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
           </button>
         </div>
       </div>
+
+      <p className="text-[11px] text-slate-500 leading-relaxed">
+        <span className="text-slate-300 font-semibold">Export all data (ZIP)</span> downloads every student, staff member,
+        class, fee record, payment, ledger entry and attendance record as plain CSV files (they open in Excel) plus one
+        complete JSON copy — for migration or use outside SchoolEx. It is a read-only copy; editing it changes nothing here.
+      </p>
 
       {/* Restore Confirmation Dialog */}
       {pendingRestoreFile && (

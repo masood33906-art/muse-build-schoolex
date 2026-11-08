@@ -140,8 +140,89 @@ export const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_payroll_records_staff ON payroll_records(staff_id)`,
 ];
 
+// ---------------------------------------------------------------------------
+// Read-only browsability views (owner-approved portability feature,
+// 2026-11-08, Part B). The app's working data lives in the `collections`
+// table as one JSON bundle per kind; these views explode those bundles
+// into ordinary rows so the database can be inspected in ANY SQLite tool
+// (one row per student, per class, per fee charge…) without SchoolEx
+// running. They are pure SELECT objects: they store nothing, change
+// nothing, and are re-asserted on every open (CREATE VIEW IF NOT EXISTS),
+// so an EXISTING database gains them the next time the server starts —
+// not only fresh databases. Names carry the _view suffix because the bare
+// entity names are the (separately purposed) storage tables above.
+// Verified against the bundled better-sqlite3 (SQLite 3.53.4): json_each
+// works inside views, including chained json_each over the fee ledger's
+// studentId -> items map. See proof-data-export.mts.
+// ---------------------------------------------------------------------------
+export const VIEWS = [
+  `CREATE VIEW IF NOT EXISTS students_view AS
+     SELECT json_extract(j.value, '$.id') AS id,
+            json_extract(j.value, '$.name') AS name,
+            json_extract(j.value, '$.gender') AS gender,
+            json_extract(j.value, '$.dob') AS dob,
+            json_extract(j.value, '$.class') AS class,
+            json_extract(j.value, '$.section') AS section,
+            json_extract(j.value, '$.rollNo') AS rollNo,
+            json_extract(j.value, '$.status') AS status,
+            json_extract(j.value, '$.admissionDate') AS admissionDate,
+            json_extract(j.value, '$.phone') AS phone,
+            json_extract(j.value, '$.familyId') AS familyId
+     FROM collections AS c, json_each(c.value) AS j
+     WHERE c.key = 'schoollee_offline_students_clean_v1'`,
+  `CREATE VIEW IF NOT EXISTS classes_view AS
+     SELECT json_extract(j.value, '$.id') AS id,
+            json_extract(j.value, '$.name') AS name,
+            json_extract(j.value, '$.fee') AS fee,
+            json_extract(j.value, '$.sectionsCount') AS sectionsCount,
+            json_extract(j.value, '$.sections') AS sections,
+            json_extract(j.value, '$.createdAt') AS createdAt
+     FROM collections AS c, json_each(c.value) AS j
+     WHERE c.key = 'schoollee_classes_clean_v1'`,
+  `CREATE VIEW IF NOT EXISTS staff_view AS
+     SELECT json_extract(j.value, '$.id') AS id,
+            json_extract(j.value, '$.name') AS name,
+            json_extract(j.value, '$.role') AS role,
+            json_extract(j.value, '$.category') AS category,
+            json_extract(j.value, '$.department') AS department,
+            json_extract(j.value, '$.status') AS status,
+            json_extract(j.value, '$.phone') AS phone,
+            json_extract(j.value, '$.email') AS email,
+            json_extract(j.value, '$.salary') AS salary,
+            json_extract(j.value, '$.joiningDate') AS joiningDate
+     FROM collections AS c, json_each(c.value) AS j
+     WHERE c.key = 'schoollee_offline_staff_clean_v1'`,
+  `CREATE VIEW IF NOT EXISTS fee_ledger_view AS
+     SELECT m.key AS studentId,
+            json_extract(i.value, '$.id') AS itemId,
+            json_extract(i.value, '$.month') AS month,
+            json_extract(i.value, '$.monthKey') AS monthKey,
+            json_extract(i.value, '$.type') AS type,
+            json_extract(i.value, '$.reason') AS reason,
+            json_extract(i.value, '$.total') AS charged,
+            json_extract(i.value, '$.paidAmount') AS paidAmount,
+            json_extract(i.value, '$.total') - json_extract(i.value, '$.paidAmount') AS balance,
+            json_extract(i.value, '$.status') AS status
+     FROM collections AS c, json_each(c.value) AS m, json_each(m.value) AS i
+     WHERE c.key = 'schoollee_student_fee_ledger_clean_v1'`,
+  `CREATE VIEW IF NOT EXISTS ledger_view AS
+     SELECT json_extract(j.value, '$.id') AS id,
+            json_extract(j.value, '$.date') AS date,
+            json_extract(j.value, '$.rawDate') AS rawDate,
+            json_extract(j.value, '$.type') AS type,
+            json_extract(j.value, '$.category') AS category,
+            json_extract(j.value, '$.amount') AS amount,
+            json_extract(j.value, '$.paymentType') AS paymentType,
+            json_extract(j.value, '$.reason') AS reason,
+            json_extract(j.value, '$.note') AS note,
+            json_extract(j.value, '$.createdBy') AS createdBy
+     FROM collections AS c, json_each(c.value) AS j
+     WHERE c.key = 'schoollee_ledger_transactions_clean_v1'`,
+];
+
 function migrate(db) {
   for (const sql of MIGRATIONS) db.exec(sql);
+  for (const sql of VIEWS) db.exec(sql);
   db.prepare('INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)')
     .run(1, new Date().toISOString());
 }
